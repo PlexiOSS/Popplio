@@ -135,6 +135,7 @@ type Config struct {
 	Servers       Servers       `yaml:"servers" validate:"required"`
 	Meta          Meta          `yaml:"meta" validate:"required"`
 	Arcadia       Arcadia       `yaml:"arcadia" validate:"required"`
+	Infernoplex   Infernoplex   `yaml:"infernoplex" validate:"required"`
 }
 
 type DiscordAuth struct {
@@ -258,4 +259,18 @@ type Panel struct {
 	RedirectURL        []string `yaml:"redirect_url" comment:"Allow-list of panel login redirect URLs" validate:"required"`
 	PanelScope         string   `yaml:"panel_scope" comment:"Static handshake value the frontend sends" validate:"required"`
 	PanelResponseScope string   `yaml:"panel_response_scope" comment:"Static handshake value the frontend expects back" validate:"required"`
+}
+
+type Infernoplex struct {
+	ClientID     string          `yaml:"client_id" comment:"Infernoplex bot Discord client ID" validate:"required"`
+	ClientSecret string          `yaml:"client_secret" comment:"Infernoplex bot Discord client secret" validate:"required"`
+	Prefix       Differs[string] `yaml:"prefix" default:"inf!" comment:"Infernoplex bot prefix" validate:"required"`
+	ServerPort   Differs[int]    `yaml:"server_port" default:"3012" comment:"Port the Infernoplex bot API listens on" validate:"required"`
+	Token        Differs[string] `yaml:"token" comment:"Infernoplex bot Discord token" validate:"required"`
+}
+
+type Naevis struct {
+	ClientID string          `yaml:"client_id" comment:"Naevis bot Discord client ID" validate:"required"`
+	Token    Differs[string] `yaml:"token" comment:"Naevis bot Discord token" validate:"required"`
+	Prefix   Differs[string] `yaml:"prefix" default:"nae!" comment:"Naevis bot prefix" validate:"required"`
 }
