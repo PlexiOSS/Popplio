@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +18,10 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/jackc/pgx/v5"
 )
+
+// Same pattern as routes/servers/assets.ResolveInvite — matches an optional
+// discord.gg/discord.com/invite/... prefix and captures the trailing code.
+var inviteCodeRegex = regexp.MustCompile(`(?:discord(?:\.gg|\.com/invite|app\.com/invite)/)?([a-zA-Z0-9-]+)/?$`)
 
 type ErrorKind string
 
@@ -64,35 +68,28 @@ func generic(format string, args ...any) *CreateInviteError {
 	return &CreateInviteError{Kind: ErrGeneric, Message: fmt.Sprintf(format, args...)}
 }
 
+// ResolveInvite validates that rawInvite (whatever a server owner pasted
+// into the setup wizard, or sent to Sorbet's ResolveInvite query) is a real,
+// permanent invite for guildID.
+//
+// This deliberately never makes an HTTP request to rawInvite itself — an
+// earlier version did (a GET to the raw user-supplied URL, following
+// redirects, then checking the *final* URL's host after the request had
+// already fired), which is a server-side request forgery: an attacker could
+// point Popplio's server at an arbitrary internal/external URL and have it
+// make a real request before any validation ran. Popplio's main invite
+// resolution (routes/servers/assets.ResolveInvite) never had this problem
+// because it only ever extracts an invite *code* from the input and hands
+// that to Discord's own REST client — the only network request is always to
+// Discord's API, never to attacker-controlled data. Same pattern here.
 func ResolveInvite(ctx context.Context, guildID snowflake.ID, rawInvite string) error {
-	client := &http.Client{Timeout: 10 * time.Second}
+	match := inviteCodeRegex.FindStringSubmatch(strings.TrimSpace(rawInvite))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawInvite, nil)
-
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	url := resp.Request.URL.String()
-
-	if !strings.HasPrefix(url, "https://discord.com/invite/") && !strings.HasPrefix(url, "https://discord.gg") {
-		return errors.New("Invalid invite URL")
-	}
-
-	parts := strings.Split(url, "/")
-	code := parts[len(parts)-1]
-
-	if code == "" {
+	if len(match) < 2 || match[1] == "" {
 		return errors.New("Invalid invite URL: No code could be parsed")
 	}
+
+	code := match[1]
 
 	inv, err := dclient.Get().Rest().GetInvite(code)
 
