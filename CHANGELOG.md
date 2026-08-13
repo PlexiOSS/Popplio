@@ -5,6 +5,101 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-13
+
+### Added
+
+- Infernoplex the standalone Rust Discord server-tracking bot has been
+  ported into Popplio's own binary as a new `infernoplex/` package, the same
+  treatment Arcadia got earlier. `main.go` now starts it right alongside
+  Arcadia (`infernoplex.Start(state.Context)`, stopped with the same 30s
+  grace period on shutdown) instead of it running as a separate service.
+  The port covers everything the Rust bot did: a guided multi-step server
+  setup wizard (`infernoplex/bot/setup.go`), invite creation/resolution
+  (`infernoplex/invite`), a server-info push command gated on "Edit
+  Servers" (`cmdUpdate`), a vote leaderboard (`cmdLeaderboard`), a
+  bot-stats command (`cmdStats` version/Go version/git commit/env, mirrors
+  Arcadia's `/info`), and background tasks for server/emoji/sticker sync and
+  team-member cleanup (`infernoplex/tasks`). It also runs its own small
+  internal HTTP API, "Sorbet" (`infernoplex/sorbet`), structured the same
+  way as Arcadia's panel dispatch. The standalone Rust Infernoplex service
+  is superseded by this and should be decommissioned.
+  **Config shape change (update `config.yaml` before deploying):** a new
+  `infernoplex:` block with `client_id`/`client_secret` plus per-environment
+  `prefix`/`server_port`/`token` (same `Differs[T]` staging/prod/beta/dev
+  pattern used elsewhere) — see `config.yaml.sample`.
+- Arcadia's staff bot replies now render as colored embeds instead of plain
+  text — green (`Ctx.Ok`) for success, red (`Ctx.Fail`) for errors/refusals,
+  blurple (`Ctx.Say`) otherwise — so its answers read as distinct from a
+  human typing in the same channel. Applies everywhere: permission-check
+  failures, disabled-command notices, panics, claim/unclaim/approve/deny
+  confirmations, and RPC modal-submission replies (new `modalReply` helper
+  in `arcadia/bot/interactions.go`). The actual reply text is unchanged, so
+  this doesn't touch the frozen strings in `arcadia/conformance`.
+- Infernoplex's leaderboard command now replies with a "No Votes Yet" embed
+  instead of an empty/broken one when a server has zero votes.
+
+### Changed
+
+- Rebranded "Infinity List" → "Omniplex" across every remaining user-facing
+  string that still had the old name: the MFA issuer shown in a staff
+  member's authenticator app on re-enrollment (`arcadia/panel/mfa.go`), the
+  staff bot's `/analytics` embed title (and its frozen conformance string),
+  and the fallback SEO description on `GET .../teams/{id}/seo` when a team
+  has no custom short description (`"View the team X on Omniplex"`). A few
+  doc comments got the same treatment with no functional effect.
+- Large internal reorganization of Arcadia's bot/panel/rpc code (the
+  "Isabelle" rewrite, #43) several oversized files split into
+  topic-scoped ones with no intended behavior change:
+  `arcadia/bot/permeditor.go` → `permeditor_apply.go`/`permeditor_render.go`/
+  `permeditor_util.go`; `arcadia/bot/staffroles.go` and the bulk of
+  `commands.go` → `staffmgmt.go`/`staffops.go`/`staffperms.go`/
+  `staffrender.go`/`help.go`/`invites.go`/`stats.go`;
+  `arcadia/panel/ops_core.go` → `ops_auth.go`/`ops_hello.go`/`ops_proxy.go`/
+  `ops_query.go`/`ops_queue.go`/`ops_rpc.go`/`ops_search.go`/
+  `ops_staff_disciplinaries.go`/`ops_staff_members.go`/
+  `ops_staff_positions.go`; `arcadia/panel/ops_shop.go` →
+  `ops_shop_benefits.go`/`ops_shop_coupons.go`/`ops_shop_items.go`/
+  `ops_shop_tiers.go`/`ops_shop_whitelist.go`; `arcadia/rpc/methods.go` →
+  `apps.go`/`audit.go`/`certify.go`/`claim.go`/`core.go`/`dispatch.go`/
+  `forceremove.go`/`modlog.go`/`premium.go`/`transfer.go`/`verdict.go`/
+  `votes.go`; `arcadia/tasks/staffresync.go` →
+  `staffresync_report.go`/`staffresync_roles.go`. Alongside the RPC split,
+  the boilerplate every handler repeated (auth + permission resolution,
+  existence guards, mod-log reason handling) was deduplicated into shared
+  helpers in the new `core.go` — deliberately still byte-for-byte behavior
+  preserving, including upstream quirks already documented in
+  `arcadia/CONFORMANCE.md` (e.g. the bare `" does not exist"` error text
+  with no entity name, and the audit-log-before-rate-limit ordering).
+- The Dev Team staff application no longer requires or mentions Rust
+  (description and two questions updated to reflect Go/TypeScript only);
+  the QAQC application track was removed entirely. Consistent with Arcadia
+  and now Infernoplex both being fully off Rust.
+
+### Removed
+
+- Five retired permissions — `view_shop`, `manage_shop`,
+  `manage_bot_whitelist`, `view_cdn`, `manage_cdn` purged from every
+  stored permission array (`staff_positions.perms`,
+  `staff_members.perm_overrides`, `staff_disciplinary_types.perm_limits`)
+  via a new one-off migration, `exp/rewrite/remove_broken_perms.sql`
+  (needs to be applied manually against the database like other `exp/`
+  scripts).
+
+### Known issues found during this pass, not yet fixed
+
+- Infernoplex's new "No Votes Yet" message has a typo: "Unfortuently, your
+  server has no votes at this time."
+- `config/config.go`'s `Naevis` struct (added alongside `Infernoplex` as an
+  apparent placeholder for a second bot) is dead code it's never
+  referenced from the top-level `Config` struct despite its fields being
+  tagged `validate:"required"`, and `config.yaml.sample`'s `naevis:` section
+  was already removed. Safe to delete outright, or finish wiring it up if
+  Naevis is still planned.
+- `arcadia/CONFORMANCE.md` references a `arcadia/rpc/review.go` in a few
+  places (issues #6, #9, #10) that doesn't exist the file is `verdict.go`.
+  Looks like a stale rename from drafting the Isabelle split.
+
 ## [1.0.1] - 2026-08-05
 
 ### Changed

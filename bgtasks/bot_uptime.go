@@ -11,18 +11,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// BotUptimeCheck walks every listed bot and records whether it's currently
-// online in the main server, via Popplio's own gateway presence cache.
-//
-// This is deliberately not Infernoplex's job: Infernoplex never requests the
-// privileged Presence intent (see infernoplex/src/main.rs), so it has no
-// visibility into other bots' online/offline state. Popplio's own client
-// does request it (state.go), so this reads straight from its cache — no
-// REST calls, no rate limits, no dependency on Arcadia being configured.
-//
-// A bot not currently in the main server (never invited, or kicked/left)
-// simply has no cache entry and counts as a failed check, same as one that's
-// present but offline — both mean "not verifiably up right now".
+/**
+* Bot Uptime Check
+*
+* This task checks the presence of all listed bots in the main guild and updates their uptime stats
+ */
 func BotUptimeCheck(ctx context.Context) error {
 	rows, err := state.Pool.Query(ctx, "SELECT bot_id FROM bots WHERE type = 'approved' OR type = 'certified'")
 
@@ -55,8 +48,6 @@ func BotUptimeCheck(ctx context.Context) error {
 		userID, err := snowflake.Parse(botID)
 
 		if err != nil {
-			// Not a valid snowflake at all — a data problem worth knowing
-			// about, but not one that should stop every other bot's check.
 			state.Logger.Warn("bot_uptime_check: invalid bot_id, skipping", zap.String("botID", botID))
 			continue
 		}
@@ -80,9 +71,6 @@ func BotUptimeCheck(ctx context.Context) error {
 	return nil
 }
 
-// isOnline reports whether the given user has a cached non-offline presence
-// in the given guild. A missing cache entry (never seen, or invisible) and
-// an explicit offline status are both treated as "not online".
 func isOnline(guildID, userID snowflake.ID) bool {
 	presence, ok := state.Discord.Caches().Presence(guildID, userID)
 

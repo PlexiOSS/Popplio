@@ -1,9 +1,3 @@
-// Package seo models the entities Popplio exposes to crawlers.
-//
-// Entity is the shape a sitemap or feed entry needs, deliberately
-// independent of the API types so a change to an API response cannot
-// silently reshape the sitemap. Fetchers that populate it live in
-// popplio/seo/fetchers.
 package seo
 
 import (
@@ -12,34 +6,22 @@ import (
 )
 
 type Entity struct {
-	// The ID of the entity
-	ID string
-	// The type of the entity
-	Type string
-	// Avatar URL
-	AvatarURL string
-	// The name of the entity
-	Name string
-	// The description of the entity
+	ID          string
+	Type        string
+	AvatarURL   string
+	Name        string
 	Description string
-	// The URL of the entity
-	URL string
-	// The author of the entity
-	Author *Entity
-	// When the entity was created
-	CreatedAt time.Time
-	// When the entity was last updated
-	UpdatedAt time.Time
+	URL         string
+	Author      *Entity
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type Fetcher interface {
-	// The type of the entity
 	Type() string
-	// Fetches the entity from the database
 	Fetch(ctx context.Context, mg *MapGenerator, id string) (*Entity, error)
 }
 
-// Generate sitemap/rss feeds easily
 type MapGenerator struct {
 	Done map[string]map[string]*Entity
 }
