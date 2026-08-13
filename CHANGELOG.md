@@ -30,6 +30,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pattern used elsewhere) — see `config.yaml.sample`.
 - Infernoplex's leaderboard command now replies with a "No Votes Yet" embed
   instead of an empty/broken one when a server has zero votes.
+- Self-hosted proof-of-work vote captcha (`popplio/captcha`), replacing the
+  dead `HCaptchaInfo` scaffolding in `types/vote.go` (which was never wired
+  to anything) with something actually enforced. `GET
+  /votes/captcha/challenge` issues a signed, stateless hashcash-style
+  challenge (find a nonce so `sha256(salt+":"+nonce)` has N leading zero
+  bits); `PUT .../votes` now requires a solved challenge in the request body
+  for bot/server votes unless the entity has opted out via the existing
+  `captcha_opt_out` setting. Challenges are HMAC-signed with the new
+  `captcha.hmac_secret` config value so they can't be forged, and each
+  solved challenge is single-use (consumed in Redis on first successful
+  verification) so a solve can't be replayed across multiple votes. No
+  third-party captcha provider involved — the whole protocol lives in
+  `popplio/captcha`.
+  **Config shape change (update `config.yaml` before deploying):** a new
+  `captcha:` block with a per-environment `hmac_secret` (same `Differs[T]`
+  pattern used elsewhere) — see `config.yaml.sample`. Generate one with e.g.
+  `openssl rand -hex 32`; rotating it invalidates all outstanding
+  challenges.
 
 ### Changed
 
@@ -117,6 +135,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (description and two questions updated to reflect Go/TypeScript only);
   the QAQC application track was removed entirely. Consistent with Arcadia
   and now Infernoplex both being fully off Rust.
+
+### Security
+
+- Only the prod instance now sets the main Discord bot's gateway presence
+  (`state.go`'s `OnGuildsReady` handler). Staging/beta/dev instances still
+  connect and function normally, they just no longer call
+  `SetPresenceForShard`, so a non-prod checkout — misconfigured shared
+  token or otherwise — can never overwrite what the public bot's profile
+  shows as its "Watching" activity.
 
 ### Removed
 

@@ -109,6 +109,7 @@ type Config struct {
 	Meta          Meta          `yaml:"meta" validate:"required"`
 	Arcadia       Arcadia       `yaml:"arcadia" validate:"required"`
 	Infernoplex   Infernoplex   `yaml:"infernoplex" validate:"required"`
+	Captcha       Captcha       `yaml:"captcha" validate:"required"`
 }
 
 type DiscordAuth struct {
@@ -212,6 +213,14 @@ type Infernoplex struct {
 	Prefix       Differs[string] `yaml:"prefix" default:"inf!" comment:"Infernoplex bot prefix" validate:"required"`
 	ServerPort   Differs[int]    `yaml:"server_port" default:"3012" comment:"Port the Infernoplex bot API listens on" validate:"required"`
 	Token        Differs[string] `yaml:"token" comment:"Infernoplex bot Discord token" validate:"required"`
+}
+
+// Captcha configures the self-hosted proof-of-work vote captcha (see
+// popplio/captcha). It is intentionally not a third-party service (hCaptcha
+// etc.) the challenge/verify logic lives entirely in this codebase, signed
+// with HMACSecret so challenges can't be forged or tampered with in transit.
+type Captcha struct {
+	HMACSecret Differs[string] `yaml:"hmac_secret" comment:"Secret used to sign and verify proof-of-work vote captcha challenges. Generate with e.g. openssl rand -hex 32 — rotating it invalidates all outstanding challenges" validate:"required"`
 }
 
 type Naevis struct {
