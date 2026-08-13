@@ -164,6 +164,18 @@ func Setup() {
 				// matter how ready the shards are. GuildsReady also fires
 				// once per shard, not once globally, so set presence per
 				// shard via SetPresenceForShard using the event's shard ID.
+				//
+				// Only the prod instance is allowed to broadcast this —
+				// staging/beta/dev must never be able to show up as the
+				// bot's live presence, whether that's because of a
+				// misconfigured shared token or someone running a local
+				// checkout against real credentials. Non-prod shards simply
+				// leave the presence untouched instead of overwriting it.
+				if config.CurrentEnv != config.CurrentEnvProd {
+					Logger.Info("Skipping presence update: not the prod instance", zap.String("env", config.CurrentEnv), zap.Int("shardID", event.ShardID()))
+					return
+				}
+
 				if presenceErr := Discord.SetPresenceForShard(Context, event.ShardID(), gateway.WithWatchingActivity(Config.Sites.Frontend.Parse())); presenceErr != nil {
 					Logger.Error("error while setting presence", zap.Error(presenceErr), zap.Int("shardID", event.ShardID()))
 				}
