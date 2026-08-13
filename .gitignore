@@ -6,3 +6,4 @@ config.yaml
 coverage.out
 cmd/kitehelper/kitehelper
 __pycache__
+.claude
