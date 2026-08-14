@@ -42,6 +42,8 @@ const (
 	StaffManagePartners Perm = "manage_partners"
 	StaffManageBlog     Perm = "manage_blog"
 
+	StaffReviewReports Perm = "review_reports"
+
 	StaffViewTickets Perm = "view_tickets"
 
 	StaffViewCDN   Perm = "view_cdn"
@@ -261,6 +263,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Description: "Create, edit and delete blog entries.",
 		Category:    "Content",
 		Legacy:      []string{"blog.create_entry", "blog.update_entry", "blog.delete_entry", "blog.*"},
+	},
+
+	{
+		ID:          StaffReviewReports,
+		Name:        "Review Reports",
+		Description: "List, resolve and dismiss user-filed content reports (license violations, ToS violations, spam, etc) against bots, servers and packs.",
+		Category:    "Content Reports",
 	},
 
 	{

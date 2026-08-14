@@ -42,6 +42,13 @@ func Docs() *docs.Doc {
 				In:          "query",
 				Schema:      docs.IdSchema,
 			},
+			{
+				Name:        "pack_type",
+				Description: "Filter to only packs of this type (bot, server, or emoji). Omit to return every type.",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
 		},
 	}
 }
@@ -56,7 +63,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (pageNum - 1) * perPage
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	packType := r.URL.Query().Get("pack_type")
+
+	var rows pgx.Rows
+
+	if packType != "" {
+		if packType != types.PackTypeBot && packType != types.PackTypeServer && packType != types.PackTypeEmoji {
+			return resp.BadRequest("pack_type must be one of bot, server, or emoji")
+		}
+
+		rows, err = state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs WHERE pack_type = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3", packType, limit, offset)
+	} else {
+		rows, err = state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	}
 
 	if err != nil {
 		return resp.Err("Error while querying packs [db fetch]", err)
@@ -78,7 +97,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	var count uint64
 
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM packs").Scan(&count)
+	if packType != "" {
+		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM packs WHERE pack_type = $1", packType).Scan(&count)
+	} else {
+		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM packs").Scan(&count)
+	}
 
 	if err != nil {
 		return resp.Err("Error while querying packs [db count]", err)

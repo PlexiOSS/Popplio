@@ -70,6 +70,25 @@ func GetEntityPerms(ctx context.Context, userId, targetType, targetId string) (p
 		}
 
 		teamId = teamOwner.String
+	case "pack":
+		// Packs are always single-owner, never team-owned — no team fallback
+		// to fall through to, unlike bots/servers.
+		var owner string
+		err := state.Pool.QueryRow(ctx, "SELECT owner FROM packs WHERE url = $1", targetId).Scan(&owner)
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			return perms.Set{}, fmt.Errorf("pack not found")
+		}
+
+		if err != nil {
+			return perms.Set{}, fmt.Errorf("error finding pack: %v", err)
+		}
+
+		if owner == userId {
+			return perms.Entity.NewSet(perms.EntityOwner), nil
+		}
+
+		return perms.Set{}, nil
 	case "team":
 		teamId = targetId
 	case "server":

@@ -42,6 +42,8 @@ const (
 	EntityManageSessions Perm = "manage_sessions"
 
 	EntityRedeemVoteCredits Perm = "redeem_vote_credits"
+
+	EntityEditPacks Perm = "edit_packs"
 )
 
 // Entity is what a team member may do. Teams have no roles, so a member's
@@ -251,6 +253,13 @@ var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 			"bot.redeem_vote_credits", "server.redeem_vote_credits",
 			"team.redeem_vote_credits", "global.redeem_vote_credits",
 		},
+	},
+
+	{
+		ID:          EntityEditPacks,
+		Name:        "Edit Packs",
+		Description: "Change the settings of a pack, including uploading its emoji images. Packs are single-owner, not team-owned, so this is only ever granted to the pack's own owner (see teams.GetEntityPerms's \"pack\" case) — it exists in this catalogue purely so the upload gateway can check it the same generic way as edit_bots/edit_servers.",
+		Category:    "Packs",
 	},
 })
 
