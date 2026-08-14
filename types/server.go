@@ -69,6 +69,20 @@ type Server struct {
 	EmojisSyncedAt         pgtype.Timestamptz `db:"emojis_synced_at" json:"emojis_synced_at" description:"The last time emojis/stickers were synced. Null if never synced (e.g. the tracking bot has never been in this server)"`
 }
 
+// @ci table=servers, unfilled=1
+//
+// ServerEmojiPreview is the minimal shape GET /servers/@emojis returns —
+// deliberately not IndexServer (which excludes emoji/sticker data
+// entirely) or the full Server (unnecessarily heavy for a bulk listing).
+// Only servers with show_emojis = true are ever returned by that route.
+type ServerEmojiPreview struct {
+	ServerID string    `db:"server_id" json:"server_id" description:"The server's ID"`
+	Name     string    `db:"name" json:"name" description:"The server's name"`
+	Avatar   string    `db:"avatar" json:"avatar" description:"The server's icon URL"`
+	Emojis   []Emoji   `db:"emojis" json:"emojis" description:"The server's custom emojis"`
+	Stickers []Sticker `db:"stickers" json:"stickers" description:"The server's stickers"`
+}
+
 type CreateServer struct {
 	Invite        string      `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS Discord invite URL"`
 	Short         string      `db:"short" json:"short" validate:"required,min=30,max=150" msg:"Short description must be between 30 and 150 characters"`

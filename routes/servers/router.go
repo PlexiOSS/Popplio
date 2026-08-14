@@ -13,6 +13,7 @@ import (
 	"popplio/routes/servers/endpoints/get_server"
 	"popplio/routes/servers/endpoints/get_server_meta"
 	"popplio/routes/servers/endpoints/get_server_seo"
+	"popplio/routes/servers/endpoints/get_servers_emojis"
 	"popplio/routes/servers/endpoints/get_servers_index"
 	"popplio/routes/servers/endpoints/patch_server_settings"
 
@@ -35,6 +36,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_all_servers.Docs,
 		Handler: get_all_servers.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/@emojis",
+		OpId:    "get_servers_emojis",
+		Method:  uapi.GET,
+		Docs:    get_servers_emojis.Docs,
+		Handler: get_servers_emojis.Route,
 	}.Route(r)
 
 	uapi.Route{

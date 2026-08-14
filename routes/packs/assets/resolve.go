@@ -24,6 +24,9 @@ var (
 
 	indexServerColArr = db.GetCols(types.IndexServer{})
 	indexServerCols   = strings.Join(indexServerColArr, ",")
+
+	packEmojiColArr = db.GetCols(types.PackEmoji{})
+	packEmojiCols   = strings.Join(packEmojiColArr, ",")
 )
 
 func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
@@ -36,11 +39,12 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 	pack.ResolvedOwner = ownerUser
 
 	// Ensure these always marshal as `[]` rather than `null` when the pack
-	// has no bots/servers — a nil Go slice serializes to JSON null, which
-	// crashes frontend consumers that call .length/.map on it without a
-	// null check.
+	// has no bots/servers/emojis — a nil Go slice serializes to JSON null,
+	// which crashes frontend consumers that call .length/.map on it without
+	// a null check.
 	pack.ResolvedBots = []types.IndexBot{}
 	pack.ResolvedServers = []types.IndexServer{}
+	pack.Emojis = []types.PackEmoji{}
 
 	for _, botId := range pack.Bots {
 		row, err := state.Pool.Query(ctx, "SELECT "+indexBotCols+" FROM bots WHERE bot_id = $1", botId)
@@ -96,6 +100,23 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 		}
 
 		pack.ResolvedServers = append(pack.ResolvedServers, server)
+	}
+
+	if pack.PackType == types.PackTypeEmoji {
+		rows, err := state.Pool.Query(ctx, "SELECT "+packEmojiCols+" FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC", pack.URL)
+
+		if err != nil {
+			state.Logger.Error("Error querying pack_emojis table [db fetch]", zap.Error(err), zap.String("pack_url", pack.URL))
+			return fmt.Errorf("error querying pack_emojis table: %w", err)
+		}
+
+		emojis, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.PackEmoji])
+
+		if err != nil {
+			return fmt.Errorf("error collecting pack emojis: %w", err)
+		}
+
+		pack.Emojis = emojis
 	}
 
 	pack.Votes, err = votes.EntityGetVoteCount(ctx, state.Pool, pack.URL, "pack")

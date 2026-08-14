@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - Unreleased
+
+### Added
+
+- Packs are no longer bots-only: a new `pack_type` column (`bot` | `server`
+  | `emoji`, immutable after creation) generalizes the existing `BotPack`
+  type, and a new `pack_emojis` table backs a genuinely new capability —
+  user-curated emoji packs, each emoji its own durably-uploaded asset (not
+  a live reference into a server's synced emoji list, so a pack keeps
+  working even if the source server stops syncing or leaves). Server packs
+  reuse the `Servers []string` field that already existed on `BotPack` but
+  was never wired to any route or UI. `add_pack`/`patch_pack` validate
+  content per type (bot packs need `bots`, server packs need `servers`,
+  emoji packs need `emojis`, capped at 50), `get_all_packs` gained an
+  optional `?pack_type=` filter, and a new `edit_packs` entity permission
+  (`teams.GetEntityPerms`'s new `"pack"` case, single-owner only — no team
+  fallback) lets the existing generic upload-permission-check flow cover
+  pack emoji uploads the same way it already covers bot/server banners.
+- A generic content-report system (`popplio/reports`, new `routes/reports`
+  package), built alongside the pack generalization above to give users a
+  way to flag a pack (or, later, any votable entity) for e.g. a license
+  violation on an emoji pack. `PUT /users/{uid}/{target_type}/{target_id}/reports`
+  mirrors the votes router's exact URL shape and target-type handling.
+  Reports are keyed `(target_type, target_id)`, same convention as
+  `entity_votes`; a partial unique index allows only one open report per
+  reporter per target, and a per-user daily cap (10) limits spamming many
+  different targets. Reporter identity is never exposed outside the staff
+  panel — the public API never returns it. Reviewed exclusively through a
+  new Arcadia RPC (`UpdateReports`/`ReportAction`, following
+  `PartnerAction`'s exact discriminated-union codec pattern) gated on a new
+  `review_reports` staff permission; there is deliberately no public
+  listing/review route, matching how Blog/Partners never got one either.
+  **Config/DB note:** three new one-off migrations to apply —
+  `exp/packtype.sql`, `exp/packemojis.sql`, `exp/reports.sql`.
+- `GET /bots/@all` and `GET /servers/@all` gained an optional
+  `?sort=trending` param, ranking by net votes (upvotes minus downvotes) in
+  the last 7 days instead of newest-first, and returning only entities with
+  at least one vote in that window. New composite index
+  `entity_votes_target_created_idx` (`exp/entityvotesidx.sql`) backs the
+  underlying grouped query — `entity_votes` had no index at all before
+  this, so trending would otherwise have been a full table scan.
+- `GET /reports/stats`: a new, deliberate exception to the reports
+  system's "no public read-back" design — anonymized counts of reports
+  grouped by `reason`/`status` only (no report IDs, no target identity, no
+  reporter identity), for a public moderation-transparency page.
+- `GET /servers/@emojis`: a new paginated endpoint returning only
+  `server_id`/`name`/`avatar`/`emojis`/`stickers` for servers with
+  `show_emojis = true`. `IndexServer` (what `@all` returns) excludes
+  emoji/sticker data entirely, so a cross-server emoji/sticker browse page
+  had no way to bulk-fetch this without N+1 calls to `GET /servers/{id}`
+  before this.
+
 ## [1.1.0] - 2026-08-13
 
 ### Added

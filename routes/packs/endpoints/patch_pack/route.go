@@ -24,12 +24,16 @@ import (
 
 var compiledMessages = uapi.CompileValidationErrors(PatchPack{})
 
+// PatchPack intentionally has no pack_type field — a pack's type is
+// immutable after creation (see types.BotPack.PackType doc comment), so
+// there is simply nothing here to change it with.
 type PatchPack struct {
-	Name    string   `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
-	Short   string   `json:"short" validate:"required,min=10,max=100" msg:"Description must be between 10 and 100 characters"`
-	Tags    []string `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	Bots    []string `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
-	Servers []string `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
+	Name    string                    `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
+	Short   string                    `json:"short" validate:"required,min=10,max=100" msg:"Description must be between 10 and 100 characters"`
+	Tags    []string                  `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	Bots    []string               `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
+	Servers []string               `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
+	Emojis  []types.PackEmojiInput `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
 }
 
 func Docs() *docs.Doc {
@@ -76,10 +80,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	var id = chi.URLParam(r, "id")
 
-	// Check that the pack exists and get its owner in one query
-	var owner string
+	// Check that the pack exists and get its owner + type in one query
+	var owner, packType string
 
-	err = state.Pool.QueryRow(d.Context, "SELECT owner FROM packs WHERE url = $1", id).Scan(&owner)
+	err = state.Pool.QueryRow(d.Context, "SELECT owner, pack_type FROM packs WHERE url = $1", id).Scan(&owner, &packType)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -93,8 +97,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("You are not the owner of this pack")
 	}
 
-	if len(payload.Bots)+len(payload.Servers) == 0 {
-		return resp.BadRequest("A pack must contain at least one bot or server")
+	// Content requirement depends on the pack's (immutable) type.
+	switch packType {
+	case types.PackTypeBot:
+		if len(payload.Bots) == 0 {
+			return resp.BadRequest("A bot pack must contain at least one bot")
+		}
+	case types.PackTypeServer:
+		if len(payload.Servers) == 0 {
+			return resp.BadRequest("A server pack must contain at least one server")
+		}
+	case types.PackTypeEmoji:
+		if len(payload.Emojis) == 0 {
+			return resp.BadRequest("An emoji pack must contain at least one emoji")
+		}
 	}
 
 	// Check that all bots exist. Anyone may add any existing bot/server to a
@@ -136,11 +152,51 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		payload.Servers = []string{}
 	}
 
+	tx, err := state.Pool.Begin(d.Context)
+
+	if err != nil {
+		return resp.ErrBody("Failed to create transaction [patch_pack]", "Failed to create transaction.", err)
+	}
+
+	defer tx.Rollback(d.Context)
+
 	// Update the pack
-	_, err = state.Pool.Exec(d.Context, "UPDATE packs SET name = $1, short = $2, tags = $3, bots = $4, servers = $5 WHERE url = $6", payload.Name, payload.Short, payload.Tags, payload.Bots, payload.Servers, id)
+	_, err = tx.Exec(d.Context, "UPDATE packs SET name = $1, short = $2, tags = $3, bots = $4, servers = $5 WHERE url = $6", payload.Name, payload.Short, payload.Tags, payload.Bots, payload.Servers, id)
 
 	if err != nil {
 		return resp.Err("Error while updating pack [db exec]", err, zap.String("id", id))
+	}
+
+	// Emojis are replaced wholesale, same as bots/servers above, rather than
+	// incrementally patched.
+	if packType == types.PackTypeEmoji {
+		_, err = tx.Exec(d.Context, "DELETE FROM pack_emojis WHERE pack_url = $1", id)
+
+		if err != nil {
+			return resp.Err("Error while clearing existing pack emojis [db exec]", err, zap.String("id", id))
+		}
+
+		for i, emoji := range payload.Emojis {
+			_, err = tx.Exec(
+				d.Context,
+				"INSERT INTO pack_emojis (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5)",
+				emoji.ID,
+				id,
+				emoji.Name,
+				emoji.Animated,
+				i,
+			)
+
+			if err != nil {
+				return resp.ErrBody("Failed to insert pack emoji [patch_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))
+			}
+		}
+	}
+
+	err = tx.Commit(d.Context)
+
+	if err != nil {
+		return resp.Err("Failed to commit transaction [patch_pack]", err, zap.String("id", id))
 	}
 
 	return uapi.DefaultResponse(http.StatusNoContent)
