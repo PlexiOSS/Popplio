@@ -35,6 +35,8 @@ func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response,
 		return s.searchEntitys(ctx, req.SearchEntitys)
 	case req.UpdatePartners != nil:
 		return s.updatePartners(ctx, req.UpdatePartners)
+	case req.UpdateReports != nil:
+		return s.updateReports(ctx, req.UpdateReports)
 	case req.UpdateChangelog != nil:
 		return s.updateChangelog(ctx, req.UpdateChangelog)
 	case req.UpdateBlog != nil:

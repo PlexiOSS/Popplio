@@ -1,4 +1,4 @@
-// Package packs mounts the "Bot Packs" group of API routes.
+// Package packs mounts the "Packs" group of API routes.
 //
 // These API endpoints are related to IBL packs
 package packs
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	tagName = "Bot Packs"
+	tagName = "Packs"
 )
 
 type Router struct{}

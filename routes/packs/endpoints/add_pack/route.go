@@ -24,12 +24,14 @@ import (
 var compiledMessages = uapi.CompileValidationErrors(CreatePack{})
 
 type CreatePack struct {
-	Name    string   `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
-	URL     string   `json:"url" validate:"required,min=3,max=20,nospaces,notblank,alpha" msg:"URL must be between 3 and 20 characters without spaces and must be alphabetic"`
-	Short   string   `json:"short" validate:"required,min=10,max=100" msg:"Description must be between 10 and 100 characters"`
-	Tags    []string `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	Bots    []string `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
-	Servers []string `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
+	Name     string                 `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
+	URL      string                 `json:"url" validate:"required,min=3,max=20,nospaces,notblank,alpha" msg:"URL must be between 3 and 20 characters without spaces and must be alphabetic"`
+	Short    string                 `json:"short" validate:"required,min=10,max=100" msg:"Description must be between 10 and 100 characters"`
+	Tags     []string               `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	PackType string                 `json:"pack_type" validate:"required,oneof=bot server emoji" msg:"pack_type must be one of bot, server, or emoji"`
+	Bots     []string               `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
+	Servers  []string               `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
+	Emojis   []types.PackEmojiInput `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
 }
 
 func Docs() *docs.Doc {
@@ -67,8 +69,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
 
-	if len(payload.Bots)+len(payload.Servers) == 0 {
-		return resp.BadRequest("A pack must contain at least one bot or server")
+	// Content requirement depends on the pack type — a pack can't be empty,
+	// but what "empty" means differs per type.
+	switch payload.PackType {
+	case types.PackTypeBot:
+		if len(payload.Bots) == 0 {
+			return resp.BadRequest("A bot pack must contain at least one bot")
+		}
+	case types.PackTypeServer:
+		if len(payload.Servers) == 0 {
+			return resp.BadRequest("A server pack must contain at least one server")
+		}
+	case types.PackTypeEmoji:
+		if len(payload.Emojis) == 0 {
+			return resp.BadRequest("An emoji pack must contain at least one emoji")
+		}
 	}
 
 	// Both columns are NOT NULL — a nil Go slice encodes as SQL NULL, so
@@ -141,10 +156,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("A pack with that URL already exists")
 	}
 
+	tx, err := state.Pool.Begin(d.Context)
+
+	if err != nil {
+		return resp.ErrBody("Failed to create transaction [add_pack]", "Failed to create transaction.", err)
+	}
+
+	defer tx.Rollback(d.Context)
+
 	// Create the pack
-	_, err = state.Pool.Exec(
+	_, err = tx.Exec(
 		d.Context,
-		"INSERT INTO packs (name, url, short, tags, bots, servers, owner) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+		"INSERT INTO packs (name, url, short, tags, bots, servers, owner, pack_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
 		payload.Name,
 		payload.URL,
 		payload.Short,
@@ -152,10 +175,33 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		payload.Bots,
 		payload.Servers,
 		d.Auth.ID,
+		payload.PackType,
 	)
 
 	if err != nil {
 		return resp.BadRequest(err.Error())
+	}
+
+	for i, emoji := range payload.Emojis {
+		_, err = tx.Exec(
+			d.Context,
+			"INSERT INTO pack_emojis (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5)",
+			emoji.ID,
+			payload.URL,
+			emoji.Name,
+			emoji.Animated,
+			i,
+		)
+
+		if err != nil {
+			return resp.ErrBody("Failed to insert pack emoji [add_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))
+		}
+	}
+
+	err = tx.Commit(d.Context)
+
+	if err != nil {
+		return resp.Err("Failed to commit transaction [add_pack]", err, zap.String("userId", d.Auth.ID))
 	}
 
 	return uapi.DefaultResponse(http.StatusNoContent)
