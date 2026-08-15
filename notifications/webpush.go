@@ -21,7 +21,14 @@ func PushNotification(userId string, notif types.Alert) error {
 		notif.AlertData = map[string]any{}
 	}
 
-	if notif.NoSave {
+	// NoSave means what it says: true skips persisting the alert to the
+	// inbox (used for spammy/high-frequency notifications like vote
+	// reminders), false (the zero value, so most callers get this by
+	// default) saves it. This used to be inverted (`if notif.NoSave`),
+	// which meant every "normal" alert silently never reached a user's
+	// inbox — only the one caller that explicitly opted OUT of saving
+	// (vote_reminders.go) ever actually persisted anything.
+	if !notif.NoSave {
 		_, err = state.Pool.Exec(
 			state.Context,
 			"INSERT INTO alerts (user_id, type, url, message, title, icon, alert_data, priority) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",

@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `arcadia/panel/ops_proxy.go`'s `popplioStaff` proxy (backs the new
+  Applications admin page) rejected every request with a misleading
+  "Path must start with /" error in production, even for a
+  correctly-formed path like `/staff/apps`. Root cause was in
+  `safeJoinPopplio` (`arcadia/panel/paths.go`): beyond the real security
+  boundary (same scheme+host as Popplio's own API base), it also enforced
+  that the resolved path stay under the *same path prefix* as the
+  configured base URL — which rejects any legitimate root-level target
+  whenever that base URL has a non-root path component. That check added
+  no security beyond the origin check and only broke valid callers, so
+  it's removed. Also stopped collapsing every `safeJoinPopplio` error into
+  the same fixed string — the real error now surfaces, so a future failure
+  here is diagnosable instead of misleading.
+- `notifications.PushNotification`'s `NoSave` field was inverted from its
+  own name/doc comment (`if notif.NoSave { INSERT }` — persisted only when
+  told *not* to save). In effect, every "normal" alert (push-subscribe
+  confirmation, reminder-set confirmation, payment-failure alerts) never
+  reached a user's in-app alert inbox, only ever firing as a transient
+  push notification — the one caller that explicitly opted out of saving
+  (`vote_reminders.go`, "spammy, fills up the db quickly") was the only
+  alert type that persisted. Condition is now `if !notif.NoSave`, matching
+  what the field has always been named and documented to mean.
+- The "New Application" Discord embed (`routes/apps/endpoints/create_app`)
+  linked to the old SvelteKit panel (`Sites.Panel` + `/panel/apps`),
+  superseded by Omniplex's own `/admin/applications` — link updated.
+
+### Added
+
+- `GET /staff/tickets` — every ticket platform-wide, gated on the existing
+  `view_tickets` staff permission (optional `?open=true|false` filter,
+  paginated). Staff could already view/reply/close/reopen any ticket via
+  the existing owner-or-staff checks on `get_ticket`/
+  `create_ticket_message`/`patch_ticket`, but had no way to find a ticket
+  ID to act on in the first place — this closes that gap. Auth follows the
+  same normal-user-session + in-handler permission check as the other
+  ticket routes, not the legacy `staffpanel__authchain` system the
+  Applications page uses.
+- A user-facing confirmation alert (now that `PushNotification` actually
+  persists them) at three points that previously gave zero in-app
+  feedback on success — a purchase completing (`GivePerks`, alongside the
+  existing staff-only mod-log post), a shop item purchase, and a vote
+  credit redemption. All three are best-effort: the underlying change is
+  already committed by the time the alert is sent, so a failed alert logs
+  a warning rather than turning into an error response for something that
+  actually succeeded.
+- A new report being filed now posts to the staff-only `StaffLogs`
+  Discord channel (target, type, reason — no reporter identity, consistent
+  with reporter identity being staff-panel-only everywhere else). The
+  equivalent "new application submitted" post already existed
+  (`create_app` posts to the `Apps` channel with an `@Apps` role ping) —
+  confirmed by reading the handler directly, not assumed.
+
 ## [1.2.1] - 2026-08-15
 
 ### Changed

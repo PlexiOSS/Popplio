@@ -14,6 +14,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/notifications"
 	"popplio/routes/shop/assets"
 	"popplio/state"
 	"popplio/types"
@@ -26,6 +27,7 @@ import (
 	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
 )
 
 type PurchaseShopItem struct {
@@ -200,6 +202,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err := tx.Commit(d.Context); err != nil {
 		return resp.ErrBody("Error committing transaction", "An error occurred while committing transaction.", err)
+	}
+
+	// Best-effort: the purchase already committed, so a failure here
+	// shouldn't turn into an error response the client would read as "the
+	// purchase failed" when it didn't.
+	if err := notifications.PushNotification(d.Auth.ID, types.Alert{
+		Type:    types.AlertTypeSuccess,
+		Title:   "Shop Purchase Complete",
+		Message: item.Name + " has been applied to " + targetID + ".",
+	}); err != nil {
+		state.Logger.Warn("Failed to send shop purchase confirmation alert", zap.Error(err), zap.String("user_id", d.Auth.ID), zap.String("item_id", item.ID))
 	}
 
 	return uapi.DefaultResponse(http.StatusNoContent)

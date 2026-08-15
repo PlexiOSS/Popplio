@@ -9,6 +9,7 @@ import (
 	"popplio/api/resp"
 	"strconv"
 
+	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	docs "github.com/infinitybotlist/eureka/doclib"
 	"github.com/infinitybotlist/eureka/uapi"
+	"go.uber.org/zap"
 )
 
 func Docs() *docs.Doc {
@@ -84,6 +86,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.ErrBody("Error committing transaction", "An error occurred while committing transaction.", err)
+	}
+
+	if err := notifications.PushNotification(d.Auth.ID, types.Alert{
+		Type:    types.AlertTypeSuccess,
+		Title:   "Votes Redeemed",
+		Message: strconv.Itoa(votesInt) + " votes converted to credits for " + targetId + ".",
+	}); err != nil {
+		state.Logger.Warn("Failed to send vote credit redemption alert", zap.Error(err), zap.String("user_id", d.Auth.ID), zap.String("target_id", targetId))
 	}
 
 	return uapi.HttpResponse{
