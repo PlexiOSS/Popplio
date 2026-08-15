@@ -57,12 +57,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	rssFeed.NS = "http://www.w3.org/2005/Atom"
 	rssFeed.Version = "2.0"
 	rssFeed.Channel = &seo.RssChannel{
-		Title:         "Infinity Bot List",
+		Title:         "Omniplex",
 		Link:          state.Config.Sites.Frontend.Parse(),
 		Description:   "Search our vast list of bots for an exciting start to your server.",
 		Language:      "en-us",
 		LastBuildDate: time.Now().Format(time.RFC822),
-		Copyright:     "Copyright " + time.Now().Format("2006") + " Infinity Development",
+		Copyright:     "Copyright " + time.Now().Format("2006") + " NodeByte LTD",
 		Docs:          "https://www.rssboard.org/rss-specification",
 		TTL:           120,
 		Category:      []string{"Bots", "Servers"},

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - Unreleased
+
+### Added
+
+- `GET /list/stats` now includes `total_pending_bots` and
+  `total_denied_bots`, so consumers can show a real approved/certified/
+  pending/denied breakdown instead of inferring it from `total_bots` minus
+  the listed count.
+
+### Changed
+
+- Omniplex is now owned by NodeByte LTD. Remaining "Infinity Bot List" /
+  "Infinity Development" copy left over from the old brand — application
+  question text, the staff-denial DM, webhook docs, the RSS feed title
+  and copyright line, the auth-log embed footer, and the `!delete`
+  bot-command copy — now reads "Omniplex" / "NodeByte LTD".
+
+### Fixed
+
+- The Gold premium plan granted ~365 hours (~15 days) of premium instead
+  of a year — `TimePeriod` was set in raw days while `GivePerks` applies
+  it as hours. Bronze/Silver were already correct; Gold now multiplies by
+  24 like they do.
+- `POST /users/{id}/redeem-payment-offer?code=BOOSTPREMIUM` granted the
+  perk successfully but then always fell through to a final `400 Invalid
+  offer code` response regardless — no caller could ever see it succeed.
+  It also never stamped `last_booster_claim`, so the "once every 30 days"
+  cooldown could never actually engage. Both are fixed: a successful
+  redemption now returns `204` and updates the claim timestamp.
+
 ## [1.2.0] - 2026-08-14
 
 ### Added

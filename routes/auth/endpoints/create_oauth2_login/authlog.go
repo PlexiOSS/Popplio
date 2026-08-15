@@ -63,7 +63,7 @@ func sendAuthLog(user oauthUser, req types.AuthorizeRequest, isNew bool) {
 				Color:  0xff0000,
 				Fields: authLogFields(user, req, bans, isNew),
 				Footer: &discord.EmbedFooter{
-					Text: "© Copyright 2023 - Infinity Bot List",
+					Text: "© Copyright 2026 - NodeByte LTD",
 				},
 				Timestamp: validators.Pointer(time.Now()),
 			},

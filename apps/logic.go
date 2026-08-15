@@ -331,7 +331,7 @@ func reviewLogicStaff(d uapi.RouteData, resp types.AppResponse, reason string, a
 			Embeds: []discord.Embed{
 				{
 					Title:       "Staff Application Denied",
-					Description: "Unfortunately, we have denied your staff application for Infinity Bot List. You may reapply later if you wish to",
+					Description: "Unfortunately, we have denied your staff application for Omniplex. You may reapply later if you wish to",
 					Color:       0x00ff00,
 					Fields: []discord.EmbedField{
 						{
