@@ -42,6 +42,7 @@ const (
 	EntityManageSessions Perm = "manage_sessions"
 
 	EntityRedeemVoteCredits Perm = "redeem_vote_credits"
+	EntityBuyShopItems      Perm = "buy_shop_items"
 
 	EntityEditPacks Perm = "edit_packs"
 )
@@ -253,6 +254,13 @@ var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 			"bot.redeem_vote_credits", "server.redeem_vote_credits",
 			"team.redeem_vote_credits", "global.redeem_vote_credits",
 		},
+	},
+
+	{
+		ID:          EntityBuyShopItems,
+		Name:        "Buy Shop Items",
+		Description: "Spend a bot's earned vote credits on a shop item.",
+		Category:    "Votes",
 	},
 
 	{

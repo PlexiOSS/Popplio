@@ -19,6 +19,7 @@ import (
 	"github.com/infinitybotlist/eureka/dovewing"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -185,7 +186,8 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		voteEntity.VoteCredits = true // Bots support vote credits
 
 		var premium bool
-		err := c.QueryRow(ctx, "SELECT premium FROM bots WHERE bot_id = $1", targetId).Scan(&premium)
+		var voteBlitzUntil pgtype.Timestamptz
+		err := c.QueryRow(ctx, "SELECT premium, vote_blitz_until FROM bots WHERE bot_id = $1", targetId).Scan(&premium, &voteBlitzUntil)
 
 		if err != nil {
 			return nil, err
@@ -200,6 +202,12 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 				voteEntity.PerUser = 2  // 2 votes per user
 				voteEntity.VoteTime = 6 // Half of the normal vote time
 			}
+		}
+
+		// A purchased vote blitz halves whatever vote time was just computed,
+		// stacking with premium/double-vote rather than overriding them.
+		if voteBlitzUntil.Valid && voteBlitzUntil.Time.After(time.Now()) {
+			voteEntity.VoteTime = max(voteEntity.VoteTime/2, 1)
 		}
 	case "server":
 		voteEntity.VoteCredits = true
