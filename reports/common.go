@@ -48,7 +48,7 @@ func GetTargetInfo(ctx context.Context, c DbConn, targetType, targetId string) (
 			return nil, errors.New("bot not found")
 		}
 
-		return &TargetInfo{Name: targetId, URL: frontend + "/bot/" + targetId}, nil
+		return &TargetInfo{Name: targetId, URL: frontend + "/bots/" + targetId}, nil
 	case "server":
 		var name string
 		err := c.QueryRow(ctx, "SELECT name FROM servers WHERE server_id = $1", targetId).Scan(&name)
@@ -61,7 +61,7 @@ func GetTargetInfo(ctx context.Context, c DbConn, targetType, targetId string) (
 			return nil, fmt.Errorf("failed to fetch server: %w", err)
 		}
 
-		return &TargetInfo{Name: name, URL: frontend + "/server/" + targetId}, nil
+		return &TargetInfo{Name: name, URL: frontend + "/servers/" + targetId}, nil
 	case "pack":
 		var name string
 		err := c.QueryRow(ctx, "SELECT name FROM packs WHERE url = $1", targetId).Scan(&name)
@@ -74,7 +74,7 @@ func GetTargetInfo(ctx context.Context, c DbConn, targetType, targetId string) (
 			return nil, fmt.Errorf("failed to fetch pack: %w", err)
 		}
 
-		return &TargetInfo{Name: name, URL: frontend + "/pack/" + targetId}, nil
+		return &TargetInfo{Name: name, URL: frontend + "/packs/" + targetId}, nil
 	case "team":
 		var name string
 		err := c.QueryRow(ctx, "SELECT name FROM teams WHERE id = $1", targetId).Scan(&name)
@@ -87,7 +87,7 @@ func GetTargetInfo(ctx context.Context, c DbConn, targetType, targetId string) (
 			return nil, fmt.Errorf("failed to fetch team: %w", err)
 		}
 
-		return &TargetInfo{Name: name, URL: frontend + "/team/" + targetId}, nil
+		return &TargetInfo{Name: name, URL: frontend + "/teams/" + targetId}, nil
 	default:
 		return nil, errors.New("unsupported report target type: " + targetType)
 	}

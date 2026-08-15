@@ -83,10 +83,12 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, err
 		}
 
-		// Set entityInfo for log
+		// Set entityInfo for log. VoteURL matches URL rather than a
+		// dedicated "/vote" sub-route — no such route exists in the
+		// frontend, voting happens inline on the entity's own page.
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/bot/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/bot/" + targetId + "/vote",
+			URL:     state.Config.Sites.Frontend.Parse() + "/bots/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/bots/" + targetId,
 			Name:    botObj.Username,
 			Avatar:  botObj.Avatar,
 		}, nil
@@ -108,8 +110,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 		}
 
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/pack/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/pack/" + targetId,
+			URL:     state.Config.Sites.Frontend.Parse() + "/packs/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/packs/" + targetId,
 			Name:    targetId,
 		}, nil
 	case "team":
@@ -132,8 +134,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 
 		// Set entityInfo for log
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/team/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/team/" + targetId + "/vote",
+			URL:     state.Config.Sites.Frontend.Parse() + "/teams/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/teams/" + targetId,
 			Name:    name,
 		}, nil
 	case "server":
@@ -156,8 +158,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 
 		// Set entityInfo for log
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/server/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/server/" + targetId + "/vote",
+			URL:     state.Config.Sites.Frontend.Parse() + "/servers/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/servers/" + targetId,
 			Name:    name,
 		}, nil
 	case "blog":
