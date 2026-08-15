@@ -3,6 +3,7 @@ package assets
 import (
 	"context"
 	"errors"
+	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -182,6 +183,18 @@ func GivePerks(ctx context.Context, perkData PerkData) error {
 
 		if err != nil {
 			return errors.New("couldn't send message to mod logs")
+		}
+
+		// The mod log above is staff-only visibility — the purchaser gets
+		// nothing confirming their own purchase without this. Best-effort:
+		// the premium period is already applied, so a failure here shouldn't
+		// turn into an error the caller reads as "the purchase failed".
+		if err := notifications.PushNotification(perkData.UserID, types.Alert{
+			Type:    types.AlertTypeSuccess,
+			Title:   "Premium Activated",
+			Message: perkData.For + " (" + perkData.ForType + ") now has premium for the next " + strconv.Itoa(perk.TimePeriod) + " hours.",
+		}); err != nil {
+			state.Logger.Warn("Failed to send premium confirmation alert", zap.Error(err), zap.String("user_id", perkData.UserID), zap.String("for", targetID))
 		}
 	}
 

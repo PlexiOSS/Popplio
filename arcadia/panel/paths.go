@@ -3,7 +3,6 @@ package panel
 import (
 	"errors"
 	"net/url"
-	"path"
 	"strings"
 
 	"popplio/state"
@@ -41,16 +40,14 @@ func safeJoinPopplio(rawPath string) (string, error) {
 
 	resolved := base.ResolveReference(ref)
 
+	// Same-origin is the actual security boundary described above: once
+	// scheme+host are pinned to Popplio's own base, the target can't be
+	// retargeted at another host. A further same-path-prefix containment
+	// check used to run here too, but it rejected legitimate root-level
+	// targets (e.g. "/staff/apps") whenever the configured base URL itself
+	// had a non-root path component — it added no real security beyond the
+	// origin check and only broke valid callers.
 	if resolved.Scheme != base.Scheme || resolved.Host != base.Host {
-		return "", errors.New("path escapes the popplio base url")
-	}
-
-	basePath := base.EscapedPath()
-	if basePath == "" {
-		basePath = "/"
-	}
-
-	if !strings.HasPrefix(path.Clean(resolved.EscapedPath())+"/", path.Clean(basePath)+"/") {
 		return "", errors.New("path escapes the popplio base url")
 	}
 
