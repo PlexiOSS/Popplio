@@ -45,10 +45,19 @@ func HasRecognizedBenefit(benefitIDs []string) bool {
 }
 
 // ApplyBenefit applies one recognized shop benefit's effect to a target
-// entity. durationHours comes from the purchased ShopItem's Duration field.
+// entity (bot or server — both tables carry identical columns for every
+// benefit below). durationHours comes from the purchased ShopItem's
+// Duration field.
 func ApplyBenefit(ctx context.Context, tx pgx.Tx, benefitID, targetType, targetID string, durationHours int64) error {
-	if targetType != "bot" {
-		return errors.New("shop benefits are only supported for bots today")
+	var table, idCol string
+
+	switch targetType {
+	case "bot":
+		table, idCol = "bots", "bot_id"
+	case "server":
+		table, idCol = "servers", "server_id"
+	default:
+		return errors.New("shop benefits are only supported for bots and servers today")
 	}
 
 	switch benefitID {
@@ -56,28 +65,28 @@ func ApplyBenefit(ctx context.Context, tx pgx.Tx, benefitID, targetType, targetI
 		// Matches routes/payments/assets/give_perks.go's GivePerks exactly, so
 		// a credits-bought premium period behaves identically to a paid one.
 		_, err := tx.Exec(ctx,
-			"UPDATE bots SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE bot_id = $2",
+			"UPDATE "+table+" SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE "+idCol+" = $2",
 			durationHours, targetID,
 		)
 		return err
 	case BenefitPriorityBoost:
 		_, err := tx.Exec(ctx,
-			"UPDATE bots SET boosted_until = GREATEST(COALESCE(boosted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2",
+			"UPDATE "+table+" SET boosted_until = GREATEST(COALESCE(boosted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
 			durationHours, targetID,
 		)
 		return err
 	case BenefitFeaturedSlot:
 		_, err := tx.Exec(ctx,
-			"UPDATE bots SET featured_until = GREATEST(COALESCE(featured_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2",
+			"UPDATE "+table+" SET featured_until = GREATEST(COALESCE(featured_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
 			durationHours, targetID,
 		)
 		return err
 	case BenefitSupporterBadge:
-		_, err := tx.Exec(ctx, "UPDATE bots SET supporter_badge = true WHERE bot_id = $1", targetID)
+		_, err := tx.Exec(ctx, "UPDATE "+table+" SET supporter_badge = true WHERE "+idCol+" = $1", targetID)
 		return err
 	case BenefitVoteBlitz:
 		_, err := tx.Exec(ctx,
-			"UPDATE bots SET vote_blitz_until = GREATEST(COALESCE(vote_blitz_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2",
+			"UPDATE "+table+" SET vote_blitz_until = GREATEST(COALESCE(vote_blitz_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
 			durationHours, targetID,
 		)
 		return err

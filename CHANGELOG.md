@@ -5,7 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.1] - Unreleased
+## [1.2.1] - 2026-08-15
+
+### Changed
+
+- The Friday-Sunday double-vote weekend bonus (`votes.GetDoubleVote`) now
+  pins its day-of-week check to UTC explicitly instead of relying on
+  `time.Now()`'s implicit host-local timezone, so the boundary is the same
+  instant regardless of what timezone the process happens to run in. Also
+  added `VoteInfo.WeekendBonus`, a per-entity flag reporting whether the
+  bonus is actively boosting that entity's `per_user`/`vote_time` right
+  now — `false` for premium bots/servers even on a bonus weekend, since
+  their flat premium cooldown already applies instead. Nothing in the API
+  previously told callers when the bonus was live.
+- Certification requirements loosened and diversified. The old rule
+  required a bot to clear servers ≥100 **and** unique clicks ≥30 both,
+  no exceptions. It's now an OR across three lowered bars (servers ≥50,
+  unique clicks ≥15, **or** votes ≥50, the last one is new), plus a new but
+  lenient 3-day minimum listed age. A bot excelling in one metric no
+  longer gets rejected for not excelling in all of them.
+- Servers can now be certified too a new "Server Certification"
+  position on `/apps` (`extraLogicCertServer`/`reviewLogicCertServer` in
+  `apps/logic.go`), using the same OR-of-three-metrics rule scaled to
+  server stats (members ≥100 in place of bot servers ≥50). New
+  `request_server_certification` permission. The "Certified" badge
+  Omniplex has always been able to render for servers had no backend path
+  that ever set it until now.
+- Premium and Shop now work for servers, not just bots:
+  - `CreatePerkData`/`PerkData` gained a `for_type` field (`"bot"` or
+    `"server"`, defaults to `"bot"` if omitted) so Stripe/PayPal checkout
+    and the booster-offer redemption can target either.
+    `servers.premium` has been a real, displayed column with no purchase
+    path behind it since it was added; now there is one.
+  - Shop purchases (`POST /{target_type}/{target_id}/shop/purchase`) and
+    all five benefit effects (`routes/shop/assets/benefits.go`) now
+    branch on target type between `bots`/`servers` both tables carry
+    identical benefit columns.
+  - `servers` gained the same `boosted_until`/`featured_until`/
+    `supporter_badge`/`vote_blitz_until` columns bots already had
+    (`exp/serverbenefits.sql`), plus the matching read-side effects:
+    boosted-first sort in `GET /servers/@all`, a `featured` category in
+    `GET /servers/@index`, and a vote-blitz cooldown halving in
+    `EntityVoteInfo`'s `"server"` case.
 
 ### Added
 
@@ -13,6 +54,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `total_denied_bots`, so consumers can show a real approved/certified/
   pending/denied breakdown instead of inferring it from `total_bots` minus
   the listed count.
+- `GET /staff/shop-purchases` the same shop-purchase data
+  `GET /{target_type}/{target_id}/shop/purchases` already exposes
+  publicly one entity at a time, but platform-wide and staff-gated
+  (`view_shop`) for abuse/fraud monitoring. No frontend consumes this yet
+  since the Arcadia panel UI isn't part of this repo it's ready for
+  whenever that side wires it up.
+- A standalone support ticket system. The existing `tickets` table/`Ticket`
+  type were entirely Discord-channel-shaped (`channel_id`, `enc_key`) with
+  no creation path anywhere in the codebase, not in the API, not in the
+  Discord bot nothing has ever created a ticket in this codebase. Rather
+  than build the Discord-integration side, tickets are now a plain web
+  feature reusing the same table (`channel_id` left `""`, `enc_key` left
+  null): `GET /tickets/topics` (a small hardcoded topic catalogue, same
+  convention as `apps.Apps`), `POST`/`GET /users/{id}/tickets`,
+  `POST /tickets/{id}/messages`, and `PATCH /tickets/{id}` to close/reopen
+  (closing is open to the author or staff; reopening is staff-only, via a
+  new `manage_tickets` permission). New message IDs are synthesized
+  Discord-format snowflakes (`disgoorg/snowflake`'s `New`) purely so
+  `GET /tickets/{id}`'s existing `snowflake.Parse`-based timestamp
+  decoding keeps working unchanged for old and new tickets alike.
 - Shop purchases actually do something now. `shop_items`/`shop_item_benefits`
   have had full staff CRUD via the Arcadia panel for a while, but nothing
   ever spent an entity's earned vote credits on one or defined what a
@@ -32,14 +93,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `vote_blitz_until` column, halves `EntityVoteInfo`'s vote-time
     cooldown while active). Unrecognized benefit IDs no-op rather than
     error, so staff can still catalogue purely descriptive/future
-    benefits without breaking a purchase — but an item with zero
+    benefits without breaking a purchase but an item with zero
     recognized benefits is rejected at purchase time rather than silently
     spending credits for nothing.
-  - `GET /{target_type}/{target_id}/shop/purchases` — purchase history,
+  - `GET /{target_type}/{target_id}/shop/purchases` purchase history,
     public, same transparency level as the existing vote-credit logs.
   - `exp/shopbenefits.sql` (schema: 4 new `bots` columns + the
     `shop_purchases` table) and `exp/shopbenefits_seed.sql` (optional
-    starter catalog rows for the 5 benefits) — the seed is just a
+    starter catalog rows for the 5 benefits) the seed is just a
     starting point; the same rows can be created through the Arcadia
     panel instead.
 
@@ -49,12 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Infinity Development" copy left over from the old brand — application
   question text, the staff-denial DM, webhook docs, the RSS feed title
   and copyright line, the auth-log embed footer, and the `!delete`
-  bot-command copy — now reads "Omniplex" / "NodeByte LTD".
+  bot-command copy now reads "Omniplex" / "NodeByte LTD".
 
 ### Fixed
 
 - The Gold premium plan granted ~365 hours (~15 days) of premium instead
-  of a year — `TimePeriod` was set in raw days while `GivePerks` applies
+  of a year `TimePeriod` was set in raw days while `GivePerks` applies
   it as hours. Bronze/Silver were already correct; Gold now multiplies by
   24 like they do.
 - `POST /users/{id}/redeem-payment-offer?code=BOOSTPREMIUM` granted the
@@ -63,6 +124,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It also never stamped `last_booster_claim`, so the "once every 30 days"
   cooldown could never actually engage. Both are fixed: a successful
   redemption now returns `204` and updates the claim timestamp.
+- `tickets.user_id` had no foreign key constraint to `users(user_id)` at
+  all, just a plain column — so the account data-export/deletion pipeline
+  (`POST /users/{id}/data`, `routes/users/endpoints/create_data_task`)
+  silently skipped every ticket a user had ever filed. The walker
+  (`ddr_task.go`) auto-includes any table with a real FK into an
+  already-registered root (`users`/`teams`), so the fix is schema-only:
+  `exp/ticketuserfkey.sql` adds the constraint `NOT VALID` (4 legacy
+  tickets reference since-deleted accounts; `NOT VALID` enforces it for
+  all new/updated rows without deleting or nulling that history). No Go
+  changes needed — confirmed via a direct `pg_constraint` check against
+  the dev DB that tickets are now walked correctly.
 
 ## [1.2.0] - 2026-08-14
 
