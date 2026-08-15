@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // @ci table=shop_item_benefits
@@ -63,4 +64,17 @@ type ShopCoupon struct {
 	ApplicableItems   []string                `db:"applicable_items" json:"applicable_items" description:"The items the coupon can be applied to (array of shop item ids)"`
 	Usable            bool                    `db:"usable" json:"usable" description:"Whether the coupon is usable or not"`
 	TargetTypes       []string                `db:"target_types" json:"target_types" description:"The types of entities this coupon can be applied to"`
+}
+
+// @ci table=shop_purchases
+//
+// ShopPurchase represents a single purchase of a shop item, paid for with an
+// entity's earned vote credits.
+type ShopPurchase struct {
+	ID         pgtype.UUID `db:"id" json:"id" description:"The ID of the purchase"`
+	TargetType string      `db:"target_type" json:"target_type" description:"The type of the entity that made the purchase"`
+	TargetID   string      `db:"target_id" json:"target_id" description:"The ID of the entity that made the purchase"`
+	ItemID     string      `db:"item_id" json:"item_id" description:"The ID of the shop item that was purchased"`
+	Cents      float64     `db:"cents" json:"cents" description:"How many credits (in cents) the purchase cost"`
+	CreatedAt  time.Time   `db:"created_at" json:"created_at" description:"When the purchase was made"`
 }

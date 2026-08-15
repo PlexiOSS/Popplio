@@ -30,6 +30,10 @@ type IndexBot struct {
 	CreatedAt        pgtype.Timestamptz      `db:"created_at" json:"created_at" description:"The creation date of the bot"`
 	SelfStatus       pgtype.Text             `db:"self_status" json:"-" description:"Presence self-reported by the bot via Post Bot Stats. Folded into user.status when present, not exposed directly."`
 	LastStatsPost    pgtype.Timestamptz      `db:"last_stats_post" json:"-" description:"The last time the bot posted stats to the list. Used to infer presence for bots with a real stats track record but no explicit self_status, not exposed directly."`
+	SupporterBadge   bool                    `db:"supporter_badge" json:"supporter_badge" description:"Whether the bot's owner has purchased the cosmetic supporter badge from the shop"`
+	BoostedUntil     pgtype.Timestamptz      `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the bot gets priority placement in listings until this time"`
+	FeaturedUntil    pgtype.Timestamptz      `db:"featured_until" json:"featured_until" description:"If set and in the future, the bot appears in the home page's Featured section until this time"`
+	VoteBlitzUntil   pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
 }
 
 type BotStats struct {
@@ -92,6 +96,10 @@ type Bot struct {
 	TeamOwner           *Team                   `db:"-" json:"team_owner" description:"If the bot is in a team, who owns the bot. If not in a team, this will be null and owner will instead be set" ci:"internal"` // Must be parsed internally
 	CaptchaOptOut       bool                    `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the bot should have captchas shown if the user has captcha_sponsor_enabled"`
 	SelfStatus          pgtype.Text             `db:"self_status" json:"-" description:"Presence self-reported by the bot via Post Bot Stats. Folded into user.status when present, not exposed directly."`
+	SupporterBadge      bool                    `db:"supporter_badge" json:"supporter_badge" description:"Whether the bot's owner has purchased the cosmetic supporter badge from the shop"`
+	BoostedUntil        pgtype.Timestamptz      `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the bot gets priority placement in listings until this time"`
+	FeaturedUntil       pgtype.Timestamptz      `db:"featured_until" json:"featured_until" description:"If set and in the future, the bot appears in the home page's Featured section until this time"`
+	VoteBlitzUntil      pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
 }
 
 // @ci table=bots, unfilled=1
@@ -140,6 +148,7 @@ type ListIndexBot struct {
 	Packs         []BotPack  `json:"packs" description:"The bot packs"`
 	RecentlyAdded []IndexBot `json:"recently_added" description:"The recently added bots"`
 	TopVoted      []IndexBot `json:"top_voted" description:"The top voted bots"`
+	Featured      []IndexBot `json:"featured" description:"Bots with an active featured_until from a shop purchase"`
 }
 
 type DiscordBotMeta struct {

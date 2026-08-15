@@ -79,7 +79,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			ORDER BY (SELECT score FROM scored WHERE scored.target_id = bots.bot_id) DESC
 			LIMIT $1 OFFSET $2`, limit, offset)
 	} else {
-		rows, err = state.Pool.Query(d.Context, "SELECT "+indexBotCols+" FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+		rows, err = state.Pool.Query(d.Context, "SELECT "+indexBotCols+" FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC LIMIT $1 OFFSET $2", limit, offset)
 	}
 
 	if err != nil {
