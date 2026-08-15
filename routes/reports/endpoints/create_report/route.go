@@ -14,6 +14,7 @@ import (
 	"popplio/types"
 	"popplio/validators"
 
+	"github.com/disgoorg/disgo/discord"
 	docs "github.com/infinitybotlist/eureka/doclib"
 	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
@@ -83,13 +84,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
 
-	if _, err := reports.GetTargetInfo(d.Context, state.Pool, targetType, targetId); err != nil {
+	targetInfo, err := reports.GetTargetInfo(d.Context, state.Pool, targetType, targetId)
+
+	if err != nil {
 		return resp.BadRequest("Could not file report: " + err.Error())
 	}
 
 	var dailyCount int64
 
-	err := state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM reports WHERE reporter_id = $1 AND created_at > NOW() - INTERVAL '24 hours'", d.Auth.ID).Scan(&dailyCount)
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM reports WHERE reporter_id = $1 AND created_at > NOW() - INTERVAL '24 hours'", d.Auth.ID).Scan(&dailyCount)
 
 	if err != nil {
 		return resp.ErrBody("Failed to check daily report count [create_report]", "Failed to file report.", err, zap.String("userId", d.Auth.ID))
@@ -113,6 +116,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		// The partial unique index (one open report per reporter per target)
 		// is the only constraint that can realistically fail here.
 		return resp.BadRequest("You already have an open report on this")
+	}
+
+	// Staff-only channel — reporter identity is never exposed outside the
+	// staff panel (see this file's own doc comment), and this message
+	// doesn't include it either, only the target and reason. Best-effort:
+	// the report is already filed, so a failed Discord post shouldn't turn
+	// into an error response.
+	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.StaffLogs, discord.MessageCreate{
+		Content: "New report filed against **" + targetInfo.Name + "** (" + targetType + ", " + payload.Reason + "): " + targetInfo.URL,
+	})
+
+	if err != nil {
+		state.Logger.Warn("Failed to post new-report staff log", zap.Error(err), zap.String("target_id", targetId), zap.String("target_type", targetType))
 	}
 
 	return uapi.DefaultResponse(http.StatusNoContent)

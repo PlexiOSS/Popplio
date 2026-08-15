@@ -40,7 +40,7 @@ func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (resp
 	target, err := safeJoinPopplio(q.Path)
 
 	if err != nil {
-		return writeText(http.StatusBadRequest, "Path must start with /"), nil
+		return writeText(http.StatusBadRequest, err.Error()), nil
 	}
 
 	var popplioToken string

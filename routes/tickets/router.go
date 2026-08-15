@@ -7,6 +7,7 @@ import (
 	"popplio/api"
 	"popplio/routes/tickets/endpoints/create_ticket"
 	"popplio/routes/tickets/endpoints/create_ticket_message"
+	"popplio/routes/tickets/endpoints/get_staff_tickets"
 	"popplio/routes/tickets/endpoints/get_ticket"
 	"popplio/routes/tickets/endpoints/get_ticket_topics"
 	"popplio/routes/tickets/endpoints/get_user_tickets"
@@ -78,6 +79,22 @@ func (b Router) Routes(r *chi.Mux) {
 		},
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/tickets",
+		OpId:    "get_staff_tickets",
+		Method:  uapi.GET,
+		Docs:    get_staff_tickets.Docs,
+		Handler: get_staff_tickets.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil, // Staff permission is checked in-handler, same as get_ticket/patch_ticket
 		},
 	}.Route(r)
 
