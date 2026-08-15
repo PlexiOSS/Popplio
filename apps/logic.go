@@ -1,6 +1,7 @@
 package apps
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"popplio/perms"
@@ -16,8 +17,105 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/infinitybotlist/eureka/dovewing"
 	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
+
+// certBotOwnerIDs returns whoever should be treated as a bot's owner for
+// cert-role purposes: the direct owner if it's not team-owned, or every
+// member of its owning team otherwise — a bot is always one or the other,
+// never both (see the owner_team_oneof check constraint).
+func certBotOwnerIDs(ctx context.Context, botID string) ([]string, error) {
+	var owner pgtype.Text
+	var teamOwner pgtype.UUID
+
+	err := state.Pool.QueryRow(ctx, "SELECT owner, team_owner FROM bots WHERE bot_id = $1", botID).Scan(&owner, &teamOwner)
+
+	if err != nil {
+		return nil, fmt.Errorf("error fetching bot owner info: %w", err)
+	}
+
+	if owner.Valid && owner.String != "" {
+		return []string{owner.String}, nil
+	}
+
+	if !teamOwner.Valid {
+		return nil, nil
+	}
+
+	return teamMemberIDs(ctx, teamOwner)
+}
+
+// certServerOwnerIDs returns every member of a server's owning team —
+// servers are always team-owned, there's no direct-owner equivalent.
+func certServerOwnerIDs(ctx context.Context, serverID string) ([]string, error) {
+	var teamOwner pgtype.UUID
+
+	err := state.Pool.QueryRow(ctx, "SELECT team_owner FROM servers WHERE server_id = $1", serverID).Scan(&teamOwner)
+
+	if err != nil {
+		return nil, fmt.Errorf("error fetching server owner info: %w", err)
+	}
+
+	if !teamOwner.Valid {
+		return nil, nil
+	}
+
+	return teamMemberIDs(ctx, teamOwner)
+}
+
+func teamMemberIDs(ctx context.Context, teamID pgtype.UUID) ([]string, error) {
+	rows, err := state.Pool.Query(ctx, "SELECT user_id FROM team_members WHERE team_id = $1", teamID)
+
+	if err != nil {
+		return nil, fmt.Errorf("error fetching team members: %w", err)
+	}
+
+	defer rows.Close()
+
+	var ids []string
+
+	for rows.Next() {
+		var id string
+
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("error scanning team member id: %w", err)
+		}
+
+		ids = append(ids, id)
+	}
+
+	return ids, rows.Err()
+}
+
+// grantCertOwnerRoles gives BotDeveloper/CertifiedDeveloper to every owner
+// ID who's actually a member of the main guild — used for both certified
+// bots and certified servers, since there's no separate server-owner role
+// convention. Best-effort throughout: an owner not being in the guild, or a
+// Discord API error, is logged rather than failing the caller, since role
+// grants are a side effect of certification, not a precondition for it.
+func grantCertOwnerRoles(ownerIDs []string) {
+	for _, ownerID := range ownerIDs {
+		uid, err := snowflake.Parse(ownerID)
+
+		if err != nil {
+			state.Logger.Warn("Could not parse owner ID for cert role grant", zap.String("owner_id", ownerID), zap.Error(err))
+			continue
+		}
+
+		if _, ok := state.Discord.Caches().Member(state.Config.Servers.Main, uid); !ok {
+			continue
+		}
+
+		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, uid, state.Config.Roles.BotDeveloper, rest.WithReason("Owner of a certified listing")); err != nil {
+			state.Logger.Warn("Failed to grant BotDeveloper role to cert owner", zap.String("owner_id", ownerID), zap.Error(err))
+		}
+
+		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, uid, state.Config.Roles.CertifiedDeveloper, rest.WithReason("Owner of a certified listing")); err != nil {
+			state.Logger.Warn("Failed to grant CertifiedDeveloper role to cert owner", zap.String("owner_id", ownerID), zap.Error(err))
+		}
+	}
+}
 
 var permBotResubmit = perms.EntityResubmitBots
 var permBotCertify = perms.EntityCertifyBots
@@ -281,11 +379,24 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 			return fmt.Errorf("error setting bot type to certified: %w", err)
 		}
 
-		// Give roles
-		err = state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, botIdSnow, state.Config.Roles.CertBot)
+		// Give the bot its own role. Best-effort: the bot might not be a
+		// member of the main guild, which shouldn't block certification
+		// from actually persisting — this used to return an error here,
+		// which meant the caller (manage_app) never ran the UPDATE apps
+		// SET state = 'approved' below it, leaving the app stuck "pending"
+		// forever even though the bot was already certified in the bots
+		// table.
+		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, botIdSnow, state.Config.Roles.CertBot); err != nil {
+			state.Logger.Warn("Failed to give certified bot role to bot", zap.String("bot_id", botID), zap.Error(err))
+		}
 
-		if err != nil {
-			return fmt.Errorf("error giving certified bot role to bot, but successfully certified bot: %v", err)
+		// Give the owner(s) their developer roles too — this used to be a
+		// fully manual step (ibb!getbotroles), so an owner who never ran
+		// the command never got anything.
+		if ownerIDs, err := certBotOwnerIDs(d.Context, botID); err != nil {
+			state.Logger.Warn("Failed to resolve bot owners for cert role grant", zap.String("bot_id", botID), zap.Error(err))
+		} else {
+			grantCertOwnerRoles(ownerIDs)
 		}
 
 		// Send an embed to the bot logs channel
@@ -307,7 +418,7 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 						},
 					},
 					Footer: &discord.EmbedFooter{
-						Text: "If you are the owner of this bot, use ibb!getbotroles to get your dev roles",
+						Text: "Owner roles are applied automatically if you're in the server — run ibb!getbotroles anytime to re-sync",
 					},
 				},
 			},
@@ -356,9 +467,18 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 			return fmt.Errorf("error setting server type to certified: %w", err)
 		}
 
-		// Send an embed to the bot logs channel — servers don't have a
-		// Discord role to grant here (unlike bots, a listed server isn't
-		// itself a member of the main guild).
+		// A listed server isn't itself a member of the main guild the way a
+		// bot is, so there's no server-equivalent of the CertBot role to
+		// grant here — but its owner(s) still get the same developer roles
+		// a certified bot's owner would, reusing that convention rather
+		// than inventing a separate server-owner role.
+		if ownerIDs, err := certServerOwnerIDs(d.Context, serverID); err != nil {
+			state.Logger.Warn("Failed to resolve server owners for cert role grant", zap.String("server_id", serverID), zap.Error(err))
+		} else {
+			grantCertOwnerRoles(ownerIDs)
+		}
+
+		// Send an embed to the bot logs channel
 		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 			Embeds: []discord.Embed{
 				{
@@ -375,6 +495,9 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 							Name:  "Reason",
 							Value: reason,
 						},
+					},
+					Footer: &discord.EmbedFooter{
+						Text: "Owner roles are applied automatically to team members who are in the server",
 					},
 				},
 			},

@@ -81,7 +81,7 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 			AvatarURL:   pu.Avatar,
 			Name:        pu.Username,
 			Description: "This user seems to be on a distant island somewhere???",
-			URL:         fmt.Sprintf("%s/users/%s", state.Config.Sites.Frontend.Production(), id),
+			URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend.Production(), id),
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		}, nil
@@ -103,7 +103,7 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 		AvatarURL:   pu.Avatar,
 		Name:        pu.Username,
 		Description: about,
-		URL:         fmt.Sprintf("%s/users/%s", state.Config.Sites.Frontend.Production(), id),
+		URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend.Production(), id),
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 	}, nil

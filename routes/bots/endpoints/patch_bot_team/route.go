@@ -136,11 +136,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 					},
 					{
 						Name:  "Old Team",
-						Value: fmt.Sprintf("[View Team](%s/team/%s)", state.Config.Sites.Frontend.Parse(), validators.EncodeUUID(currentBotTeam.Bytes)),
+						Value: fmt.Sprintf("[View Team](%s/teams/%s)", state.Config.Sites.Frontend.Parse(), validators.EncodeUUID(currentBotTeam.Bytes)),
 					},
 					{
 						Name:  "New Team",
-						Value: fmt.Sprintf("[View Team](%s/team/%s)", state.Config.Sites.Frontend.Parse(), payload.TeamID),
+						Value: fmt.Sprintf("[View Team](%s/teams/%s)", state.Config.Sites.Frontend.Parse(), payload.TeamID),
 					},
 				},
 			},
