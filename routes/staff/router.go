@@ -6,6 +6,7 @@ package staff
 
 import (
 	"popplio/routes/staff/endpoints/get_app_list"
+	"popplio/routes/staff/endpoints/get_shop_purchases"
 	"popplio/routes/staff/endpoints/get_staff_permissions"
 	"popplio/routes/staff/endpoints/manage_app"
 
@@ -38,6 +39,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_app_list.Docs,
 		Handler: get_app_list.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/shop-purchases",
+		OpId:    "get_shop_purchases",
+		Method:  uapi.GET,
+		Docs:    get_shop_purchases.Docs,
+		Handler: get_shop_purchases.Route,
 	}.Route(r)
 
 	uapi.Route{
