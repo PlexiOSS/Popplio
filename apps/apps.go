@@ -13,7 +13,7 @@ import (
 var Apps = []types.Position{
 	{
 		ID: "staff",
-		Info: `Join the Infinity Staff Team and help us Approve, Deny and Certify Discord Bots. 
+		Info: `Join the Omniplex Staff Team and help us Approve, Deny and Certify Discord Bots.
 
 We are a welcoming and laid back team who is always willing to give new people an opportunity!`,
 		Name:        "Staff Team",
@@ -74,7 +74,7 @@ We are a welcoming and laid back team who is always willing to give new people a
 	},
 	{
 		ID: "dev",
-		Info: `Join our Dev Team and help us update, manage and maintain all of the Infinity Services!.
+		Info: `Join our Dev Team and help us update, manage and maintain all of the Omniplex Services!.
 
 Some experience in PostgreSQL and at least one of the below languages is required:
 
@@ -149,7 +149,7 @@ Some experience in PostgreSQL and at least one of the below languages is require
 Some points to note:
 
 - When you apply for a partnership, make sure that you are authorized to speak on the services behalf
-- Infinity Development reserves the right to deny or cancel any partnership application at any time.
+- NodeByte LTD reserves the right to deny or cancel any partnership application at any time.
 `,
 		Name: "Partners",
 		Tags: []string{"Advertising", "Business"},
@@ -165,14 +165,14 @@ Some points to note:
 				ID:          "why",
 				Question:    "Why do you want to partner with us?",
 				Paragraph:   "Why do you want to partner with us? Be specific",
-				Placeholder: "I want to partner with Infinity Bot List because...",
+				Placeholder: "I want to partner with Omniplex because...",
 				Short:       true,
 			},
 			{
 				ID:          "how",
 				Question:    "How will you promote us?",
-				Paragraph:   "How will you promote Infinity Bot List? This could be a partner command or a link on your website!",
-				Placeholder: "I will promote Infinity Bot List using...",
+				Paragraph:   "How will you promote Omniplex? This could be a partner command or a link on your website!",
+				Placeholder: "I will promote Omniplex using...",
 				Short:       true,
 			},
 			{
@@ -220,7 +220,7 @@ Some points to note:
 		Info: `<h3 class="text-2xl font-semibold">Hello There, Welcome</h3>
 If you find yourself browsing or using this site, you should be disappointed. 
 
-Here at Infinity we strive in providing our users a safe, curtious, drama free community and only ask that you follow a few simple rules. 
+Here at Omniplex we strive in providing our users a safe, curtious, drama free community and only ask that you follow a few simple rules. 
 
 <span class="font-semibold">You have clearly done something to violate them or piss us off.</span>
 
