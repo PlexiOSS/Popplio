@@ -44,6 +44,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to fetch certified bot count", err)
 	}
 
+	var totalPendingBots int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM bots WHERE type = 'pending'").Scan(&totalPendingBots)
+
+	if err != nil {
+		return resp.Err("Failed to fetch pending bot count", err)
+	}
+
+	var totalDeniedBots int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM bots WHERE type = 'denied'").Scan(&totalDeniedBots)
+
+	if err != nil {
+		return resp.Err("Failed to fetch denied bot count", err)
+	}
+
 	var totalStaff int64
 	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM staff_members").Scan(&totalStaff)
 
@@ -84,6 +98,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			TotalBots:          totalBots,
 			TotalApprovedBots:  totalApprovedBots,
 			TotalCertifiedBots: totalCertifiedBots,
+			TotalPendingBots:   totalPendingBots,
+			TotalDeniedBots:    totalDeniedBots,
 			TotalStaff:         totalStaff,
 			TotalUsers:         totalUsers,
 			TotalVotes:         totalVotes,
