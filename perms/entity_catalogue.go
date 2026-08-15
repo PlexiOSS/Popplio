@@ -26,6 +26,7 @@ const (
 	EntityEditServers         Perm = "edit_servers"
 	EntityDeleteServers       Perm = "delete_servers"
 	EntityManageServerInvites Perm = "manage_server_invites"
+	EntityCertifyServers      Perm = "request_server_certification"
 
 	EntityAddMembers    Perm = "add_team_members"
 	EntityEditMembers   Perm = "edit_team_members"
@@ -138,6 +139,12 @@ var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 		Description: "Read and change the invite of the team's servers.",
 		Category:    "Servers",
 		Legacy:      []string{"server.get_invite", "server.set_invite", "global.get_invite", "global.set_invite"},
+	},
+	{
+		ID:          EntityCertifyServers,
+		Name:        "Request Certification",
+		Description: "Ask staff to certify one of the team's servers.",
+		Category:    "Servers",
 	},
 
 	{

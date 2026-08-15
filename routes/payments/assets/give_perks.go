@@ -16,6 +16,9 @@ type CreatePerkData struct {
 	ProductName string `json:"name" validate:"required" msg:"Product name is required."`
 	ProductID   string `json:"id" validate:"required" msg:"Product ID is required."`
 	For         string `json:"for" validate:"required" msg:"For is required."`
+	// ForType is "bot" or "server". Omitted/empty defaults to "bot" for
+	// backward compatibility with clients that predate server premium.
+	ForType string `json:"for_type" validate:"omitempty,oneof=bot server" msg:"for_type must be 'bot' or 'server' if sent."`
 }
 
 type RedirectUser struct {
@@ -23,11 +26,17 @@ type RedirectUser struct {
 }
 
 func (c CreatePerkData) Parse(userID string) PerkData {
+	forType := c.ForType
+	if forType == "" {
+		forType = "bot"
+	}
+
 	return PerkData{
 		UserID:      userID,
 		ProductName: c.ProductName,
 		ProductID:   c.ProductID,
 		For:         c.For,
+		ForType:     forType,
 	}
 }
 
@@ -36,6 +45,7 @@ type PerkData struct {
 	ProductName string `json:"name" validate:"required" msg:"Product name is required."`
 	ProductID   string `json:"id" validate:"required" msg:"Product ID is required."`
 	For         string `json:"for" validate:"required" msg:"For is required."`
+	ForType     string `json:"for_type" validate:"required,oneof=bot server" msg:"for_type must be 'bot' or 'server'."`
 }
 
 // Finds and validates the associated perm for the given payload. ProductID is still needed to determine whats being purchased.
@@ -54,38 +64,44 @@ func FindPerks(ctx context.Context, payload PerkData) (*types.PaymentPlan, error
 		return nil, err
 	}
 
+	table, idCol, entityLabel, err := entityTarget(payload.ForType)
+
+	if err != nil {
+		return nil, err
+	}
+
 	switch payload.ProductID {
 	case "premium":
 		for _, plan := range Plans {
 			if plan.ID == payload.ProductName {
-				// Ensure the bot associated with For exists
+				// Ensure the bot/server associated with For exists
 				var count int64
 
-				err := state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM bots WHERE bot_id = $1", payload.For).Scan(&count)
+				err := state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM "+table+" WHERE "+idCol+" = $1", payload.For).Scan(&count)
 
 				if err != nil {
 					return nil, errors.New("our database broke, please try again later")
 				}
 
 				if count == 0 {
-					return nil, errors.New("bot id is invalid")
+					return nil, errors.New(entityLabel + " id is invalid")
 				}
 
 				var typeStr string
 				var premium bool
 
-				err = state.Pool.QueryRow(ctx, "SELECT type, premium FROM bots WHERE bot_id = $1", payload.For).Scan(&typeStr, &premium)
+				err = state.Pool.QueryRow(ctx, "SELECT type, premium FROM "+table+" WHERE "+idCol+" = $1", payload.For).Scan(&typeStr, &premium)
 
 				if err != nil {
 					return nil, errors.New("our database broke, please try again later")
 				}
 
 				if typeStr != "approved" && typeStr != "certified" {
-					return nil, errors.New("bot is not approved or certified")
+					return nil, errors.New(entityLabel + " is not approved or certified")
 				}
 
 				if premium {
-					return nil, errors.New("bot is already premium")
+					return nil, errors.New(entityLabel + " is already premium")
 				}
 
 				perk = &plan
@@ -104,6 +120,21 @@ func FindPerks(ctx context.Context, payload PerkData) (*types.PaymentPlan, error
 	return perk, nil
 }
 
+// entityTarget maps a validated for_type to the table/column/label needed
+// to build a query against it. table/idCol are only ever one of two
+// hardcoded literal pairs (never derived from unvalidated input), so
+// string-building the query with them is safe.
+func entityTarget(forType string) (table, idCol, label string, err error) {
+	switch forType {
+	case "bot":
+		return "bots", "bot_id", "bot", nil
+	case "server":
+		return "servers", "server_id", "server", nil
+	default:
+		return "", "", "", errors.New("invalid for_type")
+	}
+}
+
 func GivePerks(ctx context.Context, perkData PerkData) error {
 	err := validators.StagingCheckSensitive(ctx, perkData.UserID)
 
@@ -120,20 +151,33 @@ func GivePerks(ctx context.Context, perkData PerkData) error {
 	// Check if the user has already purchased this perk, if not give it to them
 	switch perkData.ProductID {
 	case "premium":
-		var botID = perkData.For
+		table, idCol, _, err := entityTarget(perkData.ForType)
+
+		if err != nil {
+			return err
+		}
+
+		targetID := perkData.For
 
 		_, err = state.Pool.Exec(ctx,
-			"UPDATE bots SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE bot_id = $2",
+			"UPDATE "+table+" SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE "+idCol+" = $2",
 			perk.TimePeriod,
-			botID,
+			targetID,
 		)
 
 		if err != nil {
 			return errors.New("our database broke, please try again later")
 		}
 
+		// Servers aren't Discord-mentionable as a user the way a bot's own
+		// snowflake is, so the mod log just names it directly.
+		mention := targetID
+		if perkData.ForType == "bot" {
+			mention = "<@" + targetID + ">"
+		}
+
 		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
-			Content: "<@" + perkData.UserID + "> has bought <@" + botID + "> premium for " + strconv.Itoa(perk.TimePeriod) + " hours.",
+			Content: "<@" + perkData.UserID + "> has bought " + mention + " (" + perkData.ForType + ") premium for " + strconv.Itoa(perk.TimePeriod) + " hours.",
 		})
 
 		if err != nil {
