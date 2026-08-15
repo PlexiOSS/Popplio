@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.1] - Unreleased
+## [1.2.1] - 2026-08-15
 
 ### Changed
 
@@ -124,6 +124,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It also never stamped `last_booster_claim`, so the "once every 30 days"
   cooldown could never actually engage. Both are fixed: a successful
   redemption now returns `204` and updates the claim timestamp.
+- `tickets.user_id` had no foreign key constraint to `users(user_id)` at
+  all, just a plain column — so the account data-export/deletion pipeline
+  (`POST /users/{id}/data`, `routes/users/endpoints/create_data_task`)
+  silently skipped every ticket a user had ever filed. The walker
+  (`ddr_task.go`) auto-includes any table with a real FK into an
+  already-registered root (`users`/`teams`), so the fix is schema-only:
+  `exp/ticketuserfkey.sql` adds the constraint `NOT VALID` (4 legacy
+  tickets reference since-deleted accounts; `NOT VALID` enforces it for
+  all new/updated rows without deleting or nulling that history). No Go
+  changes needed — confirmed via a direct `pg_constraint` check against
+  the dev DB that tickets are now walked correctly.
 
 ## [1.2.0] - 2026-08-14
 
