@@ -41,3 +41,31 @@ type Attachment struct {
 	Size        int      `json:"size"`         // Size of the attachment in bytes
 	Errors      []string `json:"errors"`       // Non-fatal errors that occurred while uploading the attachment
 }
+
+// TicketTopic is a predefined category a ticket can be filed under.
+type TicketTopic struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type TicketTopicList struct {
+	Topics []TicketTopic `json:"topics"`
+}
+
+type CreateTicket struct {
+	Topic   string `json:"topic" validate:"required" msg:"Topic is required."`
+	Issue   string `json:"issue" validate:"required,min=10,max=200" msg:"Issue must be between 10 and 200 characters."`
+	Message string `json:"message" validate:"required,min=20,max=4000" msg:"Message must be between 20 and 4000 characters."`
+}
+
+type CreateTicketMessage struct {
+	Content string `json:"content" validate:"required,min=1,max=4000" msg:"Message content is required."`
+}
+
+type PatchTicket struct {
+	Open bool `json:"open"`
+}
+
+type TicketList struct {
+	Tickets []Ticket `json:"tickets"`
+}

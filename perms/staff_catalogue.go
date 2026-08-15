@@ -44,7 +44,8 @@ const (
 
 	StaffReviewReports Perm = "review_reports"
 
-	StaffViewTickets Perm = "view_tickets"
+	StaffViewTickets   Perm = "view_tickets"
+	StaffManageTickets Perm = "manage_tickets"
 
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
@@ -278,6 +279,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Description: "Read support tickets opened by users.",
 		Category:    "Support",
 		Legacy:      []string{"popplio.tickets", "popplio.*"},
+	},
+
+	{
+		ID:          StaffManageTickets,
+		Name:        "Manage Tickets",
+		Description: "Reply to and close/reopen any user's support ticket.",
+		Category:    "Support",
 	},
 
 	{
