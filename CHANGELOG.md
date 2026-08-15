@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `total_denied_bots`, so consumers can show a real approved/certified/
   pending/denied breakdown instead of inferring it from `total_bots` minus
   the listed count.
+- `GET /staff/shop-purchases` — the same shop-purchase data
+  `GET /{target_type}/{target_id}/shop/purchases` already exposes
+  publicly one entity at a time, but platform-wide and staff-gated
+  (`view_shop`) for abuse/fraud monitoring. No frontend consumes this yet
+  since the Arcadia panel UI isn't part of this repo — it's ready for
+  whenever that side wires it up.
+- A standalone support ticket system. The existing `tickets` table/`Ticket`
+  type were entirely Discord-channel-shaped (`channel_id`, `enc_key`) with
+  no creation path anywhere in the codebase, not in the API, not in the
+  Discord bot — nothing has ever created a ticket in this codebase. Rather
+  than build the Discord-integration side, tickets are now a plain web
+  feature reusing the same table (`channel_id` left `""`, `enc_key` left
+  null): `GET /tickets/topics` (a small hardcoded topic catalogue, same
+  convention as `apps.Apps`), `POST`/`GET /users/{id}/tickets`,
+  `POST /tickets/{id}/messages`, and `PATCH /tickets/{id}` to close/reopen
+  (closing is open to the author or staff; reopening is staff-only, via a
+  new `manage_tickets` permission). New message IDs are synthesized
+  Discord-format snowflakes (`disgoorg/snowflake`'s `New`) purely so
+  `GET /tickets/{id}`'s existing `snowflake.Parse`-based timestamp
+  decoding keeps working unchanged for old and new tickets alike.
 - Shop purchases actually do something now. `shop_items`/`shop_item_benefits`
   have had full staff CRUD via the Arcadia panel for a while, but nothing
   ever spent an entity's earned vote credits on one or defined what a
