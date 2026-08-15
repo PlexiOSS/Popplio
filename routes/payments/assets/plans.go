@@ -31,11 +31,15 @@ var Plans = []types.PaymentPlan{
 		Benefit: "1 year of premium",
 		TimePeriod: func() int {
 			currentYear := time.Now().Year()
+			days := 365
 			if currentYear%4 == 0 && (currentYear%100 != 0 || currentYear%400 != 0) {
-				return 366
+				days = 366
 			}
 
-			return 365
+			// TimePeriod is in hours (see GivePerks' make_interval(hours => ...)),
+			// not days — this used to hand out ~365 hours (~15 days) of premium
+			// instead of a year.
+			return days * 24
 		}(),
 		Price: 7.99,
 	},

@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - Unreleased
+
+### Added
+
+- `GET /list/stats` now includes `total_pending_bots` and
+  `total_denied_bots`, so consumers can show a real approved/certified/
+  pending/denied breakdown instead of inferring it from `total_bots` minus
+  the listed count.
+- Shop purchases actually do something now. `shop_items`/`shop_item_benefits`
+  have had full staff CRUD via the Arcadia panel for a while, but nothing
+  ever spent an entity's earned vote credits on one or defined what a
+  benefit's effect even was. New:
+  - `POST /{target_type}/{target_id}/shop/purchase` (bots only for now,
+    gated on a new `buy_shop_items` entity permission) spends credits
+    oldest-batch-first across `entity_vote_redeem_logs`, logs the purchase
+    to a new `shop_purchases` table, and applies every benefit ID on the
+    item that Popplio recognizes.
+  - Five recognized benefit IDs, each with a real effect:
+    `premium_days` (extends the bot's premium period, identical to the
+    Stripe/PayPal path), `priority_boost` (new `boosted_until` column,
+    sorts first in `/bots/@all`'s default order while active),
+    `featured_slot` (new `featured_until` column, surfaces the bot in a
+    new `featured` category on `/bots/@index`), `supporter_badge` (new
+    permanent `supporter_badge` flag), and `vote_blitz` (new
+    `vote_blitz_until` column, halves `EntityVoteInfo`'s vote-time
+    cooldown while active). Unrecognized benefit IDs no-op rather than
+    error, so staff can still catalogue purely descriptive/future
+    benefits without breaking a purchase — but an item with zero
+    recognized benefits is rejected at purchase time rather than silently
+    spending credits for nothing.
+  - `GET /{target_type}/{target_id}/shop/purchases` — purchase history,
+    public, same transparency level as the existing vote-credit logs.
+  - `exp/shopbenefits.sql` (schema: 4 new `bots` columns + the
+    `shop_purchases` table) and `exp/shopbenefits_seed.sql` (optional
+    starter catalog rows for the 5 benefits) — the seed is just a
+    starting point; the same rows can be created through the Arcadia
+    panel instead.
+
+### Changed
+
+- Omniplex is now owned by NodeByte LTD. Remaining "Infinity Bot List" /
+  "Infinity Development" copy left over from the old brand — application
+  question text, the staff-denial DM, webhook docs, the RSS feed title
+  and copyright line, the auth-log embed footer, and the `!delete`
+  bot-command copy — now reads "Omniplex" / "NodeByte LTD".
+
+### Fixed
+
+- The Gold premium plan granted ~365 hours (~15 days) of premium instead
+  of a year — `TimePeriod` was set in raw days while `GivePerks` applies
+  it as hours. Bronze/Silver were already correct; Gold now multiplies by
+  24 like they do.
+- `POST /users/{id}/redeem-payment-offer?code=BOOSTPREMIUM` granted the
+  perk successfully but then always fell through to a final `400 Invalid
+  offer code` response regardless — no caller could ever see it succeed.
+  It also never stamped `last_booster_claim`, so the "once every 30 days"
+  cooldown could never actually engage. Both are fixed: a successful
+  redemption now returns `204` and updates the claim timestamp.
+
 ## [1.2.0] - 2026-08-14
 
 ### Added

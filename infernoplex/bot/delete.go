@@ -27,7 +27,7 @@ var deleteSessions = map[string]*deleteSession{}
 func cmdDelete() *Command {
 	return &Command{
 		Name:        "delete",
-		Description: "Delete your server from Infinity List, needs the Delete Servers permission",
+		Description: "Delete your server from Omniplex, needs the Delete Servers permission",
 		Checks: []Check{
 			func(c *Ctx) error {
 				return checkForPermission(c.Context, c.GuildID, c.Author.ID.String(), perms.EntityDeleteServers)
@@ -49,7 +49,7 @@ func cmdDelete() *Command {
 			return c.Send(discord.MessageCreate{
 				Embeds: []discord.Embed{{
 					Title:       "Confirm Server Deletion?",
-					Description: "Are you sure you want to delete your server from Infinity List? This action is irreversible so think before acting!.",
+					Description: "Are you sure you want to delete your server from Omniplex? This action is irreversible so think before acting!.",
 				}},
 				Components: []discord.ContainerComponent{
 					discord.NewActionRow(
