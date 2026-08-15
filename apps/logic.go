@@ -9,6 +9,7 @@ import (
 	"popplio/types"
 	"popplio/validators"
 	"strings"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
@@ -20,8 +21,38 @@ import (
 
 var permBotResubmit = perms.EntityResubmitBots
 var permBotCertify = perms.EntityCertifyBots
+var permServerCertify = perms.EntityCertifyServers
 
 var ErrNoPersist = errors.New("no persist") // This error should be returned when the app should not be persisted to the database for review
+
+// Certification used to require servers >= 100 AND unique clicks >= 30 —
+// both, no exceptions. That shut out bots/servers that were genuinely
+// strong on one metric (e.g. very high votes, modest server count) just
+// because they hadn't cleared every bar. It's now an OR across whichever
+// reach/engagement stat the listing actually has, each bar lowered to
+// match, plus a (new, but lenient) minimum listed-age floor so a
+// same-day submission can't certify off a launch-day traffic spike.
+const (
+	certMinBotServers    = 50
+	certMinServerMembers = 100
+	certMinUniqueClicks  = 15
+	certMinVotes         = 50
+	certMinListedAge     = 3 * 24 * time.Hour
+)
+
+// checkCertStats applies the shared OR-of-three-metrics rule. reachLabel
+// names whatever reachMin is measured in ("servers" for bots, "members"
+// for servers) for the error message.
+func checkCertStats(reach, uniqueClicks, votes int64, reachLabel string, reachMin int64) error {
+	if reach >= reachMin || uniqueClicks >= certMinUniqueClicks || votes >= certMinVotes {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"not enough reach yet to certify — needs at least %d %s (has %d), %d unique clicks (has %d), or %d votes (has %d)",
+		reachMin, reachLabel, reach, certMinUniqueClicks, uniqueClicks, certMinVotes, votes,
+	)
+}
 
 func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]string) error {
 	// Get the bot ID
@@ -112,10 +143,12 @@ func extraLogicCert(d uapi.RouteData, p types.Position, answers map[string]strin
 
 	// Get the bot
 	var botType string
-	err := state.Pool.QueryRow(d.Context, "SELECT type FROM bots WHERE bot_id = $1", botID).Scan(&botType)
+	var serverCount, uniqueClicks, approxVotes int64
+	var createdAt time.Time
+	err := state.Pool.QueryRow(d.Context, "SELECT type, servers, cardinality(unique_clicks), approximate_votes, created_at FROM bots WHERE bot_id = $1", botID).Scan(&botType, &serverCount, &uniqueClicks, &approxVotes, &createdAt)
 
 	if err != nil {
-		return fmt.Errorf("error getting bot type, does the bot exist?: %w", err)
+		return fmt.Errorf("error getting bot info, does the bot exist?: %w", err)
 	}
 
 	entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "bot", botID)
@@ -133,24 +166,50 @@ func extraLogicCert(d uapi.RouteData, p types.Position, answers map[string]strin
 		return errors.New("bot is not approved | state=" + botType)
 	}
 
-	// Now check server count and unique clicks
-	var serverCount int64
-	var uniqueClicks int64
-	err = state.Pool.QueryRow(d.Context, "SELECT servers, cardinality(unique_clicks) AS unique_clicks FROM bots WHERE bot_id = $1", botID).Scan(&serverCount, &uniqueClicks)
+	if time.Since(createdAt) < certMinListedAge {
+		return fmt.Errorf("bot must be listed for at least %s before it can be certified", certMinListedAge)
+	}
+
+	return checkCertStats(serverCount, uniqueClicks, approxVotes, "servers", certMinBotServers)
+}
+
+func extraLogicCertServer(d uapi.RouteData, p types.Position, answers map[string]string) error {
+	// Get the server ID
+	serverID, ok := answers["id"]
+
+	if !ok {
+		return errors.New("server ID not found")
+	}
+
+	// Get the server
+	var serverType string
+	var memberCount, uniqueClicks, approxVotes int64
+	var createdAt time.Time
+	err := state.Pool.QueryRow(d.Context, "SELECT type, total_members, cardinality(unique_clicks), approximate_votes, created_at FROM servers WHERE server_id = $1", serverID).Scan(&serverType, &memberCount, &uniqueClicks, &approxVotes, &createdAt)
 
 	if err != nil {
-		return fmt.Errorf("error getting server count: %w", err)
+		return fmt.Errorf("error getting server info, does the server exist?: %w", err)
 	}
 
-	if serverCount < 100 {
-		return errors.New("bot does not have enough servers to be certified: has " + fmt.Sprint(serverCount) + ", needs 100")
+	entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "server", serverID)
+
+	if err != nil {
+		return fmt.Errorf("error getting user server perms: %w", err)
 	}
 
-	if uniqueClicks < 30 {
-		return errors.New("bot does not have enough unique clicks to be certified: has " + fmt.Sprint(uniqueClicks) + ", needs 30")
+	if !entityPerms.Has(permServerCertify) {
+		return errors.New("you do not have permission to certify servers")
 	}
 
-	return nil
+	if serverType != "approved" {
+		return errors.New("server is not approved | state=" + serverType)
+	}
+
+	if time.Since(createdAt) < certMinListedAge {
+		return fmt.Errorf("server must be listed for at least %s before it can be certified", certMinListedAge)
+	}
+
+	return checkCertStats(memberCount, uniqueClicks, approxVotes, "members", certMinServerMembers)
 }
 
 func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
@@ -256,6 +315,73 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 
 		if err != nil {
 			return fmt.Errorf("error sending embed to bot logs channel, but successfully certified bot: %w", err)
+		}
+	} else {
+		// Denial is always possible
+		return nil
+	}
+
+	return nil
+}
+
+func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
+	if approve {
+		// Get the server ID
+		serverID, ok := resp.Answers["id"]
+
+		if !ok {
+			return errors.New("server ID not found")
+		}
+
+		// Get the server
+		var serverType string
+		err := state.Pool.QueryRow(d.Context, "SELECT type FROM servers WHERE server_id = $1", serverID).Scan(&serverType)
+
+		if err != nil {
+			return fmt.Errorf("error getting server type, does the server exist?: %w", err)
+		}
+
+		if serverType == "certified" {
+			return nil // Just approve the review
+		}
+
+		if serverType != "approved" {
+			return errors.New("server is not approved | state=" + serverType + ". Please deny the certification until approved")
+		}
+
+		// Set the server type to certified
+		_, err = state.Pool.Exec(d.Context, "UPDATE servers SET type = 'certified' WHERE server_id = $1", serverID)
+
+		if err != nil {
+			return fmt.Errorf("error setting server type to certified: %w", err)
+		}
+
+		// Send an embed to the bot logs channel — servers don't have a
+		// Discord role to grant here (unlike bots, a listed server isn't
+		// itself a member of the main guild).
+		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
+			Embeds: []discord.Embed{
+				{
+					Title:       "Server Certified!",
+					URL:         state.Config.Sites.Frontend.Parse() + "/servers/" + serverID,
+					Description: "<@" + d.Auth.ID + "> has certified server " + serverID,
+					Color:       0x00ff00,
+					Fields: []discord.EmbedField{
+						{
+							Name:  "Server ID",
+							Value: serverID,
+						},
+						{
+							Name:  "Reason",
+							Value: reason,
+						},
+					},
+				},
+			},
+		})
+
+		if err != nil {
+			return fmt.Errorf("error sending embed to bot logs channel, but successfully certified server: %w", err)
 		}
 	} else {
 		// Denial is always possible

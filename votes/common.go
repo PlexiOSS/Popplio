@@ -33,8 +33,14 @@ type DbConn interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
+// GetDoubleVote reports whether the Friday-through-Sunday double-vote
+// weekend bonus is active right now. Pinned to UTC explicitly rather than
+// relying on time.Now()'s implicit host-local zone — the boundary needs to
+// be the same instant for every caller regardless of what timezone the
+// process happens to be running in, and it's the boundary documented to
+// users (see the Voting Rules KB article).
 func GetDoubleVote() bool {
-	weekday := time.Now().Weekday()
+	weekday := time.Now().UTC().Weekday()
 	return weekday == time.Friday || weekday == time.Saturday || weekday == time.Sunday
 }
 
@@ -201,6 +207,7 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 			if GetDoubleVote() {
 				voteEntity.PerUser = 2  // 2 votes per user
 				voteEntity.VoteTime = 6 // Half of the normal vote time
+				voteEntity.WeekendBonus = true
 			}
 		}
 
@@ -213,7 +220,8 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		voteEntity.VoteCredits = true
 
 		var premium bool
-		err := c.QueryRow(ctx, "SELECT premium FROM servers WHERE server_id = $1", targetId).Scan(&premium)
+		var voteBlitzUntil pgtype.Timestamptz
+		err := c.QueryRow(ctx, "SELECT premium, vote_blitz_until FROM servers WHERE server_id = $1", targetId).Scan(&premium, &voteBlitzUntil)
 
 		if err != nil {
 			return nil, err
@@ -227,7 +235,14 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 			if GetDoubleVote() {
 				voteEntity.PerUser = 2  // 2 votes per user
 				voteEntity.VoteTime = 6 // Half of the normal vote time
+				voteEntity.WeekendBonus = true
 			}
+		}
+
+		// A purchased vote blitz halves whatever vote time was just computed,
+		// stacking with premium/double-vote rather than overriding them.
+		if voteBlitzUntil.Valid && voteBlitzUntil.Time.After(time.Now()) {
+			voteEntity.VoteTime = max(voteEntity.VoteTime/2, 1)
 		}
 	case "blog":
 		voteEntity.MultipleVotes = false
@@ -237,10 +252,12 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		if GetDoubleVote() {
 			voteEntity.PerUser = 2  // 2 votes per user
 			voteEntity.VoteTime = 6 // Half of the normal vote time
+			voteEntity.WeekendBonus = true
 		}
 	case "pack":
 		// Packs cannot be premium yet
 		if GetDoubleVote() {
+			voteEntity.WeekendBonus = true
 			voteEntity.PerUser = 2  // 2 votes per user
 			voteEntity.VoteTime = 6 // Half of the normal vote time
 		}

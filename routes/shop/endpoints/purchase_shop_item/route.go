@@ -78,8 +78,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("target_id and target_type are required")
 	}
 
-	if targetType != "bot" {
-		return resp.BadRequest("Only bots can purchase shop items right now")
+	if targetType != "bot" && targetType != "server" {
+		return resp.BadRequest("Only bots and servers can purchase shop items")
 	}
 
 	var payload PurchaseShopItem
@@ -112,7 +112,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if !slices.Contains(item.TargetTypes, targetType) {
-		return resp.BadRequest("This item cannot be purchased for a bot")
+		return resp.BadRequest("This item cannot be purchased for a " + targetType)
 	}
 
 	if !assets.HasRecognizedBenefit(item.Benefits) {
