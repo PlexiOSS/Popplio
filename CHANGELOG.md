@@ -5,17 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1] - Unreleased
+## [1.3.1] - 2026-08-16
+
+### Added
+
+- Arcadia's `SearchEntitys` panel action now supports `Pack`, `Team`, and
+  `User` in addition to the existing `Bot`/`Server` previously any other
+  target type 501'd. Backs the admin Search page now covering every
+  entity type and its respective staff actions instead of just bots and
+  servers. New `PartialPack`/`PartialTeam`/`PartialUser` variants added to
+  the `PartialEntity` wire union (additive existing `Bot`/`Server`
+  consumers are unaffected).
+- `GET /users/{id}` now returns `user_servers`, the servers owned by any
+  team the user is on (mirroring the existing `user_bots`/`user_packs`
+  resolution). Servers have no direct `owner` column team ownership is
+  the only path, same as `GetOwnedBy`'s server branch. Public user
+  profiles previously had no way to show a user's servers at all.
+- The staff bot gained guild moderation commands `/kick`, `/ban`,
+  `/timeout`, and `/warn` (new `moderate_guild`/`warn_users` permissions),
+  plus self-serve `/kb`, `/ticket`, and `/staffinfo` for pointing users at
+  the Knowledge Base, ticket support, and the staff hierarchy without
+  retyping the same links. Every moderation command refuses to act on a
+  target who is themselves staff at a rank equal to or more senior than
+  the caller's own (`perms.LoadStaff(...).Rank()`) `staff_positions` is
+  the same hierarchy Discord role assignments already sync into via
+  `StaffResync`, so this is one hierarchy check, not a separate Discord
+  one and a separate Omniplex one.
 
 ### Fixed
 
+- Two Discord embeds in `routes/staff/endpoints/manage_app/route.go`
+  ("Application Approved"/"Application Denied") still linked to the
+  deprecated SvelteKit panel (`Sites.Panel` + `/panel/apps`) after the
+  equivalent submission-time embed was already fixed to point at
+  Omniplex's `/admin/applications` — these two were missed in that pass.
 - `StaffResync` (`arcadia/tasks/staffresync.go`) inserted a new row into
   `staff_members` before checking whether that user had a `users` row yet.
   `staff_members.user_id` has a foreign key into `users`, so any staff
   member who held a staff role in Discord but had never actually logged
   into Omniplex made every resync run fail with a `staff_members_user_id_fkey`
   violation, repeating on every scheduled run until fixed. The
-  ensure-`users`-row-exists check now runs before the `staff_members`
+  ensure-`users` row exists check now runs before the `staff_members`
   insert/update instead of after it.
 
 ## [1.3.0] - 2026-08-15

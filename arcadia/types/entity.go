@@ -57,10 +57,42 @@ type PartialServer struct {
 	Mentionable   []string   `json:"mentionable"`
 }
 
-// PartialEntity is a newtype union: {"Bot":{..}} / {"Server":{..}}.
+type PartialPack struct {
+	URL        string       `json:"url"`
+	Name       string       `json:"name"`
+	Short      string       `json:"short"`
+	PackType   string       `json:"pack_type"`
+	Owner      PlatformUser `json:"owner"`
+	Votes      int32        `json:"votes"`
+	Tags       []string     `json:"tags"`
+	VoteBanned bool         `json:"vote_banned"`
+}
+
+type PartialTeam struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Short      string   `json:"short"`
+	Votes      int32    `json:"votes"`
+	Tags       []string `json:"tags"`
+	NSFW       bool     `json:"nsfw"`
+	VoteBanned bool     `json:"vote_banned"`
+}
+
+type PartialUser struct {
+	User       PlatformUser `json:"user"`
+	Staff      bool         `json:"staff"`
+	Banned     bool         `json:"banned"`
+	VoteBanned bool         `json:"vote_banned"`
+}
+
+// PartialEntity is a newtype union:
+// {"Bot":{..}} / {"Server":{..}} / {"Pack":{..}} / {"Team":{..}} / {"User":{..}}.
 type PartialEntity struct {
 	Bot    *PartialBot
 	Server *PartialServer
+	Pack   *PartialPack
+	Team   *PartialTeam
+	User   *PartialUser
 }
 
 func (e *PartialEntity) UnmarshalJSON(data []byte) error {
@@ -81,6 +113,15 @@ func (e *PartialEntity) UnmarshalJSON(data []byte) error {
 	case "Server":
 		e.Server = &PartialServer{}
 		into = e.Server
+	case "Pack":
+		e.Pack = &PartialPack{}
+		into = e.Pack
+	case "Team":
+		e.Team = &PartialTeam{}
+		into = e.Team
+	case "User":
+		e.User = &PartialUser{}
+		into = e.User
 	default:
 		return errUnknownVariant("PartialEntity", name)
 	}
@@ -94,6 +135,12 @@ func (e PartialEntity) MarshalJSON() ([]byte, error) {
 		return encodeVariant("Bot", e.Bot)
 	case e.Server != nil:
 		return encodeVariant("Server", e.Server)
+	case e.Pack != nil:
+		return encodeVariant("Pack", e.Pack)
+	case e.Team != nil:
+		return encodeVariant("Team", e.Team)
+	case e.User != nil:
+		return encodeVariant("User", e.User)
 	default:
 		return nil, fmt.Errorf("PartialEntity: no variant set")
 	}
