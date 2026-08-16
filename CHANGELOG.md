@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - Unreleased
+
+### Fixed
+
+- `StaffResync` (`arcadia/tasks/staffresync.go`) inserted a new row into
+  `staff_members` before checking whether that user had a `users` row yet.
+  `staff_members.user_id` has a foreign key into `users`, so any staff
+  member who held a staff role in Discord but had never actually logged
+  into Omniplex made every resync run fail with a `staff_members_user_id_fkey`
+  violation, repeating on every scheduled run until fixed. The
+  ensure-`users`-row-exists check now runs before the `staff_members`
+  insert/update instead of after it.
+
+## [1.3.0] - 2026-08-15
+
+### Added
+
+- Certification approval (`reviewLogicCert`/`reviewLogicCertServer` in
+  `apps/logic.go`) now automatically grants `BotDeveloper`/
+  `CertifiedDeveloper` roles to a certified bot's owner(s), or every
+  member of a certified server's owning team, provided they're already in
+  the main guild — previously only the bot's own `CertBot` role was
+  granted, and owners had to know to run `ibb!getbotroles` themselves.
+- `GET /list/stats` gained `total_banned_users` and `total_vote_banned_bots`,
+  aggregate `COUNT(*)` queries over the existing `banned`/`vote_banned`
+  columns, for the Moderation Transparency page's new "Platform safety"
+  section. Public, no PII — same pattern as the existing report-stats
+  endpoint.
+
+### Fixed
+
+- A Discord API failure while granting a bot's own `CertBot` role during
+  certification (e.g. the bot not currently being in the server) used to
+  hard-fail the entire review, leaving the application stuck "pending"
+  even though `bots.type` had already been committed as `certified`
+  separately. It's now logged as a warning instead of aborting the review.
+- `GetOwnedBy` (`arcadia/impls/entities.go`) only checked team ownership
+  for bots, silently missing bots owned directly — meaning a direct owner
+  got "you don't own any bots" from `/getbotroles` even when they
+  genuinely did. Added the missing `OR owner = $1` branch.
+- `/staff/tickets?open=true` was 500ing: 8 legacy ticket rows had
+  `messages` stored as a JSON object instead of an array, and
+  `pgx.RowToStructByName` fails the whole result-set scan on a single
+  row's type mismatch. Normalized the affected rows; `create_ticket`
+  already always writes a real array, so this was legacy data, not a
+  recurring bug.
+
 ## [1.2.2] - 2026-08-15
 
 ### Fixed

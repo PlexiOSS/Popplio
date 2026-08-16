@@ -93,18 +93,34 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to fetch total ticket count", err)
 	}
 
+	var totalBannedUsers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM users WHERE banned = true").Scan(&totalBannedUsers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch banned user count", err)
+	}
+
+	var totalVoteBannedBots int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM bots WHERE vote_banned = true").Scan(&totalVoteBannedBots)
+
+	if err != nil {
+		return resp.Err("Failed to fetch vote-banned bot count", err)
+	}
+
 	return uapi.HttpResponse{
 		Json: types.ListStats{
-			TotalBots:          totalBots,
-			TotalApprovedBots:  totalApprovedBots,
-			TotalCertifiedBots: totalCertifiedBots,
-			TotalPendingBots:   totalPendingBots,
-			TotalDeniedBots:    totalDeniedBots,
-			TotalStaff:         totalStaff,
-			TotalUsers:         totalUsers,
-			TotalVotes:         totalVotes,
-			TotalPacks:         totalPacks,
-			TotalTickets:       totalTickets,
+			TotalBots:           totalBots,
+			TotalApprovedBots:   totalApprovedBots,
+			TotalCertifiedBots:  totalCertifiedBots,
+			TotalPendingBots:    totalPendingBots,
+			TotalDeniedBots:     totalDeniedBots,
+			TotalStaff:          totalStaff,
+			TotalUsers:          totalUsers,
+			TotalVotes:          totalVotes,
+			TotalPacks:          totalPacks,
+			TotalTickets:        totalTickets,
+			TotalBannedUsers:    totalBannedUsers,
+			TotalVoteBannedBots: totalVoteBannedBots,
 		},
 	}
 }
