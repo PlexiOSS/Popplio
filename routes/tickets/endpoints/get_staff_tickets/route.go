@@ -103,10 +103,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	for i := range ticketList {
+		// Best-effort: this spans every ticket ever filed, including ones
+		// tied to accounts that no longer exist on Discord (deleted
+		// accounts) — that's an expected case here, not a reason to fail
+		// the whole list. Leave Author nil rather than erroring out.
 		author, err := dovewing.GetUser(d.Context, ticketList[i].UserID, state.DovewingPlatformDiscord)
 
 		if err != nil {
-			return resp.Err("Failed to fetch ticket author [dovewing]", err, zap.String("userId", d.Auth.ID))
+			state.Logger.Warn("Failed to resolve ticket author", zap.Error(err), zap.String("ticketId", ticketList[i].ID), zap.String("authorId", ticketList[i].UserID))
+			continue
 		}
 
 		ticketList[i].Author = author
