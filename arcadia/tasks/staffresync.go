@@ -248,6 +248,25 @@ func StaffResync(ctx context.Context) error {
 		newPositionIDs := sortedKeys(rolePositions)
 		oldPositionIDs := sortedKeys(currentPositions)
 
+		// staff_members.user_id has a foreign key into users, so a staff
+		// member who has never logged into Omniplex (no users row yet) has
+		// to be backfilled here before the insert/update below, not after.
+		var exists bool
+
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)", userID).Scan(&exists)
+
+		if err != nil {
+			return fmt.Errorf("Error while checking if user exists: %v", err)
+		}
+
+		if !exists {
+			_, err := tx.Exec(ctx, "INSERT INTO users (user_id, api_token) VALUES ($1, $2)", userID, impls.GenRandom(512))
+
+			if err != nil {
+				return fmt.Errorf("Error while inserting user: %v", err)
+			}
+		}
+
 		if isOnDB {
 			_, err = tx.Exec(ctx,
 				"UPDATE staff_members SET positions = $1, unaccounted = false WHERE user_id = $2",
@@ -268,22 +287,6 @@ func StaffResync(ctx context.Context) error {
 
 		oldSP := buildPermissions(posByID, oldPositionIDs, overridePerms[userID])
 		newSP := buildPermissions(posByID, newPositionIDs, overridePerms[userID])
-
-		var exists bool
-
-		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)", userID).Scan(&exists)
-
-		if err != nil {
-			return fmt.Errorf("Error while checking if user exists: %v", err)
-		}
-
-		if !exists {
-			_, err := tx.Exec(ctx, "INSERT INTO users (user_id, api_token) VALUES ($1, $2)", userID, impls.GenRandom(512))
-
-			if err != nil {
-				return fmt.Errorf("Error while inserting user: %v", err)
-			}
-		}
 
 		announceResync(userID, discord.MessageCreate{
 			Embeds: []discord.Embed{{
