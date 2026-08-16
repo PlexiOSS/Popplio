@@ -12,6 +12,7 @@ import (
 	"popplio/db"
 	botAssets "popplio/routes/bots/assets"
 	"popplio/routes/packs/assets"
+	serverAssets "popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
@@ -32,6 +33,9 @@ var (
 
 	indexBotColsArr = db.GetCols(types.IndexBot{})
 	indexBotCols    = strings.Join(indexBotColsArr, ",")
+
+	indexServerColsArr = db.GetCols(types.IndexServer{})
+	indexServerCols    = strings.Join(indexServerColsArr, ",")
 
 	packColsArr = db.GetCols(types.BotPack{})
 	packCols    = strings.Join(packColsArr, ",")
@@ -104,6 +108,26 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// Resolve the userbots concurrently, since each bot's resolution is independent
 	if err := botAssets.ResolveIndexBots(d.Context, user.UserBots); err != nil {
 		return resp.ErrBody("Error resolving indexbot", "An error occurred while resolving index bot.", err)
+	}
+
+	// Servers, like bots, but exclusively team-owned there's no direct
+	// `owner` column on servers, so this is always via team membership.
+	indexServerRows, err := state.Pool.Query(d.Context,
+		"SELECT "+indexServerCols+" FROM servers WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1)",
+		user.ID)
+
+	if err != nil {
+		return resp.Err("Failed to get user servers [db fetch]", err, zap.String("userID", user.ID))
+	}
+
+	user.UserServers, err = pgx.CollectRows(indexServerRows, pgx.RowToStructByName[types.IndexServer])
+
+	if err != nil {
+		return resp.Err("Failed to get user servers [collect]", err, zap.String("userID", user.ID))
+	}
+
+	if err := serverAssets.ResolveIndexServers(d.Context, user.UserServers); err != nil {
+		return resp.ErrBody("Error resolving indexserver", "An error occurred while resolving index server.", err)
 	}
 
 	// Get user teams

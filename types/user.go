@@ -27,10 +27,11 @@ type User struct {
 	About                 pgtype.Text             `db:"about" json:"about"`
 	VoteBanned            bool                    `db:"vote_banned" json:"vote_banned"`
 	Banned                bool                    `db:"banned" json:"banned"`
-	Staff                 bool                    `db:"-" json:"staff" ci:"internal"`                                                   // Must be handled internally
-	UserTeams             []Team                  `db:"-" json:"user_teams" ci:"internal"`                                              // Must be handled internally
-	UserBots              []IndexBot              `db:"-" json:"user_bots" ci:"internal"`                                               // Must be handled internally
-	UserPacks             []BotPack               `db:"-" json:"user_packs" description:"The list of packs the user has" ci:"internal"` // Must be handled internally
+	Staff                 bool                    `db:"-" json:"staff" ci:"internal"`                                                                 // Must be handled internally
+	UserTeams             []Team                  `db:"-" json:"user_teams" ci:"internal"`                                                            // Must be handled internally
+	UserBots              []IndexBot              `db:"-" json:"user_bots" ci:"internal"`                                                             // Must be handled internally
+	UserServers           []IndexServer           `db:"-" json:"user_servers" description:"The servers owned by a team the user is on" ci:"internal"` // Must be handled internally
+	UserPacks             []BotPack               `db:"-" json:"user_packs" description:"The list of packs the user has" ci:"internal"`               // Must be handled internally
 	CreatedAt             time.Time               `db:"created_at" json:"created_at" description:"The time the user was created"`
 	UpdatedAt             time.Time               `db:"updated_at" json:"updated_at" description:"The time the user was last updated"`
 	LastBoosterClaim      *time.Time              `db:"last_booster_claim" json:"last_booster_claim" description:"The last time the user claimed a booster reward"`
