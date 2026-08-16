@@ -2,12 +2,14 @@ package impls
 
 import (
 	"errors"
+	"time"
 
 	"popplio/arcadia/dclient"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
+	"github.com/disgoorg/json"
 	"github.com/disgoorg/snowflake/v2"
 )
 
@@ -74,6 +76,40 @@ func RemoveRole(guildID, userID, roleID snowflake.ID, reason string) error {
 // KickMember removes a member from a guild, recording an audit-log reason.
 func KickMember(guildID, userID snowflake.ID, reason string) error {
 	return dclient.Get().Rest().RemoveMember(guildID, userID, rest.WithReason(reason))
+}
+
+// BanMember bans a member from a guild, recording an audit-log reason.
+// deleteMessages controls how much of their recent message history is purged
+// along with the ban (0 deletes nothing).
+func BanMember(guildID, userID snowflake.ID, deleteMessages time.Duration, reason string) error {
+	return dclient.Get().Rest().AddBan(guildID, userID, deleteMessages, rest.WithReason(reason))
+}
+
+// TimeoutMember puts a member in timeout until the given time, recording an
+// audit-log reason. Discord caps this at 28 days from now; callers are
+// expected to have already validated that.
+func TimeoutMember(guildID, userID snowflake.ID, until time.Time, reason string) error {
+	_, err := dclient.Get().Rest().UpdateMember(guildID, userID, discord.MemberUpdate{
+		CommunicationDisabledUntil: json.NewNullablePtr(until),
+	}, rest.WithReason(reason))
+
+	return err
+}
+
+// SendDM opens (or reuses) a DM channel with a user and sends a message.
+// Best-effort by nature — a user with DMs closed to the bot makes this fail,
+// which callers that also log the action elsewhere should treat as
+// non-fatal.
+func SendDM(userID snowflake.ID, msg discord.MessageCreate) error {
+	channel, err := dclient.Get().Rest().CreateDMChannel(userID)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = dclient.Get().Rest().CreateMessage(channel.ID(), msg)
+
+	return err
 }
 
 // Footer builds an embed footer.

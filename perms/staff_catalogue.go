@@ -47,6 +47,9 @@ const (
 	StaffViewTickets   Perm = "view_tickets"
 	StaffManageTickets Perm = "manage_tickets"
 
+	StaffModerateGuild Perm = "moderate_guild"
+	StaffWarnUsers     Perm = "warn_users"
+
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
 
@@ -286,6 +289,20 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Name:        "Manage Tickets",
 		Description: "Reply to and close/reopen any user's support ticket.",
 		Category:    "Support",
+	},
+
+	{
+		ID:          StaffModerateGuild,
+		Name:        "Moderate Guild",
+		Description: "Kick, ban, and timeout members in the community Discord servers.",
+		Category:    "Guild Moderation",
+		Dangerous:   true,
+	},
+	{
+		ID:          StaffWarnUsers,
+		Name:        "Warn Users",
+		Description: "Send a formal warning to a member and log it, without kicking, banning, or timing them out.",
+		Category:    "Guild Moderation",
 	},
 
 	{
