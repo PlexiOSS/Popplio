@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 )
 
-// jsonString encodes a string without Go's default HTML escaping, so the panel
-// receives the same bytes serde_json would have produced.
 func jsonString(s string) ([]byte, error) {
 	var buf bytes.Buffer
 
@@ -17,6 +15,5 @@ func jsonString(s string) ([]byte, error) {
 		return nil, err
 	}
 
-	// Encode appends a newline.
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }

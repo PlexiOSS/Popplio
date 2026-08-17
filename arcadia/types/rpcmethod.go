@@ -4,17 +4,8 @@ import (
 	"fmt"
 )
 
-// MaxReasonLength caps every `reason` field on an RPC method.
 const MaxReasonLength = 2000
 
-// RPCMethod is the tagged union of the 22 staff actions. Exactly one field is
-// non-nil.
-//
-// Its Display form (Name) is load-bearing in three places:
-//
-//	the permission lookup in RPCPermission  ->  "Claim" resolves to review_bots
-//	the `method` column in rpc_logs
-//	the leaderboard query, which filters method IN ('Approve','Deny')
 type RPCMethod struct {
 	Claim                    *RPCClaim
 	Unclaim                  *RPCTargetReason
@@ -40,9 +31,6 @@ type RPCMethod struct {
 	UnassignBadge            *RPCAssignBadge
 }
 
-// RPCTargetReason is the shape shared by every method that takes just a target
-// and a reason. Field order matches the Rust declaration order, which is what
-// ends up in the rpc_logs.data column.
 type RPCTargetReason struct {
 	TargetID string `json:"target_id"`
 	Reason   string `json:"reason"`
@@ -87,8 +75,6 @@ type RPCAssignBadge struct {
 	BadgeID  string `json:"badge_id"`
 }
 
-// RPCMethodVariants is in Rust declaration order. GetRpcMethods and the Discord
-// `rpclist` command both iterate it, so the order is user-visible.
 var RPCMethodVariants = []string{
 	"Claim",
 	"Unclaim",
@@ -114,9 +100,6 @@ var RPCMethodVariants = []string{
 	"UnassignBadge",
 }
 
-// variant returns the set variant's name and payload, or ("", nil) if none is
-// set. Name, MarshalJSON and UnmarshalJSON all route through it so there is a
-// single place listing the 18 variants.
 func (m RPCMethod) variant() (string, any) {
 	switch {
 	case m.Claim != nil:
@@ -168,7 +151,6 @@ func (m RPCMethod) variant() (string, any) {
 	}
 }
 
-// Name is the Display impl: the variant name.
 func (m RPCMethod) Name() string {
 	name, _ := m.variant()
 	return name
@@ -178,9 +160,6 @@ func (m RPCMethod) String() string {
 	return m.Name()
 }
 
-// EmptyRPCMethod builds a zero-valued method of the named variant. The panel's
-// GetRpcMethods listing and the Discord modal driver both need one instance per
-// variant to read its metadata off.
 func EmptyRPCMethod(name string) (RPCMethod, error) {
 	var m RPCMethod
 
@@ -243,8 +222,6 @@ func (m *RPCMethod) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("RPCMethod: %w", err)
 	}
 
-	// Every RPCMethod variant is a struct variant, so a bare string is never
-	// valid here.
 	built, err := EmptyRPCMethod(name)
 
 	if err != nil {
@@ -268,13 +245,14 @@ func (m RPCMethod) MarshalJSON() ([]byte, error) {
 	return encodeVariant(name, inner)
 }
 
-// SupportedTargetTypes lists the target types the method accepts.
 func (m RPCMethod) SupportedTargetTypes() []TargetType {
 	switch m.Name() {
 	case "VoteReset", "VoteResetAll", "VoteBanAdd", "VoteBanRemove":
 		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypeTeam, TargetTypePack}
 	case "ForceRemove":
 		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypePack}
+	case "Claim", "Unclaim", "Approve", "Deny", "Unverify":
+		return []TargetType{TargetTypeBot, TargetTypeServer}
 	case "AppBanUser", "AppUnbanUser", "BanUser", "UnbanUser":
 		return []TargetType{TargetTypeUser}
 	case "AssignBadge", "UnassignBadge":
@@ -286,7 +264,6 @@ func (m RPCMethod) SupportedTargetTypes() []TargetType {
 	}
 }
 
-// Description is user-visible in the panel and in `rpclist`. Frozen.
 func (m RPCMethod) Description() string {
 	switch m.Name() {
 	case "Claim":
@@ -338,7 +315,6 @@ func (m RPCMethod) Description() string {
 	}
 }
 
-// Label is user-visible in the panel and in `rpclist`. Frozen.
 func (m RPCMethod) Label() string {
 	switch m.Name() {
 	case "Claim":
@@ -390,7 +366,6 @@ func (m RPCMethod) Label() string {
 	}
 }
 
-// FieldType drives both the panel form renderer and the Discord modal driver.
 type FieldType string
 
 const (
@@ -401,7 +376,6 @@ const (
 	FieldTypeBoolean  FieldType = "Boolean"
 )
 
-// RPCField is a single form field of an RPC method.
 type RPCField struct {
 	ID          string    `json:"id"`
 	Label       string    `json:"label"`
@@ -430,8 +404,6 @@ func rpcFieldReason() RPCField {
 	}
 }
 
-// Fields returns the form fields of the method. Labels and placeholders are
-// user-visible and frozen.
 func (m RPCMethod) Fields() []RPCField {
 	switch m.Name() {
 	case "Claim":
@@ -514,8 +486,6 @@ func (m RPCMethod) Fields() []RPCField {
 	}
 }
 
-// RPCWebAction is one entry of the GetRpcMethods response. Field order matches
-// the Rust declaration.
 type RPCWebAction struct {
 	ID                   string       `json:"id"`
 	Label                string       `json:"label"`

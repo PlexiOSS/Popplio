@@ -56,3 +56,12 @@ func guardUser(ctx context.Context, targetID, reason string) error {
 
 	return userExists(ctx, targetID)
 }
+
+// guardServer is guardBot for the handlers that act on a server.
+func guardServer(ctx context.Context, targetID, reason string) error {
+	if err := checkReason(reason); err != nil {
+		return err
+	}
+
+	return serverExists(ctx, targetID)
+}

@@ -1,14 +1,6 @@
 package perms
 
-// The staff permissions.
-//
-// Names are verb_object and describe what someone may do, not which internal
-// endpoint they may reach. Where the old model had one permission per RPC
-// method, related methods now share one permission: `review_bots` covers the
-// whole claim → approve/deny loop, because no role has ever held one of those
-// without the others.
 const (
-	// StaffAdministrator implies every other staff permission.
 	StaffAdministrator Perm = "administrator"
 
 	StaffViewPanel     Perm = "view_panel"
@@ -57,8 +49,8 @@ const (
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
 
-	// The marker permissions carry no power inside Popplio. They label a staff
-	// member for other Omniplex services and for role display.
+	// Markers are permissions that don't grant any power on their own,
+	// but are used to mark a staff member as having a certain role or status.
 	StaffMarkerDeveloper      Perm = "marker_developer"
 	StaffMarkerLeadDeveloper  Perm = "marker_lead_developer"
 	StaffMarkerHumanResources Perm = "marker_human_resources"
@@ -126,14 +118,14 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffTransferBots,
 		Name:        "Transfer Bots",
 		Description: "Move a bot to a different owner or team.",
-		Category:    "Bot Reviews",
+		Category:    "Content Management",
 		Legacy:      []string{"rpc.BotTransferOwnershipUser", "rpc.BotTransferOwnershipTeam"},
 	},
 	{
 		ID:          StaffForceRemoveBots,
 		Name:        "Force Remove Bots",
 		Description: "Delete a bot from the list outright. This cannot be undone.",
-		Category:    "Bot Reviews",
+		Category:    "Content Management",
 		Dangerous:   true,
 		Legacy:      []string{"rpc.ForceRemove"},
 	},
@@ -142,7 +134,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffManagePremium,
 		Name:        "Manage Premium",
 		Description: "Give and take premium status on an entity.",
-		Category:    "Users & Votes",
+		Category:    "Content Management",
 		Dangerous:   true,
 		Legacy:      []string{"rpc.PremiumAdd", "rpc.PremiumRemove"},
 	},
@@ -150,7 +142,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffManageVotes,
 		Name:        "Manage Votes",
 		Description: "Reset the votes of an entity, or of every entity at once.",
-		Category:    "Users & Votes",
+		Category:    "Content Management",
 		Dangerous:   true,
 		Legacy:      []string{"rpc.VoteReset", "rpc.VoteResetAll"},
 	},
@@ -158,7 +150,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffBanVoters,
 		Name:        "Ban Voters",
 		Description: "Vote ban and unban a user.",
-		Category:    "Users & Votes",
+		Category:    "Content Management",
 		Legacy:      []string{"rpc.VoteBanAdd", "rpc.VoteBanRemove"},
 	},
 	{
@@ -269,14 +261,14 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffManagePartners,
 		Name:        "Manage Partners",
 		Description: "Create, edit and delete partners.",
-		Category:    "Content",
+		Category:    "Content Management",
 		Legacy:      []string{"partners.create", "partners.update", "partners.delete", "partners.*"},
 	},
 	{
 		ID:          StaffManageBlog,
 		Name:        "Manage Blog",
 		Description: "Create, edit and delete blog entries.",
-		Category:    "Content",
+		Category:    "Content Management",
 		Legacy:      []string{"blog.create_entry", "blog.update_entry", "blog.delete_entry", "blog.*"},
 	},
 
@@ -284,7 +276,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffReviewReports,
 		Name:        "Review Reports",
 		Description: "List, resolve and dismiss user-filed content reports (license violations, ToS violations, spam, etc) against bots, servers and packs.",
-		Category:    "Content Reports",
+		Category:    "Content Management",
 	},
 
 	{

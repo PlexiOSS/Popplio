@@ -17,20 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// These tests drive the real POST / handler against a real Postgres, which is
-// the only way to catch a mis-typed column now that sqlx's compile-time query
-// verification is gone (§13). They skip unless a database is configured:
-//
-//	ARCADIA_TEST_DATABASE_URL=postgres://user:pass@127.0.0.1/arcadia_test \
-//	  go test -ldflags=-checklinkname=0 ./arcadia/panel/
-//
-// Point this at a SCRATCH database: the fixtures insert and delete rows.
-//
-// Operations that resolve a dovewing user (Hello, GetUser, BotQueue,
-// SearchEntitys, UpdateStaffMembers) are not covered here because dovewing needs
-// Redis and a live Discord session. Everything reachable with just Postgres is.
-
-// dbOrSkip connects the shared pool, or skips.
 func dbOrSkip(t *testing.T) {
 	t.Helper()
 
@@ -53,15 +39,12 @@ func dbOrSkip(t *testing.T) {
 	state.Pool = pool
 }
 
-// fixture is a seeded staff member with a session.
 type fixture struct {
 	UserID     string
 	Token      string
 	PositionID string
 }
 
-// seedStaff creates a user, a staff position carrying perms, a staff member and
-// an authchain session in the given state. Everything is removed on cleanup.
 func seedStaff(t *testing.T, perms []string, sessionState string) fixture {
 	t.Helper()
 	dbOrSkip(t)
@@ -73,7 +56,6 @@ func seedStaff(t *testing.T, perms []string, sessionState string) fixture {
 		Token:  impls.GenRandom(64),
 	}
 
-	// A unique-per-test user id keeps parallel-ish runs from colliding.
 	f.UserID = fmt.Sprintf("test_%s", impls.GenRandom(12))
 
 	cleanup := func() {
@@ -124,7 +106,6 @@ func seedStaff(t *testing.T, perms []string, sessionState string) fixture {
 	return f
 }
 
-// post drives a PanelQuery through the real HTTP handler.
 func post(t *testing.T, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -136,8 +117,6 @@ func post(t *testing.T, body string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// The session GC and the two auth validators are the gate in front of almost
-// every operation, and the panel frontend matches on their exact messages.
 func TestAuthValidators(t *testing.T) {
 	dbOrSkip(t)
 
@@ -192,7 +171,6 @@ func TestAuthValidators(t *testing.T) {
 	t.Run("session GC removes stale pending sessions", func(t *testing.T) {
 		f := seedStaff(t, []string{}, "pending")
 
-		// Age the session past the 5 minute pending window.
 		_, err := state.Pool.Exec(ctx,
 			"UPDATE staffpanel__authchain SET created_at = NOW() - INTERVAL '10 minutes' WHERE token = $1", f.Token)
 
@@ -200,7 +178,6 @@ func TestAuthValidators(t *testing.T) {
 			t.Fatalf("age session: %v", err)
 		}
 
-		// Any auth call runs the GC first.
 		impls.CheckAuthInsecure(ctx, "trigger-gc")
 
 		var count int64
@@ -217,8 +194,6 @@ func TestAuthValidators(t *testing.T) {
 	})
 }
 
-// Auth failures surface as 500 with a bare string, because Error::new defaults to
-// 500. The frontend matches on the body text, so both parts matter.
 func TestAuthFailureShape(t *testing.T) {
 	dbOrSkip(t)
 
@@ -237,7 +212,6 @@ func TestAuthFailureShape(t *testing.T) {
 	}
 }
 
-// Logout takes no auth at all and returns the affected row count as bare text.
 func TestLogoutReturnsRowCountAsText(t *testing.T) {
 	f := seedStaff(t, []string{}, "active")
 
@@ -251,7 +225,6 @@ func TestLogoutReturnsRowCountAsText(t *testing.T) {
 		t.Errorf("body = %q, want \"1\"", got)
 	}
 
-	// A second logout affects no rows.
 	rec = post(t, fmt.Sprintf(`{"Authorize":{"version":5,"action":{"Logout":{"login_token":%q}}}}`, f.Token))
 
 	if got := rec.Body.String(); got != "0" {
@@ -259,8 +232,6 @@ func TestLogoutReturnsRowCountAsText(t *testing.T) {
 	}
 }
 
-// Hello validates auth BEFORE the version, so a bad version on a bad token still
-// reports the auth failure.
 func TestHelloChecksAuthBeforeVersion(t *testing.T) {
 	dbOrSkip(t)
 
@@ -271,7 +242,6 @@ func TestHelloChecksAuthBeforeVersion(t *testing.T) {
 	}
 }
 
-// Authorize checks the version before anything else and needs no session.
 func TestAuthorizeVersionGate(t *testing.T) {
 	dbOrSkip(t)
 
@@ -286,8 +256,6 @@ func TestAuthorizeVersionGate(t *testing.T) {
 	}
 }
 
-// §14.3: every guarded operation must be tested allowed and denied. These all
-// resolve permissions through the light path, so they need no Discord.
 func TestPermissionGates(t *testing.T) {
 	dbOrSkip(t)
 
@@ -357,7 +325,6 @@ func TestPermissionGates(t *testing.T) {
 
 			rec := post(t, tt.body(f.Token))
 
-			// Allowed means "got past the gate": anything but the 403 denial.
 			if rec.Code == http.StatusForbidden && rec.Body.String() == tt.wantDenied {
 				t.Errorf("permission %q was granted but the request was still denied", tt.perm)
 			}
@@ -365,15 +332,6 @@ func TestPermissionGates(t *testing.T) {
 	}
 }
 
-// The vote credit tier position dedup loop is load-bearing for ordering.
-//
-// vote_credit_tiers.position carries a UNIQUE constraint that is DEFERRABLE
-// INITIALLY DEFERRED, which is what lets the loop insert onto an occupied
-// position and tidy up before COMMIT.
-//
-// The loop handles ONE existing occupant correctly and is broken for two or
-// more. See CONFORMANCE.md a/16 - this test pins both halves so the fix is a
-// deliberate, visible change.
 func TestVoteCreditTierDedupLoop(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
 
@@ -393,7 +351,6 @@ func TestVoteCreditTierDedupLoop(t *testing.T) {
 		}
 	})
 
-	// One existing occupant: the loop shifts it down and both end up unique.
 	for _, id := range ids[:2] {
 		if rec := create(id); rec.Code != http.StatusNoContent {
 			t.Fatalf("create %s: status = %d, body = %s", id, rec.Code, rec.Body.String())
@@ -406,10 +363,6 @@ func TestVoteCreditTierDedupLoop(t *testing.T) {
 		t.Errorf("after two creates positions = %v, want the first tier pushed to 2 and the second at 1", positions)
 	}
 
-	// Two existing occupants: the loop moves the row at position 1 to position 2,
-	// which is already taken, and then resumes checking at position 3 - never
-	// re-examining the collision it just created. The deferred constraint fires
-	// at COMMIT and the panel gets a raw Postgres error.
 	rec := create(ids[2])
 
 	if rec.Code != http.StatusInternalServerError {
@@ -421,7 +374,6 @@ func TestVoteCreditTierDedupLoop(t *testing.T) {
 	}
 }
 
-// tierPositions reads back the positions of the given tiers.
 func tierPositions(t *testing.T, ids []string) map[string]int32 {
 	t.Helper()
 
@@ -452,9 +404,6 @@ func tierPositions(t *testing.T, ids []string) map[string]int32 {
 	return out
 }
 
-// The shop coupon validations reject a null max_uses, which is the reproduced
-// upstream bug that makes "unlimited uses" unreachable (CONFORMANCE.md a/2).
-// This test pins the buggy behaviour so the fix is a deliberate, visible change.
 func TestShopCouponNullValidationIsReproduced(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
 
@@ -471,8 +420,6 @@ func TestShopCouponNullValidationIsReproduced(t *testing.T) {
 	}
 }
 
-// ListPositions needs no permission and returns a JSON array, exercising the
-// staff_positions read path and the Link JSONB decode.
 func TestListPositionsIsOpenToAllStaff(t *testing.T) {
 	f := seedStaff(t, []string{}, "active")
 
@@ -509,7 +456,6 @@ func TestListPositionsIsOpenToAllStaff(t *testing.T) {
 	}
 }
 
-// BaseAnalytics exercises four grouped-count queries and the hardcoded zero.
 func TestBaseAnalytics(t *testing.T) {
 	f := seedStaff(t, []string{}, "active")
 
@@ -533,13 +479,11 @@ func TestBaseAnalytics(t *testing.T) {
 		t.Errorf("total_users = %d, want at least the seeded user", analytics.TotalUsers)
 	}
 
-	// Every count map must encode as an object, never null.
 	if analytics.BotCounts == nil || analytics.ServerCounts == nil || analytics.TicketCounts == nil {
 		t.Error("a count map decoded as null")
 	}
 }
 
-// UpdateChangelog is a hard stub: 403 regardless of input or authentication.
 func TestChangelogStubIgnoresAuth(t *testing.T) {
 	dbOrSkip(t)
 

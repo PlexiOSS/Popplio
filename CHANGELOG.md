@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Servers now go through the same staff review pipeline bots already do:
+  `PUT /servers` previously defaulted straight to `type = 'approved'`, so
+  every server went live immediately with zero review, unlike bots
+  (`type` default flipped to `pending` via `exp/serverreview.sql`, existing
+  rows untouched). `Claim`/`Unclaim`/`Approve`/`Deny`/`Unverify` now support
+  `Server` alongside `Bot` (shares the existing `review_bots` permission,
+  same precedent as `VoteBanAdd`/`ForceRemove` already covering multiple
+  target types under one permission), and a new `ServerQueue` panel op
+  mirrors `BotQueue`. No server equivalent of the bot-approval Discord
+  role auto-grant exists, so `Approve` stops at the state transition and
+  mod-log post for servers.
+- Some `Bot Reviews`/`Users & Votes` staff permissions (`transfer_bots`,
+  `force_remove_bots`, `manage_premium`, `manage_votes`, `ban_voters`)
+  reclassified under a new `Content Management` category — these act on
+  listed entities (transferring, deleting, granting perks, resetting
+  votes, vote-banning), not on the review queue or on user accounts, so
+  they read oddly grouped with either.
+
 ## [1.3.2] - 2026-08-17
 
 ### Added
@@ -16,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus a matching global check in `api/uapi.go` for defense in depth on
   any session issued before this. Reads the same `users.bug_hunters`
   column `SpecRoleSync` already keeps in sync with the Bug Hunter Discord
-  role — no new sync mechanism, no new schema.
+  role no new sync mechanism, no new schema.
 
 - Real account bans: a new `BanUser`/`UnbanUser` RPC action (new
   `ban_users` permission) sets `users.banned`, distinct from
@@ -27,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   staff action.
 - `VoteBanAdd`/`VoteBanRemove` now support `Server`, `Team`, and `Pack` in
   addition to `Bot` (all four carry an identical `vote_banned` column).
-  `ForceRemove` now supports `Server` and `Pack` in addition to `Bot` —
+  `ForceRemove` now supports `Server` and `Pack` in addition to `Bot`
   the `kick`/protected-bots behaviour stays bot-only, since neither has a
   "leave the guild" equivalent. This is the reports-can't-act-on-non-bot-
   content gap: reports against a server or pack had no staff action to
@@ -41,13 +63,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Actions menu as every other staff action, and a new
   `GET /{target_type}/{target_id}/badges` public route reads them back.
   Deliberately separate from the *functional* badges already on
-  users/bots/servers (premium, certified, developer, `bug_hunters` — the
+  users/bots/servers (premium, certified, developer, `bug_hunters` the
   last one specifically because it's synced from a Discord role by
   `SpecRoleSync`, not manually assigned, so it stays exactly as-is)
   new `manage_badges` permission gates the catalog itself.
 - Bots can now document their own commands and post changelog/announcement
   entries, gated by the same `edit_bots` entity permission (owner or team)
-  that already gates editing a bot's settings — no new permission needed.
+  that already gates editing a bot's settings no new permission needed.
   `PUT /bots/{id}/commands` replaces the whole command list (same
   full-replace convention as `extra_links`); `POST`/`DELETE
   /bots/{id}/changelogs` append and remove individual entries (same

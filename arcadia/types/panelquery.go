@@ -2,14 +2,13 @@ package types
 
 import "fmt"
 
-// PanelQuery is the request union accepted by POST /. Exactly one field is
-// non-nil. All variants are struct variants.
 type PanelQuery struct {
 	Authorize                   *QAuthorize
 	Hello                       *QHello
 	BaseAnalytics               *QLoginTokenOnly
 	GetUser                     *QGetUser
 	BotQueue                    *QLoginTokenOnly
+	ServerQueue                 *QLoginTokenOnly
 	ExecuteRpc                  *QExecuteRpc
 	GetRpcMethods               *QGetRpcMethods
 	GetRpcLogEntries            *QLoginTokenOnly
@@ -30,8 +29,6 @@ type PanelQuery struct {
 	PopplioStaff                *QPopplioStaff
 }
 
-// QLoginTokenOnly is the shape shared by the variants that take nothing but a
-// login token.
 type QLoginTokenOnly struct {
 	LoginToken string `json:"login_token"`
 }
@@ -149,7 +146,6 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("PanelQuery: %w", err)
 	}
 
-	// Every operation is a struct variant, so none accept the bare-string form.
 	var into any
 
 	switch name {
@@ -168,6 +164,9 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 	case "BotQueue":
 		q.BotQueue = &QLoginTokenOnly{}
 		into = q.BotQueue
+	case "ServerQueue":
+		q.ServerQueue = &QLoginTokenOnly{}
+		into = q.ServerQueue
 	case "ExecuteRpc":
 		q.ExecuteRpc = &QExecuteRpc{}
 		into = q.ExecuteRpc
@@ -241,6 +240,8 @@ func (q PanelQuery) MarshalJSON() ([]byte, error) {
 		return encodeVariant("GetUser", q.GetUser)
 	case q.BotQueue != nil:
 		return encodeVariant("BotQueue", q.BotQueue)
+	case q.ServerQueue != nil:
+		return encodeVariant("ServerQueue", q.ServerQueue)
 	case q.ExecuteRpc != nil:
 		return encodeVariant("ExecuteRpc", q.ExecuteRpc)
 	case q.GetRpcMethods != nil:

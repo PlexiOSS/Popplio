@@ -54,7 +54,7 @@ func TestActionUnionsRoundTrip(t *testing.T) {
 		{"AuthorizeAction Begin", `{"Begin":{"scope":"s","redirect_url":"r"}}`, func() json.Unmarshaler { return &AuthorizeAction{} }},
 		{"AuthorizeAction Logout", `{"Logout":{"login_token":"t"}}`, func() json.Unmarshaler { return &AuthorizeAction{} }},
 
-		{"PartialEntity newtype", `{"Server":{"server_id":"1","name":"n","avatar":"a","total_members":0,"online_members":0,"short":"s","type":"t","votes":0,"invite_clicks":0,"clicks":0,"nsfw":false,"tags":[],"premium":false,"claimed_by":null,"last_claimed":null,"mentionable":[]}}`, func() json.Unmarshaler { return &PartialEntity{} }},
+		{"PartialEntity newtype", `{"Server":{"server_id":"1","name":"n","avatar":"a","total_members":0,"online_members":0,"short":"s","type":"t","votes":0,"invite_clicks":0,"clicks":0,"nsfw":false,"tags":[],"premium":false,"claimed_by":null,"last_claimed":null,"approval_note":"","mentionable":[]}}`, func() json.Unmarshaler { return &PartialEntity{} }},
 	}
 
 	for _, tt := range tests {

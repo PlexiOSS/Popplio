@@ -7,12 +7,11 @@ import (
 	"popplio/arcadia/types"
 )
 
-// dispatch routes a decoded PanelQuery to its handler.
-//
-// Almost every operation begins by validating login_token. Two validators exist
-// and which one an operation uses is load-bearing: CheckAuth requires an ACTIVE
-// session, CheckAuthInsecure accepts a pending one (that is how the MFA
-// enrolment flow works before a session is activated).
+/*
+dispatch is the main entrypoint for all panel queries. It is responsible for routing the request to the appropriate handler based on the fields present in the request.
+Each case in the switch statement corresponds to a specific type of request, and the appropriate handler function is called with the context and request data.
+If no recognized operation is specified in the request, an error response is returned indicating a bad request.
+*/
 func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response, error) {
 	switch {
 	case req.Authorize != nil:
@@ -25,6 +24,8 @@ func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response,
 		return s.getUser(ctx, req.GetUser)
 	case req.BotQueue != nil:
 		return s.botQueue(ctx, req.BotQueue)
+	case req.ServerQueue != nil:
+		return s.serverQueue(ctx, req.ServerQueue)
 	case req.ExecuteRpc != nil:
 		return s.executeRpc(ctx, req.ExecuteRpc)
 	case req.GetRpcMethods != nil:
