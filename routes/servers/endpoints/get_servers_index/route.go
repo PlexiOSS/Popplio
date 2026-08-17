@@ -88,6 +88,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing top voted servers", err)
 	}
 
+	// Featured Servers (purchased via the shop)
+	featuredRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND featured_until IS NOT NULL AND featured_until > NOW() ORDER BY featured_until DESC LIMIT 9")
+	if err != nil {
+		return resp.Err("Error while getting featured servers", err)
+	}
+	listIndex.Featured, err = processRow(d.Context, featuredRows)
+	if err != nil {
+		return resp.Err("Error while processing featured servers", err)
+	}
+
 	return uapi.HttpResponse{
 		Json: listIndex,
 	}

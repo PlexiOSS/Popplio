@@ -33,6 +33,7 @@ type VoteInfo struct {
 	SupportsUpvotes                  bool   `json:"supports_upvotes" description:"Whether or not the entity supports upvotes"`
 	SupportsDownvotes                bool   `json:"supports_downvotes" description:"Whether or not the entity supports downvotes"`
 	SupportsPartialVoteCreditsRedeem bool   `json:"supports_partial_vote_credits_redeem" description:"Whether or not the entity supports partial vote credit redemption"`
+	WeekendBonus                     bool   `json:"weekend_bonus" description:"Whether the Friday-Sunday (UTC) double-vote weekend bonus is currently boosting this entity's per_user/vote_time. False for premium entities even on a bonus weekend, since their flat premium cooldown already applies instead"`
 }
 
 // Stores the hours, minutes and seconds until the user can vote again

@@ -136,6 +136,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			state.Logger.Error("Error while giving perks", zap.Error(err), zap.String("userID", d.Auth.ID))
 			return resp.BadRequest("Error: " + err.Error())
 		}
+
+		_, err = state.Pool.Exec(d.Context, "UPDATE users SET last_booster_claim = NOW() WHERE user_id = $1", d.Auth.ID)
+
+		if err != nil {
+			state.Logger.Error("Error while updating last booster claim", zap.Error(err), zap.String("userID", d.Auth.ID))
+			return resp.BadRequest("Error: " + err.Error())
+		}
+
+		return uapi.DefaultResponse(http.StatusNoContent)
 	}
 
 	return resp.BadRequest("Invalid offer code")

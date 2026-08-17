@@ -43,6 +43,8 @@ const (
 	StaffManagePartners Perm = "manage_partners"
 	StaffManageBlog     Perm = "manage_blog"
 
+	StaffReviewReports Perm = "review_reports"
+
 	StaffViewTickets   Perm = "view_tickets"
 	StaffManageTickets Perm = "manage_tickets"
 
@@ -279,6 +281,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	},
 
 	{
+		ID:          StaffReviewReports,
+		Name:        "Review Reports",
+		Description: "List, resolve and dismiss user-filed content reports (license violations, ToS violations, spam, etc) against bots, servers and packs.",
+		Category:    "Content Reports",
+	},
+
+	{
 		ID:          StaffViewTickets,
 		Name:        "View Tickets",
 		Description: "Read support tickets opened by users.",
@@ -288,22 +297,35 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	{
 		ID:          StaffManageTickets,
 		Name:        "Manage Tickets",
-		Description: "Reply to, close and reopen support tickets opened by users.",
+		Description: "Reply to and close/reopen any user's support ticket.",
 		Category:    "Support",
 	},
 
 	{
 		ID:          StaffModerateGuild,
 		Name:        "Moderate Guild",
-		Description: "Kick, ban and time out members of the main server.",
+		Description: "Kick, ban, and timeout members in the community Discord servers.",
 		Category:    "Guild Moderation",
 		Dangerous:   true,
 	},
 	{
 		ID:          StaffWarnUsers,
 		Name:        "Warn Users",
-		Description: "Warn a member of the main server.",
+		Description: "Send a formal warning to a member and log it, without kicking, banning, or timing them out.",
 		Category:    "Guild Moderation",
+	},
+
+	{
+		ID:          StaffManageBadges,
+		Name:        "Manage Badges",
+		Description: "Create, edit and delete entries in the badge catalog.",
+		Category:    "Badges",
+	},
+	{
+		ID:          StaffAssignBadges,
+		Name:        "Assign Badges",
+		Description: "Assign and unassign catalog badges to and from an entity.",
+		Category:    "Badges",
 	},
 
 	{

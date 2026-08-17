@@ -26,6 +26,7 @@ const (
 	EntityEditServers         Perm = "edit_servers"
 	EntityDeleteServers       Perm = "delete_servers"
 	EntityManageServerInvites Perm = "manage_server_invites"
+	EntityCertifyServers      Perm = "request_server_certification"
 
 	EntityAddMembers    Perm = "add_team_members"
 	EntityEditMembers   Perm = "edit_team_members"
@@ -42,6 +43,9 @@ const (
 	EntityManageSessions Perm = "manage_sessions"
 
 	EntityRedeemVoteCredits Perm = "redeem_vote_credits"
+	EntityBuyShopItems      Perm = "buy_shop_items"
+
+	EntityEditPacks Perm = "edit_packs"
 )
 
 // Entity is what a team member may do. Teams have no roles, so a member's
@@ -135,6 +139,12 @@ var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 		Description: "Read and change the invite of the team's servers.",
 		Category:    "Servers",
 		Legacy:      []string{"server.get_invite", "server.set_invite", "global.get_invite", "global.set_invite"},
+	},
+	{
+		ID:          EntityCertifyServers,
+		Name:        "Request Certification",
+		Description: "Ask staff to certify one of the team's servers.",
+		Category:    "Servers",
 	},
 
 	{
@@ -251,6 +261,20 @@ var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 			"bot.redeem_vote_credits", "server.redeem_vote_credits",
 			"team.redeem_vote_credits", "global.redeem_vote_credits",
 		},
+	},
+
+	{
+		ID:          EntityBuyShopItems,
+		Name:        "Buy Shop Items",
+		Description: "Spend a bot's earned vote credits on a shop item.",
+		Category:    "Votes",
+	},
+
+	{
+		ID:          EntityEditPacks,
+		Name:        "Edit Packs",
+		Description: "Change the settings of a pack, including uploading its emoji images. Packs are single-owner, not team-owned, so this is only ever granted to the pack's own owner (see teams.GetEntityPerms's \"pack\" case) — it exists in this catalogue purely so the upload gateway can check it the same generic way as edit_bots/edit_servers.",
+		Category:    "Packs",
 	},
 })
 

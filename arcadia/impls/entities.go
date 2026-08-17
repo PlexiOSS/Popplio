@@ -332,13 +332,15 @@ type OwnedBy struct {
 	EntityState string
 }
 
-// GetOwnedBy unions the bots and servers owned via the user's teams with the
-// packs they own outright. Unknown entity strings are logged and skipped.
+// GetOwnedBy unions the bots and servers owned via the user's teams, bots
+// owned directly (not team-owned), and the packs they own outright. Unknown
+// entity strings are logged and skipped.
 func GetOwnedBy(ctx context.Context, userID string) ([]OwnedBy, error) {
 	rows, err := state.Pool.Query(ctx, `
         SELECT bot_id as id, type, 'bot' as entity
         FROM bots
         WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1)
+           OR owner = $1
 
         UNION
 

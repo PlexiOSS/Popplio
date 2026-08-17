@@ -1,96 +1,116 @@
 package bot
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
 	"popplio/perms"
-	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
-	djson "github.com/disgoorg/json"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/jackc/pgx/v5"
 )
 
-// Guild moderation and self-serve support commands for the main server.
+// Guild moderation: kick, ban, timeout, and a log-only warn.
 //
-// The moderation commands (/kick, /ban, /timeout, /warn) all go through
-// checkModerationTarget before touching Discord, so staff hierarchy holds here
-// the same way it holds in the panel and the RPC layer: nobody can act on a
-// staff member ranked at or above themselves. StaffResync is what keeps
-// staff_positions in sync with the Discord roles this check reads.
+// Every one of these refuses to act on a staff member who ranks at or above
+// the caller's own rank. staff_positions IS the Discord role hierarchy (the
+// resync task keeps staff_members.positions in step with staff-server role
+// assignments — see staffresync.go), so comparing StaffGrants.Rank() is
+// simultaneously the Discord check and the Omniplex check: there is only one
+// hierarchy here, not two competing ones. This mirrors canEditRole's "at or
+// above the caller's own rank" rule in staffmgmt.go, applied to people
+// instead of positions.
+
+const maxTimeout = 28 * 24 * time.Hour
 
 func registerModerationCommands() {
-	register(
-		cmdKick(),
-		cmdBan(),
-		cmdTimeout(),
-		cmdWarn(),
-		cmdKB(),
-		cmdTicket(),
-		cmdStaffInfo(),
-	)
+	register(cmdKick(), cmdBan(), cmdTimeout(), cmdWarn())
 }
 
-// resolveTargetUser reads a user-option target and trims Discord's mention
-// formatting off of it, the same way the testing commands read "bot".
-func resolveTargetUser(c *Ctx, name string, index int) string {
-	return strings.Trim(c.Option(name, index), "<@!>")
+// resolveTargetUser parses a mention or raw id option into a snowflake.
+func resolveTargetUser(c *Ctx, optName string, index int) (snowflake.ID, error) {
+	raw := strings.Trim(c.Option(optName, index), "<@!>")
+
+	if raw == "" {
+		return 0, errors.New("a user is required")
+	}
+
+	id, err := snowflake.Parse(raw)
+
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a valid user", raw)
+	}
+
+	return id, nil
 }
 
-// checkModerationCall guards every moderation command: caller must be staff,
-// in the main server, and hold the given permission.
-func checkModerationCall(c *Ctx, perm perms.Perm) error {
-	if err := mainServer(c); err != nil {
+// checkModerationCall runs every guard a moderation command needs: the guild
+// itself, the staff permission, not targeting yourself, and rank.
+func checkModerationCall(c *Ctx, perm perms.Perm, target snowflake.ID) error {
+	if c.GuildID == 0 {
+		return errors.New("this command can only be used in a server")
+	}
+
+	if target == c.Author.ID {
+		return errors.New("you can't target yourself")
+	}
+
+	if err := requirePerm(c, perm); err != nil {
 		return err
 	}
 
-	return requirePerm(c, perm)
-}
-
-// checkModerationTarget refuses to let a caller act on a target who is
-// themselves staff at a rank equal to or more senior than the caller's own.
-// A target with no staff_members row ranks below everyone and is never
-// blocked here.
-func checkModerationTarget(c *Ctx, targetID string) error {
-	if targetID == c.Author.ID.String() {
-		return fmt.Errorf("you cannot use this on yourself")
-	}
-
-	actor, err := perms.LoadStaff(c.Context, c.Author.ID.String())
+	grants, err := perms.LoadStaff(c.Context, c.Author.ID.String())
 
 	if err != nil {
 		return err
 	}
 
-	target, err := perms.LoadStaff(c.Context, targetID)
+	return checkModerationTarget(c.Context, grants.Rank(), target.String())
+}
 
-	// A target with no staff_members row is not staff, LoadStaff wraps
-	// pgx.ErrNoRows for that case and Rank() would come out as NoRank anyway,
-	// but it's cheaper to just let the not-staff case fall through as unranked.
+// checkModerationTarget refuses moderating a staff member who ranks at or
+// above the caller. A target with no staff_members row at all (an ordinary
+// user) is never restricted here.
+func checkModerationTarget(ctx context.Context, actorRank int32, targetUserID string) error {
+	target, err := perms.LoadStaff(ctx, targetUserID)
+
 	if err != nil {
-		return nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return err
 	}
 
-	if target.Rank() <= actor.Rank() {
-		return fmt.Errorf("you cannot moderate a staff member at or above your own rank")
+	targetRank := target.Rank()
+
+	if targetRank <= actorRank {
+		return fmt.Errorf("<@%s> is staff at rank #%d, which is at or above your own rank (#%d) you can't moderate them", targetUserID, targetRank, actorRank)
 	}
 
 	return nil
 }
 
-// logModeration posts the mod-log embed every moderation command shares.
-func logModeration(action, targetID, reason string, colour int) error {
+// logModeration posts a mod-log entry. Best-effort: a failure here is logged
+// by the caller's normal error path but never undoes the action already
+// taken, since the moderation action itself already succeeded by the time
+// this runs.
+func logModeration(c *Ctx, action string, target snowflake.ID, reason string) error {
 	return impls.SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
-			Title:       action,
-			Description: fmt.Sprintf("Target: <@%s>", targetID),
-			Fields:      []discord.EmbedField{{Name: "Reason", Value: reason, Inline: impls.InlineTrue()}},
-			Color:       colour,
+			Title: action,
+			Fields: []discord.EmbedField{
+				{Name: "User", Value: fmt.Sprintf("<@%s> (%s)", target, target), Inline: impls.InlineTrue()},
+				{Name: "Staff", Value: fmt.Sprintf("<@%s>", c.Author.ID), Inline: impls.InlineTrue()},
+				{Name: "Reason", Value: reason, Inline: impls.InlineFalse()},
+			},
+			Color: impls.ColourRed,
 		}},
 	})
 }
@@ -99,39 +119,34 @@ func cmdKick() *Command {
 	return &Command{
 		Name:        "kick",
 		Category:    "Moderation",
-		Description: "Kick a member from the main server",
+		Description: "Kick a member from this server",
 		Checks:      []Check{isStaff},
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionUser{Name: "user", Description: "The member to kick", Required: true},
-			discord.ApplicationCommandOptionString{Name: "reason", Description: "Reason for the kick", Required: true},
+			discord.ApplicationCommandOptionString{Name: "reason", Description: "Why they're being kicked", Required: true},
 		},
 		Run: func(c *Ctx) error {
-			if err := checkModerationCall(c, perms.StaffModerateGuild); err != nil {
-				return err
-			}
-
-			targetID := resolveTargetUser(c, "user", 0)
-			reason := c.Option("reason", 1)
-
-			if err := checkModerationTarget(c, targetID); err != nil {
-				return err
-			}
-
-			targetSnowflake, err := parseSnowflake(targetID)
+			target, err := resolveTargetUser(c, "user", 0)
 
 			if err != nil {
 				return err
 			}
 
-			if err := dclient.Get().Rest().RemoveMember(c.GuildID, targetSnowflake); err != nil {
-				return fmt.Errorf("failed to kick: %w", err)
+			reason := c.Option("reason", 1)
+
+			if err := checkModerationCall(c, perms.StaffModerateGuild, target); err != nil {
+				return err
 			}
 
-			if err := logModeration("Member Kicked", targetID, reason, impls.ColourRed); err != nil {
-				state.Logger.Warn("Failed to post kick to mod log")
+			if err := impls.KickMember(c.GuildID, target, reason); err != nil {
+				return err
 			}
 
-			return c.Ok(fmt.Sprintf("Kicked <@%s>.", targetID))
+			if err := logModeration(c, "Member Kicked", target, reason); err != nil {
+				return err
+			}
+
+			return c.Ok(fmt.Sprintf("Kicked <@%s>.", target))
 		},
 	}
 }
@@ -140,39 +155,45 @@ func cmdBan() *Command {
 	return &Command{
 		Name:        "ban",
 		Category:    "Moderation",
-		Description: "Ban a member from the main server",
+		Description: "Ban a member from this server",
 		Checks:      []Check{isStaff},
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionUser{Name: "user", Description: "The member to ban", Required: true},
-			discord.ApplicationCommandOptionString{Name: "reason", Description: "Reason for the ban", Required: true},
+			discord.ApplicationCommandOptionString{Name: "reason", Description: "Why they're being banned", Required: true},
+			discord.ApplicationCommandOptionInt{Name: "delete_days", Description: "Days of their recent messages to delete (0-7)", MinValue: intPtr(0), MaxValue: intPtr(7)},
 		},
 		Run: func(c *Ctx) error {
-			if err := checkModerationCall(c, perms.StaffModerateGuild); err != nil {
-				return err
-			}
-
-			targetID := resolveTargetUser(c, "user", 0)
-			reason := c.Option("reason", 1)
-
-			if err := checkModerationTarget(c, targetID); err != nil {
-				return err
-			}
-
-			targetSnowflake, err := parseSnowflake(targetID)
+			target, err := resolveTargetUser(c, "user", 0)
 
 			if err != nil {
 				return err
 			}
 
-			if err := dclient.Get().Rest().AddBan(c.GuildID, targetSnowflake, 0, nil); err != nil {
-				return fmt.Errorf("failed to ban: %w", err)
+			reason := c.Option("reason", 1)
+
+			deleteDays := 0
+
+			if raw := c.Option("delete_days", 2); raw != "" {
+				deleteDays, err = strconv.Atoi(raw)
+
+				if err != nil || deleteDays < 0 || deleteDays > 7 {
+					return errors.New("delete_days must be between 0 and 7")
+				}
 			}
 
-			if err := logModeration("Member Banned", targetID, reason, impls.ColourRed); err != nil {
-				state.Logger.Warn("Failed to post ban to mod log")
+			if err := checkModerationCall(c, perms.StaffModerateGuild, target); err != nil {
+				return err
 			}
 
-			return c.Ok(fmt.Sprintf("Banned <@%s>.", targetID))
+			if err := impls.BanMember(c.GuildID, target, time.Duration(deleteDays)*24*time.Hour, reason); err != nil {
+				return err
+			}
+
+			if err := logModeration(c, "Member Banned", target, reason); err != nil {
+				return err
+			}
+
+			return c.Ok(fmt.Sprintf("Banned <@%s>.", target))
 		},
 	}
 }
@@ -181,63 +202,43 @@ func cmdTimeout() *Command {
 	return &Command{
 		Name:        "timeout",
 		Category:    "Moderation",
-		Description: "Time out a member in the main server",
+		Description: "Time out a member so they can't send messages or join voice",
 		Checks:      []Check{isStaff},
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionUser{Name: "user", Description: "The member to time out", Required: true},
-			discord.ApplicationCommandOptionString{Name: "reason", Description: "Reason for the timeout", Required: true},
-			discord.ApplicationCommandOptionString{Name: "duration", Description: "e.g. 10m, 1h, 2d (max 28d, clears if omitted)"},
+			discord.ApplicationCommandOptionString{Name: "duration", Description: "How long, e.g. 10m, 1h, 3d (max 28d)", Required: true},
+			discord.ApplicationCommandOptionString{Name: "reason", Description: "Why they're being timed out", Required: true},
 		},
 		Run: func(c *Ctx) error {
-			if err := checkModerationCall(c, perms.StaffModerateGuild); err != nil {
-				return err
-			}
-
-			targetID := resolveTargetUser(c, "user", 0)
-			reason := c.Option("reason", 1)
-			duration := c.Option("duration", 2)
-
-			if err := checkModerationTarget(c, targetID); err != nil {
-				return err
-			}
-
-			targetSnowflake, err := parseSnowflake(targetID)
+			target, err := resolveTargetUser(c, "user", 0)
 
 			if err != nil {
 				return err
 			}
 
-			update := discord.MemberUpdate{}
+			duration, err := parseTimeoutDuration(c.Option("duration", 1))
 
-			if strings.TrimSpace(duration) == "" {
-				update.CommunicationDisabledUntil = djson.NullPtr[time.Time]()
-			} else {
-				d, err := parseTimeoutDuration(duration)
-
-				if err != nil {
-					return err
-				}
-
-				if d > 28*24*time.Hour {
-					return fmt.Errorf("timeouts cannot exceed 28 days")
-				}
-
-				update.CommunicationDisabledUntil = djson.NewNullablePtr(time.Now().Add(d))
+			if err != nil {
+				return err
 			}
 
-			if _, err := dclient.Get().Rest().UpdateMember(c.GuildID, targetSnowflake, update); err != nil {
-				return fmt.Errorf("failed to time out: %w", err)
+			reason := c.Option("reason", 2)
+
+			if err := checkModerationCall(c, perms.StaffModerateGuild, target); err != nil {
+				return err
 			}
 
-			if err := logModeration("Member Timed Out", targetID, reason, impls.ColourRed); err != nil {
-				state.Logger.Warn("Failed to post timeout to mod log")
+			until := time.Now().Add(duration)
+
+			if err := impls.TimeoutMember(c.GuildID, target, until, reason); err != nil {
+				return err
 			}
 
-			if strings.TrimSpace(duration) == "" {
-				return c.Ok(fmt.Sprintf("Cleared the timeout on <@%s>.", targetID))
+			if err := logModeration(c, "Member Timed Out", target, fmt.Sprintf("%s (until <t:%d:f>)", reason, until.Unix())); err != nil {
+				return err
 			}
 
-			return c.Ok(fmt.Sprintf("Timed out <@%s> for %s.", targetID, duration))
+			return c.Ok(fmt.Sprintf("Timed out <@%s> until <t:%d:f>.", target, until.Unix()))
 		},
 	}
 }
@@ -246,120 +247,79 @@ func cmdWarn() *Command {
 	return &Command{
 		Name:        "warn",
 		Category:    "Moderation",
-		Description: "Warn a member",
+		Description: "Send a formal warning to a member (no other action taken)",
 		Checks:      []Check{isStaff},
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionUser{Name: "user", Description: "The member to warn", Required: true},
-			discord.ApplicationCommandOptionString{Name: "reason", Description: "Reason for the warning", Required: true},
+			discord.ApplicationCommandOptionString{Name: "reason", Description: "What they're being warned for", Required: true},
 		},
 		Run: func(c *Ctx) error {
-			if err := checkModerationCall(c, perms.StaffWarnUsers); err != nil {
-				return err
-			}
-
-			targetID := resolveTargetUser(c, "user", 0)
-			reason := c.Option("reason", 1)
-
-			if err := checkModerationTarget(c, targetID); err != nil {
-				return err
-			}
-
-			targetSnowflake, err := parseSnowflake(targetID)
+			target, err := resolveTargetUser(c, "user", 0)
 
 			if err != nil {
 				return err
 			}
 
-			dm, dmErr := dclient.Get().Rest().CreateDMChannel(targetSnowflake)
+			reason := c.Option("reason", 1)
 
-			if dmErr == nil {
-				// A closed DM is not a reason to fail the warning itself, only to
-				// skip telling the target directly - the mod log still records it.
-				_, _ = dclient.Get().Rest().CreateMessage(dm.ID(), discord.MessageCreate{
-					Embeds: []discord.Embed{{
-						Title:       "You have been warned",
-						Description: reason,
-						Color:       impls.ColourRed,
-					}},
-				})
+			if err := checkModerationCall(c, perms.StaffWarnUsers, target); err != nil {
+				return err
 			}
 
-			if err := logModeration("Member Warned", targetID, reason, impls.ColourRed); err != nil {
-				state.Logger.Warn("Failed to post warning to mod log")
+			// Best-effort: a member with DMs closed still gets warned and logged,
+			// they just don't hear about it directly.
+			_ = impls.SendDM(target, discord.MessageCreate{
+				Embeds: []discord.Embed{{
+					Title:       "You've received a formal warning",
+					Description: reason,
+					Color:       impls.ColourRed,
+				}},
+			})
+
+			if err := logModeration(c, "Member Warned", target, reason); err != nil {
+				return err
 			}
 
-			return c.Ok(fmt.Sprintf("Warned <@%s>.", targetID))
+			return c.Ok(fmt.Sprintf("Warned <@%s>.", target))
 		},
 	}
 }
 
-// cmdKB points a user at the Knowledge Base without staff retyping the link
-// every time someone asks the same question.
-func cmdKB() *Command {
-	return &Command{
-		Name:        "kb",
-		Category:    "Support",
-		Description: "Link the Knowledge Base",
-		Run: func(c *Ctx) error {
-			return c.Say(fmt.Sprintf("Check out our Knowledge Base: %s/kb", state.Config.Sites.Frontend.Parse()))
-		},
-	}
-}
+func intPtr(i int) *int { return &i }
 
-// cmdTicket points a user at how to open a support ticket in-site.
-func cmdTicket() *Command {
-	return &Command{
-		Name:        "ticket",
-		Category:    "Support",
-		Description: "Explain how to open a support ticket",
-		Run: func(c *Ctx) error {
-			return c.Say(fmt.Sprintf(
-				"Need direct help? Open a support ticket at %s/tickets and a staff member will get to it.",
-				state.Config.Sites.Frontend.Parse()))
-		},
-	}
-}
+// parseTimeoutDuration parses a duration string, adding support for a "d"
+// (day) suffix time.ParseDuration has no equivalent of, since that's the
+// natural unit for a timeout.
+func parseTimeoutDuration(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(strings.ToLower(raw))
 
-// cmdStaffInfo explains the staff hierarchy the moderation commands enforce,
-// so "why couldn't I moderate them" has a self-serve answer.
-func cmdStaffInfo() *Command {
-	return &Command{
-		Name:        "staffinfo",
-		Category:    "Support",
-		Description: "Explain the staff hierarchy",
-		Run: func(c *Ctx) error {
-			return c.Say("Staff moderation commands follow the staff role hierarchy: " +
-				"you cannot kick, ban, time out or warn a staff member ranked at or above your own role. " +
-				"Roles and their rank are kept in sync with this server's staff roles.")
-		},
-	}
-}
+	var d time.Duration
 
-// parseTimeoutDuration parses a duration written with a day suffix in
-// addition to what time.ParseDuration already understands, since Discord
-// timeouts commonly run in days and Go's stdlib has no unit for one.
-func parseTimeoutDuration(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-
-	if strings.HasSuffix(s, "d") {
-		days, err := strconv.ParseFloat(strings.TrimSuffix(s, "d"), 64)
+	if strings.HasSuffix(raw, "d") {
+		days, err := strconv.ParseFloat(strings.TrimSuffix(raw, "d"), 64)
 
 		if err != nil {
-			return 0, fmt.Errorf("invalid duration %q", s)
+			return 0, fmt.Errorf("%q is not a valid duration try e.g. 10m, 1h, 3d", raw)
 		}
 
-		return time.Duration(days * float64(24*time.Hour)), nil
+		d = time.Duration(days * float64(24*time.Hour))
+	} else {
+		parsed, err := time.ParseDuration(raw)
+
+		if err != nil {
+			return 0, fmt.Errorf("%q is not a valid duration try e.g. 10m, 1h, 3d", raw)
+		}
+
+		d = parsed
 	}
 
-	d, err := time.ParseDuration(s)
+	if d <= 0 {
+		return 0, errors.New("duration must be positive")
+	}
 
-	if err != nil {
-		return 0, fmt.Errorf("invalid duration %q, try e.g. 10m, 1h, 2d", s)
+	if d > maxTimeout {
+		return 0, errors.New("duration can't be more than 28 days")
 	}
 
 	return d, nil
-}
-
-func parseSnowflake(id string) (snowflake.ID, error) {
-	return snowflake.Parse(id)
 }

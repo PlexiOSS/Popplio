@@ -13,7 +13,7 @@ import (
 var Apps = []types.Position{
 	{
 		ID: "staff",
-		Info: `Join the Infinity Staff Team and help us Approve, Deny and Certify Discord Bots. 
+		Info: `Join the Omniplex Staff Team and help us Approve, Deny and Certify Discord Bots.
 
 We are a welcoming and laid back team who is always willing to give new people an opportunity!`,
 		Name:        "Staff Team",
@@ -74,7 +74,7 @@ We are a welcoming and laid back team who is always willing to give new people a
 	},
 	{
 		ID: "dev",
-		Info: `Join our Dev Team and help us update, manage and maintain all of the Infinity Services!.
+		Info: `Join our Dev Team and help us update, manage and maintain all of the Omniplex Services!.
 
 Some experience in PostgreSQL and at least one of the below languages is required:
 
@@ -149,7 +149,7 @@ Some experience in PostgreSQL and at least one of the below languages is require
 Some points to note:
 
 - When you apply for a partnership, make sure that you are authorized to speak on the services behalf
-- Infinity Development reserves the right to deny or cancel any partnership application at any time.
+- NodeByte LTD reserves the right to deny or cancel any partnership application at any time.
 `,
 		Name: "Partners",
 		Tags: []string{"Advertising", "Business"},
@@ -165,14 +165,14 @@ Some points to note:
 				ID:          "why",
 				Question:    "Why do you want to partner with us?",
 				Paragraph:   "Why do you want to partner with us? Be specific",
-				Placeholder: "I want to partner with Infinity Bot List because...",
+				Placeholder: "I want to partner with Omniplex because...",
 				Short:       true,
 			},
 			{
 				ID:          "how",
 				Question:    "How will you promote us?",
-				Paragraph:   "How will you promote Infinity Bot List? This could be a partner command or a link on your website!",
-				Placeholder: "I will promote Infinity Bot List using...",
+				Paragraph:   "How will you promote Omniplex? This could be a partner command or a link on your website!",
+				Placeholder: "I will promote Omniplex using...",
 				Short:       true,
 			},
 			{
@@ -220,7 +220,7 @@ Some points to note:
 		Info: `<h3 class="text-2xl font-semibold">Hello There, Welcome</h3>
 If you find yourself browsing or using this site, you should be disappointed. 
 
-Here at Infinity we strive in providing our users a safe, curtious, drama free community and only ask that you follow a few simple rules. 
+Here at Omniplex we strive in providing our users a safe, curtious, drama free community and only ask that you follow a few simple rules. 
 
 <span class="font-semibold">You have clearly done something to violate them or piss us off.</span>
 
@@ -269,7 +269,7 @@ You can only have up to one ban appeal at any given point of time. Abusing the s
 		Name: "Certification",
 		Info: `So you want to apply for certification, eh?
 
-Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify.
+Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of servers, unique clicks, or votes your bot is strongest in — you don't need to clear every bar, just one.
 
 Then fill out the form below and wait for a staff member to review your application. If you are accepted, you're in the club!
 
@@ -298,6 +298,44 @@ You can only have one certification application at a time. If you have already a
 				Question:    "What does your bot do?",
 				Paragraph:   "What does your bot do? Does it have NSFW functionality?",
 				Placeholder: "My bot does...",
+				Short:       false,
+			},
+		},
+	},
+	{
+		ID:   "server_certification",
+		Name: "Server Certification",
+		Info: `Certification isn't just for bots servers can qualify too.
+
+Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of members, unique clicks, or votes your server is strongest in — you don't need to clear every bar, just one.
+
+Then fill out the form below and wait for a staff member to review your application. If you are accepted, you're in the club!
+
+You can only have one certification application at a time. If you have already applied, please wait for a staff member to review your application before applying again.
+		`,
+		ExtraLogic:  extraLogicCertServer,
+		ReviewLogic: reviewLogicCertServer,
+		Tags:        []string{"Certification"},
+		Questions: []types.Question{
+			{
+				ID:          "id",
+				Question:    "Server ID?",
+				Paragraph:   "What is the server ID?",
+				Placeholder: "Server ID",
+				Short:       true,
+			},
+			{
+				ID:          "why",
+				Question:    "Why do you want your server to be certified?",
+				Paragraph:   "Why do you want to be certified? What makes your community stand out from others?",
+				Placeholder: "I want to be certified because...",
+				Short:       false,
+			},
+			{
+				ID:          "what",
+				Question:    "What is your server about?",
+				Paragraph:   "What is your server about? Does it have NSFW content?",
+				Placeholder: "My server is about...",
 				Short:       false,
 			},
 		},

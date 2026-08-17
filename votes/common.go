@@ -19,6 +19,7 @@ import (
 	"github.com/infinitybotlist/eureka/dovewing"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -32,8 +33,14 @@ type DbConn interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
+// GetDoubleVote reports whether the Friday-through-Sunday double-vote
+// weekend bonus is active right now. Pinned to UTC explicitly rather than
+// relying on time.Now()'s implicit host-local zone — the boundary needs to
+// be the same instant for every caller regardless of what timezone the
+// process happens to be running in, and it's the boundary documented to
+// users (see the Voting Rules KB article).
 func GetDoubleVote() bool {
-	weekday := time.Now().Weekday()
+	weekday := time.Now().UTC().Weekday()
 	return weekday == time.Friday || weekday == time.Saturday || weekday == time.Sunday
 }
 
@@ -76,10 +83,12 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, err
 		}
 
-		// Set entityInfo for log
+		// Set entityInfo for log. VoteURL matches URL rather than a
+		// dedicated "/vote" sub-route — no such route exists in the
+		// frontend, voting happens inline on the entity's own page.
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/bot/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/bot/" + targetId + "/vote",
+			URL:     state.Config.Sites.Frontend.Parse() + "/bots/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/bots/" + targetId,
 			Name:    botObj.Username,
 			Avatar:  botObj.Avatar,
 		}, nil
@@ -101,8 +110,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 		}
 
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/pack/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/pack/" + targetId,
+			URL:     state.Config.Sites.Frontend.Parse() + "/packs/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/packs/" + targetId,
 			Name:    targetId,
 		}, nil
 	case "team":
@@ -125,8 +134,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 
 		// Set entityInfo for log
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/team/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/team/" + targetId + "/vote",
+			URL:     state.Config.Sites.Frontend.Parse() + "/teams/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/teams/" + targetId,
 			Name:    name,
 		}, nil
 	case "server":
@@ -149,8 +158,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 
 		// Set entityInfo for log
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/server/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/server/" + targetId + "/vote",
+			URL:     state.Config.Sites.Frontend.Parse() + "/servers/" + targetId,
+			VoteURL: state.Config.Sites.Frontend.Parse() + "/servers/" + targetId,
 			Name:    name,
 		}, nil
 	case "blog":
@@ -185,7 +194,8 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		voteEntity.VoteCredits = true // Bots support vote credits
 
 		var premium bool
-		err := c.QueryRow(ctx, "SELECT premium FROM bots WHERE bot_id = $1", targetId).Scan(&premium)
+		var voteBlitzUntil pgtype.Timestamptz
+		err := c.QueryRow(ctx, "SELECT premium, vote_blitz_until FROM bots WHERE bot_id = $1", targetId).Scan(&premium, &voteBlitzUntil)
 
 		if err != nil {
 			return nil, err
@@ -199,13 +209,21 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 			if GetDoubleVote() {
 				voteEntity.PerUser = 2  // 2 votes per user
 				voteEntity.VoteTime = 6 // Half of the normal vote time
+				voteEntity.WeekendBonus = true
 			}
+		}
+
+		// A purchased vote blitz halves whatever vote time was just computed,
+		// stacking with premium/double-vote rather than overriding them.
+		if voteBlitzUntil.Valid && voteBlitzUntil.Time.After(time.Now()) {
+			voteEntity.VoteTime = max(voteEntity.VoteTime/2, 1)
 		}
 	case "server":
 		voteEntity.VoteCredits = true
 
 		var premium bool
-		err := c.QueryRow(ctx, "SELECT premium FROM servers WHERE server_id = $1", targetId).Scan(&premium)
+		var voteBlitzUntil pgtype.Timestamptz
+		err := c.QueryRow(ctx, "SELECT premium, vote_blitz_until FROM servers WHERE server_id = $1", targetId).Scan(&premium, &voteBlitzUntil)
 
 		if err != nil {
 			return nil, err
@@ -219,7 +237,14 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 			if GetDoubleVote() {
 				voteEntity.PerUser = 2  // 2 votes per user
 				voteEntity.VoteTime = 6 // Half of the normal vote time
+				voteEntity.WeekendBonus = true
 			}
+		}
+
+		// A purchased vote blitz halves whatever vote time was just computed,
+		// stacking with premium/double-vote rather than overriding them.
+		if voteBlitzUntil.Valid && voteBlitzUntil.Time.After(time.Now()) {
+			voteEntity.VoteTime = max(voteEntity.VoteTime/2, 1)
 		}
 	case "blog":
 		voteEntity.MultipleVotes = false
@@ -229,10 +254,12 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		if GetDoubleVote() {
 			voteEntity.PerUser = 2  // 2 votes per user
 			voteEntity.VoteTime = 6 // Half of the normal vote time
+			voteEntity.WeekendBonus = true
 		}
 	case "pack":
 		// Packs cannot be premium yet
 		if GetDoubleVote() {
+			voteEntity.WeekendBonus = true
 			voteEntity.PerUser = 2  // 2 votes per user
 			voteEntity.VoteTime = 6 // Half of the normal vote time
 		}

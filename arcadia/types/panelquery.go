@@ -15,6 +15,7 @@ type PanelQuery struct {
 	GetRpcLogEntries            *QLoginTokenOnly
 	SearchEntitys               *QSearchEntitys
 	UpdatePartners              *QUpdatePartners
+	UpdateReports               *QUpdateReports
 	UpdateChangelog             *QUpdateChangelog
 	UpdateBlog                  *QUpdateBlog
 	UpdateStaffPositions        *QUpdateStaffPositions
@@ -70,6 +71,11 @@ type QSearchEntitys struct {
 type QUpdatePartners struct {
 	LoginToken string        `json:"login_token"`
 	Action     PartnerAction `json:"action"`
+}
+
+type QUpdateReports struct {
+	LoginToken string       `json:"login_token"`
+	Action     ReportAction `json:"action"`
 }
 
 type QUpdateChangelog struct {
@@ -177,6 +183,9 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 	case "UpdatePartners":
 		q.UpdatePartners = &QUpdatePartners{}
 		into = q.UpdatePartners
+	case "UpdateReports":
+		q.UpdateReports = &QUpdateReports{}
+		into = q.UpdateReports
 	case "UpdateChangelog":
 		q.UpdateChangelog = &QUpdateChangelog{}
 		into = q.UpdateChangelog
@@ -242,6 +251,8 @@ func (q PanelQuery) MarshalJSON() ([]byte, error) {
 		return encodeVariant("SearchEntitys", q.SearchEntitys)
 	case q.UpdatePartners != nil:
 		return encodeVariant("UpdatePartners", q.UpdatePartners)
+	case q.UpdateReports != nil:
+		return encodeVariant("UpdateReports", q.UpdateReports)
 	case q.UpdateChangelog != nil:
 		return encodeVariant("UpdateChangelog", q.UpdateChangelog)
 	case q.UpdateBlog != nil:
