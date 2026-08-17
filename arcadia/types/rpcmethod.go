@@ -7,7 +7,7 @@ import (
 // MaxReasonLength caps every `reason` field on an RPC method.
 const MaxReasonLength = 2000
 
-// RPCMethod is the tagged union of the 18 staff actions. Exactly one field is
+// RPCMethod is the tagged union of the 22 staff actions. Exactly one field is
 // non-nil.
 //
 // Its Display form (Name) is load-bearing in three places:
@@ -34,6 +34,10 @@ type RPCMethod struct {
 	BotTransferOwnershipTeam *RPCBotTransferOwnershipTeam
 	AppBanUser               *RPCTargetReason
 	AppUnbanUser             *RPCTargetReason
+	BanUser                  *RPCTargetReason
+	UnbanUser                *RPCTargetReason
+	AssignBadge              *RPCAssignBadge
+	UnassignBadge            *RPCAssignBadge
 }
 
 // RPCTargetReason is the shape shared by every method that takes just a target
@@ -77,6 +81,12 @@ type RPCBotTransferOwnershipTeam struct {
 	NewTeam  string `json:"new_team"`
 }
 
+type RPCAssignBadge struct {
+	TargetID string `json:"target_id"`
+	Reason   string `json:"reason"`
+	BadgeID  string `json:"badge_id"`
+}
+
 // RPCMethodVariants is in Rust declaration order. GetRpcMethods and the Discord
 // `rpclist` command both iterate it, so the order is user-visible.
 var RPCMethodVariants = []string{
@@ -98,6 +108,10 @@ var RPCMethodVariants = []string{
 	"BotTransferOwnershipTeam",
 	"AppBanUser",
 	"AppUnbanUser",
+	"BanUser",
+	"UnbanUser",
+	"AssignBadge",
+	"UnassignBadge",
 }
 
 // variant returns the set variant's name and payload, or ("", nil) if none is
@@ -141,6 +155,14 @@ func (m RPCMethod) variant() (string, any) {
 		return "AppBanUser", m.AppBanUser
 	case m.AppUnbanUser != nil:
 		return "AppUnbanUser", m.AppUnbanUser
+	case m.BanUser != nil:
+		return "BanUser", m.BanUser
+	case m.UnbanUser != nil:
+		return "UnbanUser", m.UnbanUser
+	case m.AssignBadge != nil:
+		return "AssignBadge", m.AssignBadge
+	case m.UnassignBadge != nil:
+		return "UnassignBadge", m.UnassignBadge
 	default:
 		return "", nil
 	}
@@ -199,6 +221,14 @@ func EmptyRPCMethod(name string) (RPCMethod, error) {
 		m.AppBanUser = &RPCTargetReason{}
 	case "AppUnbanUser":
 		m.AppUnbanUser = &RPCTargetReason{}
+	case "BanUser":
+		m.BanUser = &RPCTargetReason{}
+	case "UnbanUser":
+		m.UnbanUser = &RPCTargetReason{}
+	case "AssignBadge":
+		m.AssignBadge = &RPCAssignBadge{}
+	case "UnassignBadge":
+		m.UnassignBadge = &RPCAssignBadge{}
 	default:
 		return m, errUnknownVariant("RPCMethod", name)
 	}
@@ -241,10 +271,14 @@ func (m RPCMethod) MarshalJSON() ([]byte, error) {
 // SupportedTargetTypes lists the target types the method accepts.
 func (m RPCMethod) SupportedTargetTypes() []TargetType {
 	switch m.Name() {
-	case "VoteReset", "VoteResetAll":
+	case "VoteReset", "VoteResetAll", "VoteBanAdd", "VoteBanRemove":
 		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypeTeam, TargetTypePack}
-	case "AppBanUser", "AppUnbanUser":
+	case "ForceRemove":
+		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypePack}
+	case "AppBanUser", "AppUnbanUser", "BanUser", "UnbanUser":
 		return []TargetType{TargetTypeUser}
+	case "AssignBadge", "UnassignBadge":
+		return []TargetType{TargetTypeUser, TargetTypeBot, TargetTypeServer, TargetTypeTeam}
 	case "":
 		return []TargetType{}
 	default:
@@ -291,6 +325,14 @@ func (m RPCMethod) Description() string {
 		return "Ban user from apps"
 	case "AppUnbanUser":
 		return "Unban user from apps"
+	case "BanUser":
+		return "Bans a user's account from the platform entirely"
+	case "UnbanUser":
+		return "Unbans a user's account"
+	case "AssignBadge":
+		return "Awards a badge to a user, bot, server, or team"
+	case "UnassignBadge":
+		return "Removes a badge from a user, bot, server, or team"
 	default:
 		return ""
 	}
@@ -335,6 +377,14 @@ func (m RPCMethod) Label() string {
 		return "Ban from apps [User]"
 	case "AppUnbanUser":
 		return "Unban from apps [User]"
+	case "BanUser":
+		return "Ban User [Account]"
+	case "UnbanUser":
+		return "Unban User [Account]"
+	case "AssignBadge":
+		return "Assign Badge"
+	case "UnassignBadge":
+		return "Remove Badge"
 	default:
 		return ""
 	}
@@ -442,6 +492,18 @@ func (m RPCMethod) Fields() []RPCField {
 				FieldType:   FieldTypeText,
 				Icon:        "material-symbols:timer",
 				Placeholder: "New Team",
+			},
+			rpcFieldReason(),
+		}
+	case "AssignBadge", "UnassignBadge":
+		return []RPCField{
+			rpcFieldTargetID(),
+			{
+				ID:          "badge_id",
+				Label:       "Badge ID",
+				FieldType:   FieldTypeText,
+				Icon:        "material-symbols:award-star",
+				Placeholder: "The badge's ID, from the badge catalog",
 			},
 			rpcFieldReason(),
 		}

@@ -24,6 +24,7 @@ const (
 	StaffManagePremium Perm = "manage_premium"
 	StaffManageVotes   Perm = "manage_votes"
 	StaffBanVoters     Perm = "ban_voters"
+	StaffBanUsers      Perm = "ban_users"
 
 	StaffViewApps    Perm = "view_apps"
 	StaffManageApps  Perm = "manage_apps"
@@ -42,7 +43,14 @@ const (
 	StaffManagePartners Perm = "manage_partners"
 	StaffManageBlog     Perm = "manage_blog"
 
-	StaffViewTickets Perm = "view_tickets"
+	StaffViewTickets   Perm = "view_tickets"
+	StaffManageTickets Perm = "manage_tickets"
+
+	StaffModerateGuild Perm = "moderate_guild"
+	StaffWarnUsers     Perm = "warn_users"
+
+	StaffManageBadges Perm = "manage_badges"
+	StaffAssignBadges Perm = "assign_badges"
 
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
@@ -150,6 +158,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Description: "Vote ban and unban a user.",
 		Category:    "Users & Votes",
 		Legacy:      []string{"rpc.VoteBanAdd", "rpc.VoteBanRemove"},
+	},
+	{
+		ID:          StaffBanUsers,
+		Name:        "Ban Users",
+		Description: "Ban and unban a user's account from the platform entirely — blocks every authenticated action except submitting a ban appeal.",
+		Category:    "Users & Votes",
+		Dangerous:   true,
 	},
 
 	{
@@ -269,6 +284,26 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Description: "Read support tickets opened by users.",
 		Category:    "Support",
 		Legacy:      []string{"popplio.tickets", "popplio.*"},
+	},
+	{
+		ID:          StaffManageTickets,
+		Name:        "Manage Tickets",
+		Description: "Reply to, close and reopen support tickets opened by users.",
+		Category:    "Support",
+	},
+
+	{
+		ID:          StaffModerateGuild,
+		Name:        "Moderate Guild",
+		Description: "Kick, ban and time out members of the main server.",
+		Category:    "Guild Moderation",
+		Dangerous:   true,
+	},
+	{
+		ID:          StaffWarnUsers,
+		Name:        "Warn Users",
+		Description: "Warn a member of the main server.",
+		Category:    "Guild Moderation",
 	},
 
 	{

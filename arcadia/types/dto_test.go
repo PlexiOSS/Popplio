@@ -100,6 +100,10 @@ func TestRPCMethodsRoundTrip(t *testing.T) {
 		"BotTransferOwnershipTeam": `{"BotTransferOwnershipTeam":{"target_id":"1","reason":"r","new_team":"2"}}`,
 		"AppBanUser":               `{"AppBanUser":{"target_id":"1","reason":"r"}}`,
 		"AppUnbanUser":             `{"AppUnbanUser":{"target_id":"1","reason":"r"}}`,
+		"BanUser":                  `{"BanUser":{"target_id":"1","reason":"r"}}`,
+		"UnbanUser":                `{"UnbanUser":{"target_id":"1","reason":"r"}}`,
+		"AssignBadge":              `{"AssignBadge":{"target_id":"1","reason":"r","badge_id":"b"}}`,
+		"UnassignBadge":            `{"UnassignBadge":{"target_id":"1","reason":"r","badge_id":"b"}}`,
 	}
 
 	if len(wire) != len(RPCMethodVariants) {

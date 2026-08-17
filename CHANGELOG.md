@@ -5,6 +5,370 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - Unreleased
+
+### Added
+
+- Sign-in on beta and staging is now restricted to Bug Hunters (instance
+  owners bypass it, so they can't lock themselves out of their own
+  environment). Rejected cleanly at the OAuth login step
+  (`checkBugHunterOnly`, same pattern as the existing `checkBanScope`),
+  plus a matching global check in `api/uapi.go` for defense in depth on
+  any session issued before this. Reads the same `users.bug_hunters`
+  column `SpecRoleSync` already keeps in sync with the Bug Hunter Discord
+  role — no new sync mechanism, no new schema.
+
+- Real account bans: a new `BanUser`/`UnbanUser` RPC action (new
+  `ban_users` permission) sets `users.banned`, distinct from
+  `AppBanUser`/`AppUnbanUser`'s much narrower `app_banned` flag. Nothing
+  previously set the column at all despite `api/uapi.go` already rejecting
+  every authenticated request from a banned user except sessions scoped
+  `ban_exempt` a full account ban was completely unreachable through any
+  staff action.
+- `VoteBanAdd`/`VoteBanRemove` now support `Server`, `Team`, and `Pack` in
+  addition to `Bot` (all four carry an identical `vote_banned` column).
+  `ForceRemove` now supports `Server` and `Pack` in addition to `Bot` —
+  the `kick`/protected-bots behaviour stays bot-only, since neither has a
+  "leave the guild" equivalent. This is the reports-can't-act-on-non-bot-
+  content gap: reports against a server or pack had no staff action to
+  take beyond bots.
+- A generic badge system: a staff-managed catalog (`badges`) plus a
+  flexible assignment table (`entity_badges`), so a new purely-decorative
+  badge is a catalog row and an assignment from now on, not a new column,
+  backend flag, and frontend branch every time. New `AssignBadge`/
+  `UnassignBadge` RPC action (new `assign_badges` permission, works on
+  User/Bot/Server/Team) reaches every entity type through the same
+  Actions menu as every other staff action, and a new
+  `GET /{target_type}/{target_id}/badges` public route reads them back.
+  Deliberately separate from the *functional* badges already on
+  users/bots/servers (premium, certified, developer, `bug_hunters` — the
+  last one specifically because it's synced from a Discord role by
+  `SpecRoleSync`, not manually assigned, so it stays exactly as-is)
+  new `manage_badges` permission gates the catalog itself.
+- Bots can now document their own commands and post changelog/announcement
+  entries, gated by the same `edit_bots` entity permission (owner or team)
+  that already gates editing a bot's settings — no new permission needed.
+  `PUT /bots/{id}/commands` replaces the whole command list (same
+  full-replace convention as `extra_links`); `POST`/`DELETE
+  /bots/{id}/changelogs` append and remove individual entries (same
+  convention as reviews). Both are public to read.
+
+## [1.3.1] - 2026-08-16
+
+### Added
+
+- Arcadia's `SearchEntitys` panel action now supports `Pack`, `Team`, and
+  `User` in addition to the existing `Bot`/`Server` previously any other
+  target type 501'd. Backs the admin Search page now covering every
+  entity type and its respective staff actions instead of just bots and
+  servers. New `PartialPack`/`PartialTeam`/`PartialUser` variants added to
+  the `PartialEntity` wire union (additive existing `Bot`/`Server`
+  consumers are unaffected).
+- `GET /users/{id}` now returns `user_servers`, the servers owned by any
+  team the user is on (mirroring the existing `user_bots`/`user_packs`
+  resolution). Servers have no direct `owner` column team ownership is
+  the only path, same as `GetOwnedBy`'s server branch. Public user
+  profiles previously had no way to show a user's servers at all.
+- The staff bot gained guild moderation commands `/kick`, `/ban`,
+  `/timeout`, and `/warn` (new `moderate_guild`/`warn_users` permissions),
+  plus self-serve `/kb`, `/ticket`, and `/staffinfo` for pointing users at
+  the Knowledge Base, ticket support, and the staff hierarchy without
+  retyping the same links. Every moderation command refuses to act on a
+  target who is themselves staff at a rank equal to or more senior than
+  the caller's own (`perms.LoadStaff(...).Rank()`) `staff_positions` is
+  the same hierarchy Discord role assignments already sync into via
+  `StaffResync`, so this is one hierarchy check, not a separate Discord
+  one and a separate Omniplex one.
+
+### Fixed
+
+- Two Discord embeds in `routes/staff/endpoints/manage_app/route.go`
+  ("Application Approved"/"Application Denied") still linked to the
+  deprecated SvelteKit panel (`Sites.Panel` + `/panel/apps`) after the
+  equivalent submission-time embed was already fixed to point at
+  Omniplex's `/admin/applications` — these two were missed in that pass.
+- `StaffResync` (`arcadia/tasks/staffresync.go`) inserted a new row into
+  `staff_members` before checking whether that user had a `users` row yet.
+  `staff_members.user_id` has a foreign key into `users`, so any staff
+  member who held a staff role in Discord but had never actually logged
+  into Omniplex made every resync run fail with a `staff_members_user_id_fkey`
+  violation, repeating on every scheduled run until fixed. The
+  ensure-`users` row exists check now runs before the `staff_members`
+  insert/update instead of after it.
+
+## [1.3.0] - 2026-08-15
+
+### Added
+
+- Certification approval (`reviewLogicCert`/`reviewLogicCertServer` in
+  `apps/logic.go`) now automatically grants `BotDeveloper`/
+  `CertifiedDeveloper` roles to a certified bot's owner(s), or every
+  member of a certified server's owning team, provided they're already in
+  the main guild — previously only the bot's own `CertBot` role was
+  granted, and owners had to know to run `ibb!getbotroles` themselves.
+- `GET /list/stats` gained `total_banned_users` and `total_vote_banned_bots`,
+  aggregate `COUNT(*)` queries over the existing `banned`/`vote_banned`
+  columns, for the Moderation Transparency page's new "Platform safety"
+  section. Public, no PII — same pattern as the existing report-stats
+  endpoint.
+
+### Fixed
+
+- A Discord API failure while granting a bot's own `CertBot` role during
+  certification (e.g. the bot not currently being in the server) used to
+  hard-fail the entire review, leaving the application stuck "pending"
+  even though `bots.type` had already been committed as `certified`
+  separately. It's now logged as a warning instead of aborting the review.
+- `GetOwnedBy` (`arcadia/impls/entities.go`) only checked team ownership
+  for bots, silently missing bots owned directly — meaning a direct owner
+  got "you don't own any bots" from `/getbotroles` even when they
+  genuinely did. Added the missing `OR owner = $1` branch.
+- `/staff/tickets?open=true` was 500ing: 8 legacy ticket rows had
+  `messages` stored as a JSON object instead of an array, and
+  `pgx.RowToStructByName` fails the whole result-set scan on a single
+  row's type mismatch. Normalized the affected rows; `create_ticket`
+  already always writes a real array, so this was legacy data, not a
+  recurring bug.
+
+## [1.2.2] - 2026-08-15
+
+### Fixed
+
+- `arcadia/panel/ops_proxy.go`'s `popplioStaff` proxy (backs the new
+  Applications admin page) rejected every request with a misleading
+  "Path must start with /" error in production, even for a
+  correctly-formed path like `/staff/apps`. Root cause was in
+  `safeJoinPopplio` (`arcadia/panel/paths.go`): beyond the real security
+  boundary (same scheme+host as Popplio's own API base), it also enforced
+  that the resolved path stay under the *same path prefix* as the
+  configured base URL — which rejects any legitimate root-level target
+  whenever that base URL has a non-root path component. That check added
+  no security beyond the origin check and only broke valid callers, so
+  it's removed. Also stopped collapsing every `safeJoinPopplio` error into
+  the same fixed string — the real error now surfaces, so a future failure
+  here is diagnosable instead of misleading.
+- `notifications.PushNotification`'s `NoSave` field was inverted from its
+  own name/doc comment (`if notif.NoSave { INSERT }` — persisted only when
+  told *not* to save). In effect, every "normal" alert (push-subscribe
+  confirmation, reminder-set confirmation, payment-failure alerts) never
+  reached a user's in-app alert inbox, only ever firing as a transient
+  push notification — the one caller that explicitly opted out of saving
+  (`vote_reminders.go`, "spammy, fills up the db quickly") was the only
+  alert type that persisted. Condition is now `if !notif.NoSave`, matching
+  what the field has always been named and documented to mean.
+- The "New Application" Discord embed (`routes/apps/endpoints/create_app`)
+  linked to the old SvelteKit panel (`Sites.Panel` + `/panel/apps`),
+  superseded by Omniplex's own `/admin/applications` — link updated.
+
+### Added
+
+- `GET /staff/tickets` — every ticket platform-wide, gated on the existing
+  `view_tickets` staff permission (optional `?open=true|false` filter,
+  paginated). Staff could already view/reply/close/reopen any ticket via
+  the existing owner-or-staff checks on `get_ticket`/
+  `create_ticket_message`/`patch_ticket`, but had no way to find a ticket
+  ID to act on in the first place — this closes that gap. Auth follows the
+  same normal-user-session + in-handler permission check as the other
+  ticket routes, not the legacy `staffpanel__authchain` system the
+  Applications page uses.
+- A user-facing confirmation alert (now that `PushNotification` actually
+  persists them) at three points that previously gave zero in-app
+  feedback on success — a purchase completing (`GivePerks`, alongside the
+  existing staff-only mod-log post), a shop item purchase, and a vote
+  credit redemption. All three are best-effort: the underlying change is
+  already committed by the time the alert is sent, so a failed alert logs
+  a warning rather than turning into an error response for something that
+  actually succeeded.
+- A new report being filed now posts to the staff-only `StaffLogs`
+  Discord channel (target, type, reason — no reporter identity, consistent
+  with reporter identity being staff-panel-only everywhere else). The
+  equivalent "new application submitted" post already existed
+  (`create_app` posts to the `Apps` channel with an `@Apps` role ping) —
+  confirmed by reading the handler directly, not assumed.
+
+## [1.2.1] - 2026-08-15
+
+### Changed
+
+- The Friday-Sunday double-vote weekend bonus (`votes.GetDoubleVote`) now
+  pins its day-of-week check to UTC explicitly instead of relying on
+  `time.Now()`'s implicit host-local timezone, so the boundary is the same
+  instant regardless of what timezone the process happens to run in. Also
+  added `VoteInfo.WeekendBonus`, a per-entity flag reporting whether the
+  bonus is actively boosting that entity's `per_user`/`vote_time` right
+  now — `false` for premium bots/servers even on a bonus weekend, since
+  their flat premium cooldown already applies instead. Nothing in the API
+  previously told callers when the bonus was live.
+- Certification requirements loosened and diversified. The old rule
+  required a bot to clear servers ≥100 **and** unique clicks ≥30 both,
+  no exceptions. It's now an OR across three lowered bars (servers ≥50,
+  unique clicks ≥15, **or** votes ≥50, the last one is new), plus a new but
+  lenient 3-day minimum listed age. A bot excelling in one metric no
+  longer gets rejected for not excelling in all of them.
+- Servers can now be certified too a new "Server Certification"
+  position on `/apps` (`extraLogicCertServer`/`reviewLogicCertServer` in
+  `apps/logic.go`), using the same OR-of-three-metrics rule scaled to
+  server stats (members ≥100 in place of bot servers ≥50). New
+  `request_server_certification` permission. The "Certified" badge
+  Omniplex has always been able to render for servers had no backend path
+  that ever set it until now.
+- Premium and Shop now work for servers, not just bots:
+  - `CreatePerkData`/`PerkData` gained a `for_type` field (`"bot"` or
+    `"server"`, defaults to `"bot"` if omitted) so Stripe/PayPal checkout
+    and the booster-offer redemption can target either.
+    `servers.premium` has been a real, displayed column with no purchase
+    path behind it since it was added; now there is one.
+  - Shop purchases (`POST /{target_type}/{target_id}/shop/purchase`) and
+    all five benefit effects (`routes/shop/assets/benefits.go`) now
+    branch on target type between `bots`/`servers` both tables carry
+    identical benefit columns.
+  - `servers` gained the same `boosted_until`/`featured_until`/
+    `supporter_badge`/`vote_blitz_until` columns bots already had
+    (`exp/serverbenefits.sql`), plus the matching read-side effects:
+    boosted-first sort in `GET /servers/@all`, a `featured` category in
+    `GET /servers/@index`, and a vote-blitz cooldown halving in
+    `EntityVoteInfo`'s `"server"` case.
+
+### Added
+
+- `GET /list/stats` now includes `total_pending_bots` and
+  `total_denied_bots`, so consumers can show a real approved/certified/
+  pending/denied breakdown instead of inferring it from `total_bots` minus
+  the listed count.
+- `GET /staff/shop-purchases` the same shop-purchase data
+  `GET /{target_type}/{target_id}/shop/purchases` already exposes
+  publicly one entity at a time, but platform-wide and staff-gated
+  (`view_shop`) for abuse/fraud monitoring. No frontend consumes this yet
+  since the Arcadia panel UI isn't part of this repo it's ready for
+  whenever that side wires it up.
+- A standalone support ticket system. The existing `tickets` table/`Ticket`
+  type were entirely Discord-channel-shaped (`channel_id`, `enc_key`) with
+  no creation path anywhere in the codebase, not in the API, not in the
+  Discord bot nothing has ever created a ticket in this codebase. Rather
+  than build the Discord-integration side, tickets are now a plain web
+  feature reusing the same table (`channel_id` left `""`, `enc_key` left
+  null): `GET /tickets/topics` (a small hardcoded topic catalogue, same
+  convention as `apps.Apps`), `POST`/`GET /users/{id}/tickets`,
+  `POST /tickets/{id}/messages`, and `PATCH /tickets/{id}` to close/reopen
+  (closing is open to the author or staff; reopening is staff-only, via a
+  new `manage_tickets` permission). New message IDs are synthesized
+  Discord-format snowflakes (`disgoorg/snowflake`'s `New`) purely so
+  `GET /tickets/{id}`'s existing `snowflake.Parse`-based timestamp
+  decoding keeps working unchanged for old and new tickets alike.
+- Shop purchases actually do something now. `shop_items`/`shop_item_benefits`
+  have had full staff CRUD via the Arcadia panel for a while, but nothing
+  ever spent an entity's earned vote credits on one or defined what a
+  benefit's effect even was. New:
+  - `POST /{target_type}/{target_id}/shop/purchase` (bots only for now,
+    gated on a new `buy_shop_items` entity permission) spends credits
+    oldest-batch-first across `entity_vote_redeem_logs`, logs the purchase
+    to a new `shop_purchases` table, and applies every benefit ID on the
+    item that Popplio recognizes.
+  - Five recognized benefit IDs, each with a real effect:
+    `premium_days` (extends the bot's premium period, identical to the
+    Stripe/PayPal path), `priority_boost` (new `boosted_until` column,
+    sorts first in `/bots/@all`'s default order while active),
+    `featured_slot` (new `featured_until` column, surfaces the bot in a
+    new `featured` category on `/bots/@index`), `supporter_badge` (new
+    permanent `supporter_badge` flag), and `vote_blitz` (new
+    `vote_blitz_until` column, halves `EntityVoteInfo`'s vote-time
+    cooldown while active). Unrecognized benefit IDs no-op rather than
+    error, so staff can still catalogue purely descriptive/future
+    benefits without breaking a purchase but an item with zero
+    recognized benefits is rejected at purchase time rather than silently
+    spending credits for nothing.
+  - `GET /{target_type}/{target_id}/shop/purchases` purchase history,
+    public, same transparency level as the existing vote-credit logs.
+  - `exp/shopbenefits.sql` (schema: 4 new `bots` columns + the
+    `shop_purchases` table) and `exp/shopbenefits_seed.sql` (optional
+    starter catalog rows for the 5 benefits) the seed is just a
+    starting point; the same rows can be created through the Arcadia
+    panel instead.
+
+### Changed
+
+- Omniplex is now owned by NodeByte LTD. Remaining "Infinity Bot List" /
+  "Infinity Development" copy left over from the old brand — application
+  question text, the staff-denial DM, webhook docs, the RSS feed title
+  and copyright line, the auth-log embed footer, and the `!delete`
+  bot-command copy now reads "Omniplex" / "NodeByte LTD".
+
+### Fixed
+
+- The Gold premium plan granted ~365 hours (~15 days) of premium instead
+  of a year `TimePeriod` was set in raw days while `GivePerks` applies
+  it as hours. Bronze/Silver were already correct; Gold now multiplies by
+  24 like they do.
+- `POST /users/{id}/redeem-payment-offer?code=BOOSTPREMIUM` granted the
+  perk successfully but then always fell through to a final `400 Invalid
+  offer code` response regardless — no caller could ever see it succeed.
+  It also never stamped `last_booster_claim`, so the "once every 30 days"
+  cooldown could never actually engage. Both are fixed: a successful
+  redemption now returns `204` and updates the claim timestamp.
+- `tickets.user_id` had no foreign key constraint to `users(user_id)` at
+  all, just a plain column — so the account data-export/deletion pipeline
+  (`POST /users/{id}/data`, `routes/users/endpoints/create_data_task`)
+  silently skipped every ticket a user had ever filed. The walker
+  (`ddr_task.go`) auto-includes any table with a real FK into an
+  already-registered root (`users`/`teams`), so the fix is schema-only:
+  `exp/ticketuserfkey.sql` adds the constraint `NOT VALID` (4 legacy
+  tickets reference since-deleted accounts; `NOT VALID` enforces it for
+  all new/updated rows without deleting or nulling that history). No Go
+  changes needed — confirmed via a direct `pg_constraint` check against
+  the dev DB that tickets are now walked correctly.
+
+## [1.2.0] - 2026-08-14
+
+### Added
+
+- Packs are no longer bots-only: a new `pack_type` column (`bot` | `server`
+  | `emoji`, immutable after creation) generalizes the existing `BotPack`
+  type, and a new `pack_emojis` table backs a genuinely new capability —
+  user-curated emoji packs, each emoji its own durably-uploaded asset (not
+  a live reference into a server's synced emoji list, so a pack keeps
+  working even if the source server stops syncing or leaves). Server packs
+  reuse the `Servers []string` field that already existed on `BotPack` but
+  was never wired to any route or UI. `add_pack`/`patch_pack` validate
+  content per type (bot packs need `bots`, server packs need `servers`,
+  emoji packs need `emojis`, capped at 50), `get_all_packs` gained an
+  optional `?pack_type=` filter, and a new `edit_packs` entity permission
+  (`teams.GetEntityPerms`'s new `"pack"` case, single-owner only — no team
+  fallback) lets the existing generic upload-permission-check flow cover
+  pack emoji uploads the same way it already covers bot/server banners.
+- A generic content-report system (`popplio/reports`, new `routes/reports`
+  package), built alongside the pack generalization above to give users a
+  way to flag a pack (or, later, any votable entity) for e.g. a license
+  violation on an emoji pack. `PUT /users/{uid}/{target_type}/{target_id}/reports`
+  mirrors the votes router's exact URL shape and target-type handling.
+  Reports are keyed `(target_type, target_id)`, same convention as
+  `entity_votes`; a partial unique index allows only one open report per
+  reporter per target, and a per-user daily cap (10) limits spamming many
+  different targets. Reporter identity is never exposed outside the staff
+  panel — the public API never returns it. Reviewed exclusively through a
+  new Arcadia RPC (`UpdateReports`/`ReportAction`, following
+  `PartnerAction`'s exact discriminated-union codec pattern) gated on a new
+  `review_reports` staff permission; there is deliberately no public
+  listing/review route, matching how Blog/Partners never got one either.
+  **Config/DB note:** three new one-off migrations to apply —
+  `exp/packtype.sql`, `exp/packemojis.sql`, `exp/reports.sql`.
+- `GET /bots/@all` and `GET /servers/@all` gained an optional
+  `?sort=trending` param, ranking by net votes (upvotes minus downvotes) in
+  the last 7 days instead of newest-first, and returning only entities with
+  at least one vote in that window. New composite index
+  `entity_votes_target_created_idx` (`exp/entityvotesidx.sql`) backs the
+  underlying grouped query — `entity_votes` had no index at all before
+  this, so trending would otherwise have been a full table scan.
+- `GET /reports/stats`: a new, deliberate exception to the reports
+  system's "no public read-back" design — anonymized counts of reports
+  grouped by `reason`/`status` only (no report IDs, no target identity, no
+  reporter identity), for a public moderation-transparency page.
+- `GET /servers/@emojis`: a new paginated endpoint returning only
+  `server_id`/`name`/`avatar`/`emojis`/`stickers` for servers with
+  `show_emojis = true`. `IndexServer` (what `@all` returns) excludes
+  emoji/sticker data entirely, so a cross-server emoji/sticker browse page
+  had no way to bulk-fetch this without N+1 calls to `GET /servers/{id}`
+  before this.
+
 ## [1.1.0] - 2026-08-13
 
 ### Added

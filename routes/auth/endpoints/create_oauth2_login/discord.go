@@ -7,6 +7,8 @@ import (
 	"net/url"
 
 	"popplio/api/resp"
+	"popplio/config"
+	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
 
@@ -286,6 +288,46 @@ func checkBanScope(ctx context.Context, userID, scope string) error {
 			status:  http.StatusForbidden,
 			message: "The selected scope is not allowed for unbanned users [ban_exempt].",
 			reason:  "Unbanned user attempted login with ban_exempt scope",
+		}
+	}
+
+	return nil
+}
+
+// checkBugHunterOnly restricts sign-in on beta and staging to Bug Hunters,
+// bypassing for instance owners so they can't lock themselves out of their
+// own environment. users.bug_hunters is kept in sync with the Bug Hunter
+// Discord role by SpecRoleSync (arcadia/tasks/discord.go), the same source
+// of truth this reads — there's a real, small staleness window right after
+// someone is first granted the role until the next sync tick (it runs every
+// 50s), same as everywhere else that column is read.
+func checkBugHunterOnly(ctx context.Context, userID string) error {
+	if config.CurrentEnv != config.CurrentEnvBeta && config.CurrentEnv != config.CurrentEnvStaging {
+		return nil
+	}
+
+	if perms.IsConfigOwner(userID) {
+		return nil
+	}
+
+	var bugHunter bool
+
+	err := state.Pool.QueryRow(ctx, "SELECT bug_hunters FROM users WHERE user_id = $1", userID).Scan(&bugHunter)
+
+	if err != nil {
+		return &oauthError{
+			status:  http.StatusInternalServerError,
+			message: "Failed to check Bug Hunter status",
+			reason:  "Failed to check Bug Hunter status",
+			cause:   err,
+		}
+	}
+
+	if !bugHunter {
+		return &oauthError{
+			status:  http.StatusForbidden,
+			message: "This environment is limited to Bug Hunters.",
+			reason:  "Non-Bug-Hunter attempted login on a restricted environment",
 		}
 	}
 

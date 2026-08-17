@@ -21,6 +21,7 @@ import (
 	"popplio/routes/alerts"
 	"popplio/routes/apps"
 	"popplio/routes/auth"
+	"popplio/routes/badges"
 	"popplio/routes/blogs"
 	"popplio/routes/bots"
 	"popplio/routes/diagnostics"
@@ -161,6 +162,7 @@ func main() {
 		alerts.Router{},
 		apps.Router{},
 		auth.Router{},
+		badges.Router{},
 		blogs.Router{},
 		bots.Router{},
 		diagnostics.Router{},

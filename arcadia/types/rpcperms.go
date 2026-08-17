@@ -35,6 +35,12 @@ var rpcPermissions = map[string]perms.Perm{
 
 	"AppBanUser":   perms.StaffBanAppUsers,
 	"AppUnbanUser": perms.StaffBanAppUsers,
+
+	"BanUser":   perms.StaffBanUsers,
+	"UnbanUser": perms.StaffBanUsers,
+
+	"AssignBadge":   perms.StaffAssignBadges,
+	"UnassignBadge": perms.StaffAssignBadges,
 }
 
 // RPCPermission is the permission needed to run the named method. The second

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"popplio/config"
 	"popplio/constants"
 	"popplio/perms"
 	"popplio/state"
@@ -181,13 +182,29 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 		switch auth.Type {
 		case TargetTypeUser:
-			var banned bool
+			var banned, bugHunter bool
 
-			err := state.Pool.QueryRow(state.Context, "SELECT banned FROM users WHERE user_id = $1", targetId).Scan(&banned)
+			err := state.Pool.QueryRow(state.Context, "SELECT banned, bug_hunters FROM users WHERE user_id = $1", targetId).Scan(&banned, &bugHunter)
 
 			if err != nil {
 				state.Logger.Error("Failed to fetch user associated with session [db fetch]", zap.Error(err), zap.String("userID", targetId))
 				return uapi.AuthData{}, uapi.DefaultResponse(http.StatusInternalServerError), false
+			}
+
+			// Beta and staging are restricted to Bug Hunters (bypassing for
+			// instance owners so they can't lock themselves out of their own
+			// environment). users.bug_hunters is kept in sync with the Bug
+			// Hunter Discord role by SpecRoleSync, same source of truth
+			// everywhere it's used.
+			if (config.CurrentEnv == config.CurrentEnvBeta || config.CurrentEnv == config.CurrentEnvStaging) &&
+				!bugHunter && !perms.IsConfigOwner(targetId) {
+				return uapi.AuthData{}, uapi.HttpResponse{
+					Status: http.StatusForbidden,
+					Json:   types.ApiError{Message: "This environment is limited to Bug Hunters."},
+					Headers: map[string]string{
+						"X-Session-Invalid": "true",
+					},
+				}, false
 			}
 
 			authData = uapi.AuthData{

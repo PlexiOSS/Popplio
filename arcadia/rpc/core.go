@@ -190,3 +190,39 @@ func botExists(ctx context.Context, targetID string) error {
 func userExists(ctx context.Context, targetID string) error {
 	return entityExists(ctx, "SELECT COUNT(*) FROM users WHERE user_id = $1", targetID)
 }
+
+func serverExists(ctx context.Context, targetID string) error {
+	return entityExists(ctx, "SELECT COUNT(*) FROM servers WHERE server_id = $1", targetID)
+}
+
+func teamExists(ctx context.Context, targetID string) error {
+	return entityExists(ctx, "SELECT COUNT(*) FROM teams WHERE id = $1", targetID)
+}
+
+func packExists(ctx context.Context, targetID string) error {
+	return entityExists(ctx, "SELECT COUNT(*) FROM packs WHERE url = $1", targetID)
+}
+
+// guardEntity is guardBot/guardUser generalized across every target type a
+// method might be extended to support — used by handlers whose
+// SupportedTargetTypes covers more than one entity kind.
+func guardEntity(ctx context.Context, targetType types.TargetType, targetID, reason string) error {
+	if err := checkReason(reason); err != nil {
+		return err
+	}
+
+	switch targetType {
+	case types.TargetTypeBot:
+		return botExists(ctx, targetID)
+	case types.TargetTypeServer:
+		return serverExists(ctx, targetID)
+	case types.TargetTypeTeam:
+		return teamExists(ctx, targetID)
+	case types.TargetTypePack:
+		return packExists(ctx, targetID)
+	case types.TargetTypeUser:
+		return userExists(ctx, targetID)
+	default:
+		return fmt.Errorf("unsupported target type %s", targetType)
+	}
+}

@@ -39,6 +39,7 @@ func registerCommands() {
 	)
 
 	registerStaffRoleCommands()
+	registerModerationCommands()
 }
 
 // cmdRegister is poise's owner-only application-command registration helper.

@@ -17,14 +17,37 @@ import (
 // Nothing here deletes a vote. Votes are voided in place with a reason and a
 // timestamp, so the record of what was reset survives the reset.
 
+// voteBanTable and its id column, per target type. Bots, servers, teams and
+// packs all carry an identical vote_banned column for exactly this purpose.
+func voteBanTable(targetType types.TargetType) (table, idCol string, ok bool) {
+	switch targetType {
+	case types.TargetTypeBot:
+		return "bots", "bot_id", true
+	case types.TargetTypeServer:
+		return "servers", "server_id", true
+	case types.TargetTypeTeam:
+		return "teams", "id", true
+	case types.TargetTypePack:
+		return "packs", "url", true
+	default:
+		return "", "", false
+	}
+}
+
 func voteBanSet(ctx context.Context, m *types.RPCTargetReason, h Handle, banned bool) (Success, error) {
-	if err := guardBot(ctx, m.TargetID, m.Reason); err != nil {
+	if err := guardEntity(ctx, h.TargetType, m.TargetID, m.Reason); err != nil {
 		return Success{}, err
 	}
 
-	query := "UPDATE bots SET vote_banned = false WHERE bot_id = $1"
+	table, idCol, ok := voteBanTable(h.TargetType)
+
+	if !ok {
+		return Success{}, fmt.Errorf("vote banning does not support target type %s", h.TargetType)
+	}
+
+	query := "UPDATE " + table + " SET vote_banned = false WHERE " + idCol + " = $1"
 	if banned {
-		query = "UPDATE bots SET vote_banned = true WHERE bot_id = $1"
+		query = "UPDATE " + table + " SET vote_banned = true WHERE " + idCol + " = $1"
 	}
 
 	if _, err := state.Pool.Exec(ctx, query, m.TargetID); err != nil {
