@@ -25,7 +25,7 @@ type syncedSticker struct {
 }
 
 func ServerSync(ctx context.Context) error {
-	if err := syncAvatars(ctx); err != nil {
+	if err := syncServerMeta(ctx); err != nil {
 		return err
 	}
 
@@ -76,11 +76,21 @@ func ServerSync(ctx context.Context) error {
 		syncedEmojis := make([]syncedEmoji, 0, len(emojis))
 
 		for _, e := range emojis {
+			// disgo's Emoji.URL() always defaults to PNG regardless of
+			// e.Animated — unlike Sticker.URL(), which already infers the
+			// right format from its FormatType. Has to be requested
+			// explicitly here or animated emojis get a permanently-static
+			// URL despite being flagged as animated.
+			url := e.URL()
+			if e.Animated {
+				url = e.URL(discord.WithFormat(discord.FileFormatGIF))
+			}
+
 			syncedEmojis = append(syncedEmojis, syncedEmoji{
 				ID:       e.ID.String(),
 				Name:     e.Name,
 				Animated: e.Animated,
-				URL:      e.URL(),
+				URL:      url,
 			})
 		}
 
@@ -121,7 +131,7 @@ func stickerFormatName(t discord.StickerFormatType) string {
 	}
 }
 
-func syncAvatars(ctx context.Context) error {
+func syncServerMeta(ctx context.Context) error {
 	rows, err := state.Pool.Query(ctx, "SELECT server_id FROM servers")
 
 	if err != nil {
@@ -154,9 +164,16 @@ func syncAvatars(ctx context.Context) error {
 			continue
 		}
 
-		guild, ok := dclient.Get().Caches().Guild(guildID)
+		// The gateway-cached guild (dclient.Get().Caches().Guild) only tracks
+		// member/presence counts if the privileged Server Members intent is
+		// enabled, which this bot deliberately doesn't request (see
+		// TeamCleanup's doc comment) — so its MemberCount is just whatever
+		// was in the initial GUILD_CREATE payload and never updates. A REST
+		// fetch with with_counts=true gets a live approximate count without
+		// needing that intent, the same way /setup does on server creation.
+		guild, err := dclient.Get().Rest().GetGuild(guildID, true)
 
-		if !ok {
+		if err != nil {
 			continue
 		}
 
@@ -166,7 +183,10 @@ func syncAvatars(ctx context.Context) error {
 			avatar = *url
 		}
 
-		if _, err := state.Pool.Exec(ctx, "UPDATE servers SET avatar = $2 WHERE server_id = $1", serverID, avatar); err != nil {
+		if _, err := state.Pool.Exec(ctx,
+			"UPDATE servers SET avatar = $2, total_members = $3, online_members = $4 WHERE server_id = $1",
+			serverID, avatar, guild.ApproximateMemberCount, guild.ApproximatePresenceCount,
+		); err != nil {
 			return err
 		}
 	}

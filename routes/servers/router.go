@@ -9,6 +9,8 @@ import (
 	"popplio/perms"
 	"popplio/routes/servers/endpoints/add_server"
 	"popplio/routes/servers/endpoints/get_all_servers"
+	"popplio/routes/servers/endpoints/get_flat_emojis"
+	"popplio/routes/servers/endpoints/get_flat_stickers"
 	"popplio/routes/servers/endpoints/get_random_servers"
 	"popplio/routes/servers/endpoints/get_server"
 	"popplio/routes/servers/endpoints/get_server_meta"
@@ -44,6 +46,22 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_servers_emojis.Docs,
 		Handler: get_servers_emojis.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/@emojis/flat",
+		OpId:    "get_flat_emojis",
+		Method:  uapi.GET,
+		Docs:    get_flat_emojis.Docs,
+		Handler: get_flat_emojis.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/@stickers/flat",
+		OpId:    "get_flat_stickers",
+		Method:  uapi.GET,
+		Docs:    get_flat_stickers.Docs,
+		Handler: get_flat_stickers.Route,
 	}.Route(r)
 
 	uapi.Route{

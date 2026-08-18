@@ -91,6 +91,34 @@ type ServerEmojiPreview struct {
 	Stickers []Sticker `db:"stickers" json:"stickers" description:"The server's stickers"`
 }
 
+// FlatEmoji is a single emoji flattened out of every opted-in server's
+// `emojis` jsonb column, for GET /servers/@emojis/flat — item-level
+// pagination across all servers at once rather than one page per server.
+// Not @ci table-checked: id/name/animated/url come from unnesting the jsonb
+// array, not real servers columns, so there's nothing for that checker to
+// validate against.
+type FlatEmoji struct {
+	ServerID     string `db:"server_id" json:"server_id" description:"The ID of the server this emoji belongs to"`
+	ServerName   string `db:"server_name" json:"server_name" description:"The name of the server this emoji belongs to"`
+	ServerAvatar string `db:"server_avatar" json:"server_avatar" description:"The icon URL of the server this emoji belongs to"`
+	ID           string `db:"id" json:"id" description:"The emoji's Discord ID"`
+	Name         string `db:"name" json:"name" description:"The emoji's name"`
+	Animated     bool   `db:"animated" json:"animated" description:"Whether the emoji is animated"`
+	URL          string `db:"url" json:"url" description:"The emoji's CDN URL"`
+}
+
+// FlatSticker is the sticker equivalent of FlatEmoji, for GET
+// /servers/@stickers/flat.
+type FlatSticker struct {
+	ServerID     string `db:"server_id" json:"server_id" description:"The ID of the server this sticker belongs to"`
+	ServerName   string `db:"server_name" json:"server_name" description:"The name of the server this sticker belongs to"`
+	ServerAvatar string `db:"server_avatar" json:"server_avatar" description:"The icon URL of the server this sticker belongs to"`
+	ID           string `db:"id" json:"id" description:"The sticker's Discord ID"`
+	Name         string `db:"name" json:"name" description:"The sticker's name"`
+	Format       string `db:"format" json:"format" description:"The sticker's format (png, apng, lottie or gif)"`
+	URL          string `db:"url" json:"url" description:"The sticker's CDN URL"`
+}
+
 type CreateServer struct {
 	Invite        string      `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS Discord invite URL"`
 	Short         string      `db:"short" json:"short" validate:"required,min=30,max=150" msg:"Short description must be between 30 and 150 characters"`
