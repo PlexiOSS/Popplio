@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A new `Health` route group, `GET /health/*` — one endpoint per subsystem
+  (database, API, bot/server/pack listings, blog, search, Discord auth,
+  tickets, staff panel, plus Infernoplex's and Arcadia's separate Discord
+  gateway connections), each returning a bare 200/503 with no body to
+  parse. Built for the new external status page (omni-status) to point one
+  uptime monitor at each endpoint — mirrors what Omniplex's own
+  `/about/status` page already self-probes client-side, done server-side
+  instead so an outside monitor doesn't need API-client internals.
+
 - Servers now go through the same staff review pipeline bots already do:
   `PUT /servers` previously defaulted straight to `type = 'approved'`, so
   every server went live immediately with zero review, unlike bots

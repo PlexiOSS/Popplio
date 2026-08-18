@@ -25,6 +25,7 @@ import (
 	"popplio/routes/blogs"
 	"popplio/routes/bots"
 	"popplio/routes/diagnostics"
+	"popplio/routes/health"
 	"popplio/routes/list"
 	notifrouter "popplio/routes/notifications"
 	"popplio/routes/packs"
@@ -159,6 +160,7 @@ func main() {
 		blogs.Router{},
 		bots.Router{},
 		diagnostics.Router{},
+		health.Router{},
 		list.Router{},
 		notifrouter.Router{},
 		packs.Router{},
