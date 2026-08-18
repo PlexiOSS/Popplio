@@ -68,6 +68,14 @@ func (b Router) Routes(r *chi.Mux) {
 			Docs:    docsFor(svc.name),
 			Handler: handlerFor(svc.check),
 		}.Route(r)
+
+		uapi.Route{
+			Pattern: svc.path,
+			OpId:    "health_" + opSuffix + "_head",
+			Method:  uapi.HEAD,
+			Docs:    docsFor(svc.name),
+			Handler: handlerFor(svc.check),
+		}.Route(r)
 	}
 }
 
