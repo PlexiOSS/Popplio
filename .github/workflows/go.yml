@@ -1,0 +1,39 @@
+name: Go Build & Vet
+
+on:
+  push:
+    branches: [ "staging", "production", "develop" ]
+  pull_request:
+    branches: [ "staging", "production", "develop" ]
+
+jobs:
+  build-and-vet:
+    name: ${{ matrix.module.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - name: popplio
+            dir: .
+          - name: kitehelper
+            dir: cmd/kitehelper
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module.dir }}/go.mod
+          cache-dependency-path: ${{ matrix.module.dir }}/go.sum
+
+      - name: go build
+        working-directory: ${{ matrix.module.dir }}
+        run: go build -v ./...
+
+      - name: go vet
+        working-directory: ${{ matrix.module.dir }}
+        run: go vet ./...

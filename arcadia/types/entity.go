@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// PlatformUser is a dovewing-resolved Discord user. Equality is by id only.
 type PlatformUser struct {
 	ID          string `json:"id"`
 	Username    string `json:"username"`
@@ -54,6 +53,7 @@ type PartialServer struct {
 	Premium       bool       `json:"premium"`
 	ClaimedBy     *string    `json:"claimed_by"`
 	LastClaimed   *Timestamp `json:"last_claimed"`
+	ApprovalNote  string     `json:"approval_note"`
 	Mentionable   []string   `json:"mentionable"`
 }
 
@@ -85,8 +85,6 @@ type PartialUser struct {
 	VoteBanned bool         `json:"vote_banned"`
 }
 
-// PartialEntity is a newtype union:
-// {"Bot":{..}} / {"Server":{..}} / {"Pack":{..}} / {"Team":{..}} / {"User":{..}}.
 type PartialEntity struct {
 	Bot    *PartialBot
 	Server *PartialServer
@@ -146,8 +144,6 @@ func (e PartialEntity) MarshalJSON() ([]byte, error) {
 	}
 }
 
-// RPCLogEntry is one row of the rpc_logs table as the panel sees it. `data` is
-// raw JSON passthrough.
 type RPCLogEntry struct {
 	ID        string          `json:"id"`
 	UserID    string          `json:"user_id"`
@@ -157,8 +153,6 @@ type RPCLogEntry struct {
 	CreatedAt Timestamp       `json:"created_at"`
 }
 
-// BaseAnalytics is the BaseAnalytics response. changelogs_count is hardcoded 0
-// upstream.
 type BaseAnalytics struct {
 	BotCounts       map[string]int64 `json:"bot_counts"`
 	ServerCounts    map[string]int64 `json:"server_counts"`

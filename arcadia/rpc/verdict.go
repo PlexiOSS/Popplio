@@ -23,6 +23,10 @@ import (
 // testing server, and the invite URL it hands back.
 
 func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
+	if h.TargetType == types.TargetTypeServer {
+		return approveServer(ctx, m, h)
+	}
+
 	if err := checkReason(m.Reason); err != nil {
 		return Success{}, err
 	}
@@ -134,7 +138,83 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 	)), nil
 }
 
+// approveServer is approve's server counterpart. There's no server
+// equivalent of the BotDeveloper Discord role auto-grant or the
+// testing-guild kick approve does for bots — no such role is configured for
+// servers — so this stops at the state transition and mod-log post.
+func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
+	if err := checkReason(m.Reason); err != nil {
+		return Success{}, err
+	}
+
+	var (
+		serverType  string
+		claimedBy   *string
+		lastClaimed *time.Time
+	)
+
+	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, last_claimed FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType, &claimedBy, &lastClaimed)
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	if serverType != "pending" {
+		return Success{}, errors.New("This server is not pending review")
+	}
+
+	if claimedBy == nil || *claimedBy == "" || lastClaimed == nil {
+		return Success{}, fmt.Errorf("server `%s` is not claimed yet — claim it first", m.TargetID)
+	}
+
+	owners, err := impls.GetEntityManagers(ctx, types.TargetTypeServer, m.TargetID)
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	tx, err := state.Pool.Begin(ctx)
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, "UPDATE servers SET type = 'approved', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
+		return Success{}, err
+	}
+
+	err = impls.SendModLog(discord.MessageCreate{
+		Content: owners.MentionUsers(),
+		Embeds: []discord.Embed{{
+			Title:       "Server Approved",
+			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend.Parse(), m.TargetID),
+			Description: fmt.Sprintf("<@!%s> has approved server `%s`", h.UserID, m.TargetID),
+			Fields: []discord.EmbedField{
+				{Name: "Feedback", Value: m.Reason, Inline: impls.InlineTrue()},
+				{Name: "Moderator", Value: "<@!" + h.UserID + ">", Inline: impls.InlineTrue()},
+			},
+			Color: impls.ColourGreen,
+		}},
+	})
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Success{}, err
+	}
+
+	return NoContent(), nil
+}
+
 func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
+	if h.TargetType == types.TargetTypeServer {
+		return denyServer(ctx, m, h)
+	}
+
 	if err := checkReason(m.Reason); err != nil {
 		return Success{}, err
 	}
@@ -193,7 +273,68 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 	return NoContent(), nil
 }
 
+// denyServer is deny's server counterpart.
+func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
+	if err := checkReason(m.Reason); err != nil {
+		return Success{}, err
+	}
+
+	var (
+		serverType  string
+		claimedBy   *string
+		lastClaimed *time.Time
+	)
+
+	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, last_claimed FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType, &claimedBy, &lastClaimed)
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	if serverType != "pending" {
+		return Success{}, errors.New("This server is not pending review")
+	}
+
+	if claimedBy == nil || *claimedBy == "" || lastClaimed == nil {
+		return Success{}, fmt.Errorf("server `%s` is not claimed yet — claim it first", m.TargetID)
+	}
+
+	owners, err := impls.GetEntityManagers(ctx, types.TargetTypeServer, m.TargetID)
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'denied', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
+		return Success{}, err
+	}
+
+	err = impls.SendModLog(discord.MessageCreate{
+		Content: owners.MentionUsers(),
+		Embeds: []discord.Embed{{
+			Title:       "Server Denied",
+			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend.Parse(), m.TargetID),
+			Description: fmt.Sprintf("<@%s> has denied server `%s`", h.UserID, m.TargetID),
+			Fields: []discord.EmbedField{
+				reasonField(m.Reason),
+				{Name: "Moderator", Value: "<@!" + h.UserID + ">", Inline: impls.InlineTrue()},
+			},
+			Color: impls.ColourRed,
+		}},
+	})
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	return NoContent(), nil
+}
+
 func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
+	if h.TargetType == types.TargetTypeServer {
+		return unverifyServer(ctx, m, h)
+	}
+
 	if err := guardBot(ctx, m.TargetID, m.Reason); err != nil {
 		return Success{}, err
 	}
@@ -222,6 +363,48 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 				reasonField(m.Reason),
 				{Name: "Moderator", Value: "<@" + h.UserID + ">", Inline: impls.InlineTrue()},
 				{Name: "", Value: "<@!" + m.TargetID + ">", Inline: impls.InlineTrue()},
+			},
+			Footer: impls.Footer("Gonna be pending further review..."),
+			Color:  impls.ColourRed,
+		}},
+	})
+
+	if err != nil {
+		return Success{}, err
+	}
+
+	return NoContent(), nil
+}
+
+// unverifyServer is unverify's server counterpart. New code, not upstream
+// reproduction, so it doesn't carry over the bot path's empty-embed-field-name
+// quirk (see CONFORMANCE.md) that makes that call always fail.
+func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
+	if err := guardServer(ctx, m.TargetID, m.Reason); err != nil {
+		return Success{}, err
+	}
+
+	var serverType string
+
+	if err := state.Pool.QueryRow(ctx, "SELECT type FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType); err != nil {
+		return Success{}, err
+	}
+
+	if serverType == "certified" {
+		return Success{}, errors.New("Certified servers cannot be unverified")
+	}
+
+	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'pending', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
+		return Success{}, err
+	}
+
+	err := impls.SendModLog(discord.MessageCreate{
+		Embeds: []discord.Embed{{
+			Title: "Server Unverified For Further Review",
+			Fields: []discord.EmbedField{
+				reasonField(m.Reason),
+				{Name: "Moderator", Value: "<@" + h.UserID + ">", Inline: impls.InlineTrue()},
+				{Name: "Server", Value: "`" + m.TargetID + "`", Inline: impls.InlineTrue()},
 			},
 			Footer: impls.Footer("Gonna be pending further review..."),
 			Color:  impls.ColourRed,

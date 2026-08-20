@@ -44,6 +44,7 @@ type Server struct {
 	Short                  string             `db:"short" json:"short" description:"The server's short description"`
 	Long                   string             `db:"-" json:"long" description:"The server's long description in raw format (HTML/markdown etc. based on the servers settings). May not be included in responses (e.g. long is not set in include)" skip:"long" ci:"internal"` // Must be parsed internally
 	Type                   string             `db:"type" json:"type" description:"The server's type (e.g. pending/approved/certified/denied etc.)"`
+	Note                   pgtype.Text        `db:"approval_note" json:"approval_note" description:"The note for the server's approval"`
 	State                  string             `db:"state" json:"state" description:"The server's state (public, private, unlisted, defunct)"`
 	Tags                   []string           `db:"tags" json:"tags" description:"The server's tags"`
 	VanityRef              pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
@@ -88,6 +89,34 @@ type ServerEmojiPreview struct {
 	Avatar   string    `db:"avatar" json:"avatar" description:"The server's icon URL"`
 	Emojis   []Emoji   `db:"emojis" json:"emojis" description:"The server's custom emojis"`
 	Stickers []Sticker `db:"stickers" json:"stickers" description:"The server's stickers"`
+}
+
+// FlatEmoji is a single emoji flattened out of every opted-in server's
+// `emojis` jsonb column, for GET /servers/@emojis/flat — item-level
+// pagination across all servers at once rather than one page per server.
+// Not @ci table-checked: id/name/animated/url come from unnesting the jsonb
+// array, not real servers columns, so there's nothing for that checker to
+// validate against.
+type FlatEmoji struct {
+	ServerID     string `db:"server_id" json:"server_id" description:"The ID of the server this emoji belongs to"`
+	ServerName   string `db:"server_name" json:"server_name" description:"The name of the server this emoji belongs to"`
+	ServerAvatar string `db:"server_avatar" json:"server_avatar" description:"The icon URL of the server this emoji belongs to"`
+	ID           string `db:"id" json:"id" description:"The emoji's Discord ID"`
+	Name         string `db:"name" json:"name" description:"The emoji's name"`
+	Animated     bool   `db:"animated" json:"animated" description:"Whether the emoji is animated"`
+	URL          string `db:"url" json:"url" description:"The emoji's CDN URL"`
+}
+
+// FlatSticker is the sticker equivalent of FlatEmoji, for GET
+// /servers/@stickers/flat.
+type FlatSticker struct {
+	ServerID     string `db:"server_id" json:"server_id" description:"The ID of the server this sticker belongs to"`
+	ServerName   string `db:"server_name" json:"server_name" description:"The name of the server this sticker belongs to"`
+	ServerAvatar string `db:"server_avatar" json:"server_avatar" description:"The icon URL of the server this sticker belongs to"`
+	ID           string `db:"id" json:"id" description:"The sticker's Discord ID"`
+	Name         string `db:"name" json:"name" description:"The sticker's name"`
+	Format       string `db:"format" json:"format" description:"The sticker's format (png, apng, lottie or gif)"`
+	URL          string `db:"url" json:"url" description:"The sticker's CDN URL"`
 }
 
 type CreateServer struct {

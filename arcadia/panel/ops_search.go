@@ -23,6 +23,7 @@ type searchServerRow struct {
 	OnlineMembers    int32      `db:"online_members"`
 	Short            string     `db:"short"`
 	Type             string     `db:"type"`
+	ApprovalNote     string     `db:"approval_note"`
 	ApproximateVotes int32      `db:"approximate_votes"`
 	InviteClicks     int32      `db:"invite_clicks"`
 	Clicks           int32      `db:"clicks"`
@@ -63,9 +64,9 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 		return s.partialBots(ctx, queue)
 	case types.TargetTypeServer:
 		rows, err := state.Pool.Query(ctx,
-			`SELECT server_id, name, avatar, total_members, online_members, short, type, approximate_votes, invite_clicks,
-                        clicks, nsfw, tags, premium, claimed_by, last_claimed FROM servers
-                        WHERE server_id = $1 OR name ILIKE $2 ORDER BY created_at`,
+			`SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
+                        approximate_votes, invite_clicks, clicks, nsfw, tags, premium, claimed_by, last_claimed
+                        FROM servers WHERE server_id = $1 OR name ILIKE $2 ORDER BY created_at`,
 			q.Query, pattern)
 
 		if err != nil {
@@ -78,45 +79,7 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 			return response{}, newError(err)
 		}
 
-		serverIDs := make([]string, 0, len(queue))
-
-		for _, server := range queue {
-			serverIDs = append(serverIDs, server.ServerID)
-		}
-
-		managers, err := impls.GetServerManagers(ctx, serverIDs)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		servers := make([]types.PartialEntity, 0, len(queue))
-
-		for _, server := range queue {
-			servers = append(servers, types.PartialEntity{Server: &types.PartialServer{
-				ServerID: server.ServerID,
-				Name:     server.Name,
-				// Populated from servers.avatar, synced by Infernoplex's
-				// serversync task while it's a member of the guild. Empty
-				// until the first sync (or if the bot has never joined).
-				Avatar:        server.Avatar,
-				TotalMembers:  server.TotalMembers,
-				OnlineMembers: server.OnlineMembers,
-				Short:         server.Short,
-				Type:          server.Type,
-				Votes:         server.ApproximateVotes,
-				InviteClicks:  server.InviteClicks,
-				Clicks:        server.Clicks,
-				NSFW:          server.NSFW,
-				Tags:          types.NonNilStrings(server.Tags),
-				Premium:       server.Premium,
-				ClaimedBy:     server.ClaimedBy,
-				LastClaimed:   types.TimestampPtr(server.LastClaimed),
-				Mentionable:   managers[server.ServerID].Mentionables(),
-			}})
-		}
-
-		return writeJSON(http.StatusOK, servers), nil
+		return s.partialServers(ctx, queue)
 	case types.TargetTypePack:
 		rows, err := state.Pool.Query(ctx,
 			`SELECT url, name, short, pack_type, owner, tags, vote_banned FROM packs

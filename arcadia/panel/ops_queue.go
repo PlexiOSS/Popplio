@@ -73,6 +73,75 @@ func (s *Server) botQueue(ctx context.Context, q *types.QLoginTokenOnly) (respon
 	return s.partialBots(ctx, queue)
 }
 
+func (s *Server) serverQueue(ctx context.Context, q *types.QLoginTokenOnly) (response, error) {
+	// Public to all staff: no permission check, matching botQueue.
+	if _, err := checkAuth(ctx, q.LoginToken); err != nil {
+		return response{}, err
+	}
+
+	rows, err := state.Pool.Query(ctx,
+		`SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
+                approximate_votes, invite_clicks, clicks, nsfw, tags, premium, claimed_by, last_claimed
+                FROM servers WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at`)
+
+	if err != nil {
+		return response{}, newError(err)
+	}
+
+	queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[searchServerRow])
+
+	if err != nil {
+		return response{}, newError(err)
+	}
+
+	return s.partialServers(ctx, queue)
+}
+
+// partialServers renders a server list, batching manager resolution the same
+// way partialBots does.
+func (s *Server) partialServers(ctx context.Context, queue []searchServerRow) (response, error) {
+	serverIDs := make([]string, 0, len(queue))
+
+	for _, server := range queue {
+		serverIDs = append(serverIDs, server.ServerID)
+	}
+
+	managers, err := impls.GetServerManagers(ctx, serverIDs)
+
+	if err != nil {
+		return response{}, newError(err)
+	}
+
+	servers := make([]types.PartialEntity, 0, len(queue))
+
+	for _, server := range queue {
+		servers = append(servers, types.PartialEntity{Server: &types.PartialServer{
+			ServerID: server.ServerID,
+			Name:     server.Name,
+			// Populated from servers.avatar, synced by Infernoplex's
+			// serversync task while it's a member of the guild. Empty
+			// until the first sync (or if the bot has never joined).
+			Avatar:        server.Avatar,
+			TotalMembers:  server.TotalMembers,
+			OnlineMembers: server.OnlineMembers,
+			Short:         server.Short,
+			Type:          server.Type,
+			ApprovalNote:  server.ApprovalNote,
+			Votes:         server.ApproximateVotes,
+			InviteClicks:  server.InviteClicks,
+			Clicks:        server.Clicks,
+			NSFW:          server.NSFW,
+			Tags:          types.NonNilStrings(server.Tags),
+			Premium:       server.Premium,
+			ClaimedBy:     server.ClaimedBy,
+			LastClaimed:   types.TimestampPtr(server.LastClaimed),
+			Mentionable:   managers[server.ServerID].Mentionables(),
+		}})
+	}
+
+	return writeJSON(http.StatusOK, servers), nil
+}
+
 // partialBots renders a bot list.
 //
 // Upstream resolved each bot's managers with two queries inside the loop, so an

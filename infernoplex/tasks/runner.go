@@ -23,7 +23,7 @@ func All() []Task {
 	return []Task{
 		{
 			Name:        "serversync",
-			Description: "Syncs every listed server's icon, plus opted-in servers' emojis/stickers, into the database",
+			Description: "Syncs every listed server's icon and member/online counts, plus opted-in servers' emojis/stickers, into the database",
 			Enabled:     true,
 			Interval:    30 * time.Minute,
 			Run:         ServerSync,

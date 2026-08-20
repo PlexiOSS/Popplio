@@ -165,17 +165,17 @@ func TestRoleSelectRowHidesSeniorRoles(t *testing.T) {
 // will refuse: they leave permissions the caller cannot manage exactly as they
 // are, so one locked permission does not make the button useless.
 func TestBulkCategorySelectionLeavesUnmanageableAlone(t *testing.T) {
-	def, _ := perms.Staff.Lookup(perms.StaffReviewBots)
+	def, _ := perms.Staff.Lookup(perms.StaffTransferBots)
 	category := def.Category
 
-	// Can review, cannot force remove.
-	manager := managerContext{perms: perms.Staff.NewSet(perms.StaffReviewBots, perms.StaffCertifyBots, perms.StaffTransferBots)}
+	// Can transfer, cannot force remove.
+	manager := managerContext{perms: perms.Staff.NewSet(perms.StaffTransferBots)}
 
 	held := map[perms.Perm]bool{perms.StaffForceRemoveBots: true}
 
 	granted := bulkCategorySelection(category, held, manager, true)
 
-	if !slices.Contains(granted, string(perms.StaffReviewBots)) {
+	if !slices.Contains(granted, string(perms.StaffTransferBots)) {
 		t.Error("grant all should turn on a permission the caller manages")
 	}
 
@@ -185,7 +185,7 @@ func TestBulkCategorySelectionLeavesUnmanageableAlone(t *testing.T) {
 
 	revoked := bulkCategorySelection(category, held, manager, false)
 
-	if slices.Contains(revoked, string(perms.StaffReviewBots)) {
+	if slices.Contains(revoked, string(perms.StaffTransferBots)) {
 		t.Error("revoke all should turn off a permission the caller manages")
 	}
 

@@ -2,14 +2,13 @@ package types
 
 import "fmt"
 
-// PanelQuery is the request union accepted by POST /. Exactly one field is
-// non-nil. All variants are struct variants.
 type PanelQuery struct {
 	Authorize                   *QAuthorize
 	Hello                       *QHello
 	BaseAnalytics               *QLoginTokenOnly
 	GetUser                     *QGetUser
 	BotQueue                    *QLoginTokenOnly
+	ServerQueue                 *QLoginTokenOnly
 	ExecuteRpc                  *QExecuteRpc
 	GetRpcMethods               *QGetRpcMethods
 	GetRpcLogEntries            *QLoginTokenOnly
@@ -26,11 +25,10 @@ type PanelQuery struct {
 	UpdateShopItemBenefits      *QUpdateShopItemBenefits
 	UpdateShopCoupons           *QUpdateShopCoupons
 	UpdateBotWhitelist          *QUpdateBotWhitelist
+	UpdateBadges                *QUpdateBadges
 	PopplioStaff                *QPopplioStaff
 }
 
-// QLoginTokenOnly is the shape shared by the variants that take nothing but a
-// login token.
 type QLoginTokenOnly struct {
 	LoginToken string `json:"login_token"`
 }
@@ -127,6 +125,11 @@ type QUpdateBotWhitelist struct {
 	Action     BotWhitelistAction `json:"action"`
 }
 
+type QUpdateBadges struct {
+	LoginToken string      `json:"login_token"`
+	Action     BadgeAction `json:"action"`
+}
+
 type QPopplioStaff struct {
 	LoginToken string `json:"login_token"`
 	Path       string `json:"path"`
@@ -143,7 +146,6 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("PanelQuery: %w", err)
 	}
 
-	// Every operation is a struct variant, so none accept the bare-string form.
 	var into any
 
 	switch name {
@@ -162,6 +164,9 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 	case "BotQueue":
 		q.BotQueue = &QLoginTokenOnly{}
 		into = q.BotQueue
+	case "ServerQueue":
+		q.ServerQueue = &QLoginTokenOnly{}
+		into = q.ServerQueue
 	case "ExecuteRpc":
 		q.ExecuteRpc = &QExecuteRpc{}
 		into = q.ExecuteRpc
@@ -210,6 +215,9 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 	case "UpdateBotWhitelist":
 		q.UpdateBotWhitelist = &QUpdateBotWhitelist{}
 		into = q.UpdateBotWhitelist
+	case "UpdateBadges":
+		q.UpdateBadges = &QUpdateBadges{}
+		into = q.UpdateBadges
 	case "PopplioStaff":
 		q.PopplioStaff = &QPopplioStaff{}
 		into = q.PopplioStaff
@@ -232,6 +240,8 @@ func (q PanelQuery) MarshalJSON() ([]byte, error) {
 		return encodeVariant("GetUser", q.GetUser)
 	case q.BotQueue != nil:
 		return encodeVariant("BotQueue", q.BotQueue)
+	case q.ServerQueue != nil:
+		return encodeVariant("ServerQueue", q.ServerQueue)
 	case q.ExecuteRpc != nil:
 		return encodeVariant("ExecuteRpc", q.ExecuteRpc)
 	case q.GetRpcMethods != nil:
@@ -264,6 +274,8 @@ func (q PanelQuery) MarshalJSON() ([]byte, error) {
 		return encodeVariant("UpdateShopCoupons", q.UpdateShopCoupons)
 	case q.UpdateBotWhitelist != nil:
 		return encodeVariant("UpdateBotWhitelist", q.UpdateBotWhitelist)
+	case q.UpdateBadges != nil:
+		return encodeVariant("UpdateBadges", q.UpdateBadges)
 	case q.PopplioStaff != nil:
 		return encodeVariant("PopplioStaff", q.PopplioStaff)
 	default:

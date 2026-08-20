@@ -8,9 +8,13 @@ import (
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/bots/endpoints/add_bot"
+	"popplio/routes/bots/endpoints/create_bot_changelog"
 	"popplio/routes/bots/endpoints/delete_bot"
+	"popplio/routes/bots/endpoints/delete_bot_changelog"
 	"popplio/routes/bots/endpoints/get_all_bots"
 	"popplio/routes/bots/endpoints/get_bot"
+	"popplio/routes/bots/endpoints/get_bot_changelogs"
+	"popplio/routes/bots/endpoints/get_bot_commands"
 	"popplio/routes/bots/endpoints/get_bot_meta"
 	"popplio/routes/bots/endpoints/get_bot_seo"
 	"popplio/routes/bots/endpoints/get_bots_index"
@@ -18,6 +22,7 @@ import (
 	"popplio/routes/bots/endpoints/patch_bot_settings"
 	"popplio/routes/bots/endpoints/patch_bot_team"
 	"popplio/routes/bots/endpoints/post_bot_stats"
+	"popplio/routes/bots/endpoints/put_bot_commands"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/infinitybotlist/eureka/uapi"
@@ -160,6 +165,103 @@ func (b Router) Routes(r *chi.Mux) {
 		Docs:    patch_bot_settings.Docs,
 		Handler: patch_bot_settings.Route,
 		Setup:   patch_bot_settings.Setup,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeBot,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditBots),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeBot, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/commands",
+		OpId:    "get_bot_commands",
+		Method:  uapi.GET,
+		Docs:    get_bot_commands.Docs,
+		Handler: get_bot_commands.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/commands",
+		OpId:    "put_bot_commands",
+		Method:  uapi.PUT,
+		Docs:    put_bot_commands.Docs,
+		Handler: put_bot_commands.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeBot,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditBots),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeBot, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/changelogs",
+		OpId:    "get_bot_changelogs",
+		Method:  uapi.GET,
+		Docs:    get_bot_changelogs.Docs,
+		Handler: get_bot_changelogs.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/changelogs",
+		OpId:    "create_bot_changelog",
+		Method:  uapi.POST,
+		Docs:    create_bot_changelog.Docs,
+		Handler: create_bot_changelog.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeBot,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditBots),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeBot, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/changelogs/{changelog_id}",
+		OpId:    "delete_bot_changelog",
+		Method:  uapi.DELETE,
+		Docs:    delete_bot_changelog.Docs,
+		Handler: delete_bot_changelog.Route,
 		Auth: []uapi.AuthType{
 			{
 				Type: api.TargetTypeUser,

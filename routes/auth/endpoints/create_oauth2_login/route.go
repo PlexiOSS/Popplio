@@ -176,6 +176,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
+	if err := checkBugHunterOnly(d.Context, user.ID); err != nil {
+		return oauthFailure(err, headers)
+	}
+
 	token, sessionID, err := createSession(d.Context, user.ID, sessionName(r.UserAgent()))
 
 	if err != nil {

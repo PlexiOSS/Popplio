@@ -4,17 +4,8 @@ import (
 	"fmt"
 )
 
-// MaxReasonLength caps every `reason` field on an RPC method.
 const MaxReasonLength = 2000
 
-// RPCMethod is the tagged union of the 18 staff actions. Exactly one field is
-// non-nil.
-//
-// Its Display form (Name) is load-bearing in three places:
-//
-//	the permission lookup in RPCPermission  ->  "Claim" resolves to review_bots
-//	the `method` column in rpc_logs
-//	the leaderboard query, which filters method IN ('Approve','Deny')
 type RPCMethod struct {
 	Claim                    *RPCClaim
 	Unclaim                  *RPCTargetReason
@@ -34,11 +25,12 @@ type RPCMethod struct {
 	BotTransferOwnershipTeam *RPCBotTransferOwnershipTeam
 	AppBanUser               *RPCTargetReason
 	AppUnbanUser             *RPCTargetReason
+	BanUser                  *RPCTargetReason
+	UnbanUser                *RPCTargetReason
+	AssignBadge              *RPCAssignBadge
+	UnassignBadge            *RPCAssignBadge
 }
 
-// RPCTargetReason is the shape shared by every method that takes just a target
-// and a reason. Field order matches the Rust declaration order, which is what
-// ends up in the rpc_logs.data column.
 type RPCTargetReason struct {
 	TargetID string `json:"target_id"`
 	Reason   string `json:"reason"`
@@ -77,8 +69,12 @@ type RPCBotTransferOwnershipTeam struct {
 	NewTeam  string `json:"new_team"`
 }
 
-// RPCMethodVariants is in Rust declaration order. GetRpcMethods and the Discord
-// `rpclist` command both iterate it, so the order is user-visible.
+type RPCAssignBadge struct {
+	TargetID string `json:"target_id"`
+	Reason   string `json:"reason"`
+	BadgeID  string `json:"badge_id"`
+}
+
 var RPCMethodVariants = []string{
 	"Claim",
 	"Unclaim",
@@ -98,11 +94,12 @@ var RPCMethodVariants = []string{
 	"BotTransferOwnershipTeam",
 	"AppBanUser",
 	"AppUnbanUser",
+	"BanUser",
+	"UnbanUser",
+	"AssignBadge",
+	"UnassignBadge",
 }
 
-// variant returns the set variant's name and payload, or ("", nil) if none is
-// set. Name, MarshalJSON and UnmarshalJSON all route through it so there is a
-// single place listing the 18 variants.
 func (m RPCMethod) variant() (string, any) {
 	switch {
 	case m.Claim != nil:
@@ -141,12 +138,19 @@ func (m RPCMethod) variant() (string, any) {
 		return "AppBanUser", m.AppBanUser
 	case m.AppUnbanUser != nil:
 		return "AppUnbanUser", m.AppUnbanUser
+	case m.BanUser != nil:
+		return "BanUser", m.BanUser
+	case m.UnbanUser != nil:
+		return "UnbanUser", m.UnbanUser
+	case m.AssignBadge != nil:
+		return "AssignBadge", m.AssignBadge
+	case m.UnassignBadge != nil:
+		return "UnassignBadge", m.UnassignBadge
 	default:
 		return "", nil
 	}
 }
 
-// Name is the Display impl: the variant name.
 func (m RPCMethod) Name() string {
 	name, _ := m.variant()
 	return name
@@ -156,9 +160,6 @@ func (m RPCMethod) String() string {
 	return m.Name()
 }
 
-// EmptyRPCMethod builds a zero-valued method of the named variant. The panel's
-// GetRpcMethods listing and the Discord modal driver both need one instance per
-// variant to read its metadata off.
 func EmptyRPCMethod(name string) (RPCMethod, error) {
 	var m RPCMethod
 
@@ -199,6 +200,14 @@ func EmptyRPCMethod(name string) (RPCMethod, error) {
 		m.AppBanUser = &RPCTargetReason{}
 	case "AppUnbanUser":
 		m.AppUnbanUser = &RPCTargetReason{}
+	case "BanUser":
+		m.BanUser = &RPCTargetReason{}
+	case "UnbanUser":
+		m.UnbanUser = &RPCTargetReason{}
+	case "AssignBadge":
+		m.AssignBadge = &RPCAssignBadge{}
+	case "UnassignBadge":
+		m.UnassignBadge = &RPCAssignBadge{}
 	default:
 		return m, errUnknownVariant("RPCMethod", name)
 	}
@@ -213,8 +222,6 @@ func (m *RPCMethod) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("RPCMethod: %w", err)
 	}
 
-	// Every RPCMethod variant is a struct variant, so a bare string is never
-	// valid here.
 	built, err := EmptyRPCMethod(name)
 
 	if err != nil {
@@ -238,13 +245,18 @@ func (m RPCMethod) MarshalJSON() ([]byte, error) {
 	return encodeVariant(name, inner)
 }
 
-// SupportedTargetTypes lists the target types the method accepts.
 func (m RPCMethod) SupportedTargetTypes() []TargetType {
 	switch m.Name() {
-	case "VoteReset", "VoteResetAll":
+	case "VoteReset", "VoteResetAll", "VoteBanAdd", "VoteBanRemove":
 		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypeTeam, TargetTypePack}
-	case "AppBanUser", "AppUnbanUser":
+	case "ForceRemove":
+		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypePack}
+	case "Claim", "Unclaim", "Approve", "Deny", "Unverify":
+		return []TargetType{TargetTypeBot, TargetTypeServer}
+	case "AppBanUser", "AppUnbanUser", "BanUser", "UnbanUser":
 		return []TargetType{TargetTypeUser}
+	case "AssignBadge", "UnassignBadge":
+		return []TargetType{TargetTypeUser, TargetTypeBot, TargetTypeServer, TargetTypeTeam}
 	case "":
 		return []TargetType{}
 	default:
@@ -252,7 +264,6 @@ func (m RPCMethod) SupportedTargetTypes() []TargetType {
 	}
 }
 
-// Description is user-visible in the panel and in `rpclist`. Frozen.
 func (m RPCMethod) Description() string {
 	switch m.Name() {
 	case "Claim":
@@ -291,12 +302,19 @@ func (m RPCMethod) Description() string {
 		return "Ban user from apps"
 	case "AppUnbanUser":
 		return "Unban user from apps"
+	case "BanUser":
+		return "Bans a user's account from the platform entirely"
+	case "UnbanUser":
+		return "Unbans a user's account"
+	case "AssignBadge":
+		return "Awards a badge to a user, bot, server, or team"
+	case "UnassignBadge":
+		return "Removes a badge from a user, bot, server, or team"
 	default:
 		return ""
 	}
 }
 
-// Label is user-visible in the panel and in `rpclist`. Frozen.
 func (m RPCMethod) Label() string {
 	switch m.Name() {
 	case "Claim":
@@ -335,12 +353,19 @@ func (m RPCMethod) Label() string {
 		return "Ban from apps [User]"
 	case "AppUnbanUser":
 		return "Unban from apps [User]"
+	case "BanUser":
+		return "Ban User [Account]"
+	case "UnbanUser":
+		return "Unban User [Account]"
+	case "AssignBadge":
+		return "Assign Badge"
+	case "UnassignBadge":
+		return "Remove Badge"
 	default:
 		return ""
 	}
 }
 
-// FieldType drives both the panel form renderer and the Discord modal driver.
 type FieldType string
 
 const (
@@ -351,7 +376,6 @@ const (
 	FieldTypeBoolean  FieldType = "Boolean"
 )
 
-// RPCField is a single form field of an RPC method.
 type RPCField struct {
 	ID          string    `json:"id"`
 	Label       string    `json:"label"`
@@ -380,8 +404,6 @@ func rpcFieldReason() RPCField {
 	}
 }
 
-// Fields returns the form fields of the method. Labels and placeholders are
-// user-visible and frozen.
 func (m RPCMethod) Fields() []RPCField {
 	switch m.Name() {
 	case "Claim":
@@ -445,6 +467,18 @@ func (m RPCMethod) Fields() []RPCField {
 			},
 			rpcFieldReason(),
 		}
+	case "AssignBadge", "UnassignBadge":
+		return []RPCField{
+			rpcFieldTargetID(),
+			{
+				ID:          "badge_id",
+				Label:       "Badge ID",
+				FieldType:   FieldTypeText,
+				Icon:        "material-symbols:award-star",
+				Placeholder: "The badge's ID, from the badge catalog",
+			},
+			rpcFieldReason(),
+		}
 	case "":
 		return []RPCField{}
 	default:
@@ -452,8 +486,6 @@ func (m RPCMethod) Fields() []RPCField {
 	}
 }
 
-// RPCWebAction is one entry of the GetRpcMethods response. Field order matches
-// the Rust declaration.
 type RPCWebAction struct {
 	ID                   string       `json:"id"`
 	Label                string       `json:"label"`

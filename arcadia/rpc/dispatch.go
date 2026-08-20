@@ -56,6 +56,14 @@ func handleMethod(ctx context.Context, method types.RPCMethod, h Handle) (Succes
 		return appBanSet(ctx, method.AppBanUser, h, true)
 	case method.AppUnbanUser != nil:
 		return appBanSet(ctx, method.AppUnbanUser, h, false)
+	case method.BanUser != nil:
+		return banUserSet(ctx, method.BanUser, h, true)
+	case method.UnbanUser != nil:
+		return banUserSet(ctx, method.UnbanUser, h, false)
+	case method.AssignBadge != nil:
+		return assignBadgeSet(ctx, method.AssignBadge, h, true)
+	case method.UnassignBadge != nil:
+		return assignBadgeSet(ctx, method.UnassignBadge, h, false)
 	default:
 		return Success{}, errors.New("This method does not support this target type yet")
 	}

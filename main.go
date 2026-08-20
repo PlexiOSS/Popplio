@@ -21,9 +21,11 @@ import (
 	"popplio/routes/alerts"
 	"popplio/routes/apps"
 	"popplio/routes/auth"
+	"popplio/routes/badges"
 	"popplio/routes/blogs"
 	"popplio/routes/bots"
 	"popplio/routes/diagnostics"
+	"popplio/routes/health"
 	"popplio/routes/list"
 	notifrouter "popplio/routes/notifications"
 	"popplio/routes/packs"
@@ -114,13 +116,12 @@ func main() {
 		ErrorStruct: types.ApiError{},
 		Info: docs.Info{
 			Title:          "Omniplex API",
-			TermsOfService: "https://nodebyte.co.uk/legal/terms",
-			Version:        "1.0.0",
+			TermsOfService: "https://omniplex.gg/legal/terms",
+			Version:        "1.3.2",
 			Description:    "",
 			Contact: docs.Contact{
-				Name:  "NodeByte LTD",
-				URL:   "https://nodebyte.co.uk",
-				Email: "support@nodebyte.co.uk",
+				Name: "Omniplex Support",
+				URL:  "https://discord.gg/AxrR4RNSFT",
 			},
 			License: docs.License{
 				Name: "AGPL-3.0",
@@ -135,13 +136,6 @@ func main() {
 
 	docs.AddSecuritySchema("User", "User-Auth", "Requires a user token. Should be prefixed with `User ` in `Authorization` header.")
 	docs.AddSecuritySchema("Bot", "Bot-Auth", "Requires a bot token. Should be prefixed with `Bot ` in `Authorization` header.")
-	// "server"/"team" (lowercase, matching AuthTypeMap in api/uapi.go, since
-	// these two map to themselves rather than a capitalized scheme name like
-	// User/Bot) were never registered at all, even though Authorize() has
-	// always fully supported them — every operation requiring one referenced
-	// a security scheme name absent from components.securitySchemes, which
-	// tools resolving the requirement against registered schemes (e.g.
-	// fumadocs-openapi's APIPage) crash on outright.
 	docs.AddSecuritySchema("server", "Server-Auth", "Requires a server API session token. Should be prefixed with `Server ` in `Authorization` header.")
 	docs.AddSecuritySchema("team", "Team-Auth", "Requires a team API session token. Should be prefixed with `Team ` in `Authorization` header.")
 
@@ -162,9 +156,11 @@ func main() {
 		alerts.Router{},
 		apps.Router{},
 		auth.Router{},
+		badges.Router{},
 		blogs.Router{},
 		bots.Router{},
 		diagnostics.Router{},
+		health.Router{},
 		list.Router{},
 		notifrouter.Router{},
 		packs.Router{},

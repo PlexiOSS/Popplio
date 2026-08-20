@@ -1,0 +1,34 @@
+name: Promote staging to production
+
+# Manual only, on purpose — this opens the PR, it never merges it. Deciding
+# staging is actually ready to go live is a human call, not a timer; see
+# go.yml, which already runs its build/vet matrix on any PR targeting
+# `production`, so that PR gets real CI status before anyone merges it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Open or report existing promotion PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh pr list --base production --head staging --state open --json url --jq '.[0].url // empty')
+          if [ -n "$existing" ]; then
+            echo "A promotion PR is already open: $existing"
+            exit 0
+          fi
+
+          gh pr create \
+            --base production \
+            --head staging \
+            --title "Promote staging → production ($(date -u +%Y-%m-%d))" \
+            --body "Opened via the **Promote staging to production** workflow. This does not merge automatically — review the diff and CI status before merging."
