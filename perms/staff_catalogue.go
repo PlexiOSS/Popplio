@@ -44,8 +44,9 @@ const (
 	StaffModerateGuild Perm = "moderate_guild"
 	StaffWarnUsers     Perm = "warn_users"
 
-	StaffManageBadges Perm = "manage_badges"
-	StaffAssignBadges Perm = "assign_badges"
+	StaffManageBadges    Perm = "manage_badges"
+	StaffAssignBadges    Perm = "assign_badges"
+	StaffManageTemplates Perm = "manage_templates"
 
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
@@ -325,6 +326,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Name:        "Assign Badges",
 		Description: "Assign and unassign catalog badges to and from an entity.",
 		Category:    "Badges",
+	},
+
+	{
+		ID:          StaffManageTemplates,
+		Name:        "Manage Templates",
+		Description: "Create, edit and delete the pre-built answers staff pick from when approving, denying, or otherwise reviewing a bot or server.",
+		Category:    "Bot Reviews",
 	},
 
 	{
