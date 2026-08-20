@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Full CRUD for the staff-template catalog (pre-built answers staff pick
+  from when approving/denying a bot or server review) via a new
+  `UpdateStaffTemplates` panel op, gated by a new `manage_templates`
+  permission — previously the only way to add or edit one was a manual DB
+  insert, since nothing in Popplio or Arcadia wrote to `staff_templates`
+  at all.
 - `POST /servers/stats` — lets a server self-report `total_members`/
   `online_members` via a server-scoped API token, the same way bots have
   long been able to via `POST /bots/stats`. Posting at all flips a new
@@ -36,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Storage matches the shop path exactly (stacks with a bought featured
   slot instead of clobbering it), generalized across bots/servers via the
   same `table`/`idCol` pattern the shop benefits code already used.
+
+### Fixed
+
+- `StaffMember` never exposed a way for the panel to know a viewer's actual
+  seniority rank (`perms.StaffGrants.Rank()`) — an instance owner holding
+  no explicit position had no way to be told apart from a regular staff
+  member holding none, and the frontend derived a "lowest held index"
+  from `positions` that put both at the same (locked-out-of-everything)
+  end. New `rank` field on the API response, mirroring `Rank()` exactly
+  (owners get `math.MinInt32`, no-position members get `NoRank`).
 
 ### Removed
 

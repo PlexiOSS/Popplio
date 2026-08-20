@@ -204,6 +204,15 @@ type StaffMember struct {
 	MfaVerified    bool                `json:"mfa_verified"`
 	CreatedAt      Timestamp           `json:"created_at"`
 
+	// Rank is perms.StaffGrants.Rank() — the index of the member's most
+	// senior held position, lower being more senior. An instance owner gets
+	// perms.OwnerRank (outranks every position without holding one); a
+	// member with no positions at all gets perms.NoRank (outranked by
+	// every position). The panel compares a position's own index against
+	// this to decide what the viewer may edit/delete/reorder — see
+	// ops_staff_positions.go.
+	Rank int32 `json:"rank"`
+
 	// Grants is where the member's permissions come from: the roles they hold
 	// plus their extras, before disciplinaries are layered on. It is skipped by
 	// serde and must never appear on the wire, hence json:"-".
