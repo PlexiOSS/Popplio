@@ -5,59 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-
-- A new `Health` route group, `GET /health/*` — one endpoint per subsystem
-  (database, API, bot/server/pack listings, blog, search, Discord auth,
-  tickets, staff panel, plus Infernoplex's and Arcadia's separate Discord
-  gateway connections), each returning a bare 200/503 with no body to
-  parse. Built for the new external status page (omni-status) to point one
-  uptime monitor at each endpoint — mirrors what Omniplex's own
-  `/about/status` page already self-probes client-side, done server-side
-  instead so an outside monitor doesn't need API-client internals.
-
-- Servers now go through the same staff review pipeline bots already do:
-  `PUT /servers` previously defaulted straight to `type = 'approved'`, so
-  every server went live immediately with zero review, unlike bots
-  (`type` default flipped to `pending` via `exp/serverreview.sql`, existing
-  rows untouched). `Claim`/`Unclaim`/`Approve`/`Deny`/`Unverify` now support
-  `Server` alongside `Bot` (shares the existing `review_bots` permission,
-  same precedent as `VoteBanAdd`/`ForceRemove` already covering multiple
-  target types under one permission), and a new `ServerQueue` panel op
-  mirrors `BotQueue`. No server equivalent of the bot-approval Discord
-  role auto-grant exists, so `Approve` stops at the state transition and
-  mod-log post for servers.
-- Some `Bot Reviews`/`Users & Votes` staff permissions (`transfer_bots`,
-  `force_remove_bots`, `manage_premium`, `manage_votes`, `ban_voters`)
-  reclassified under a new `Content Management` category — these act on
-  listed entities (transferring, deleting, granting perks, resetting
-  votes, vote-banning), not on the review queue or on user accounts, so
-  they read oddly grouped with either.
-- `GET /servers/@emojis/flat` and `GET /servers/@stickers/flat` — unnest
-  every opted-in server's emojis/stickers into one flat, item-level-paginated
-  list (60/page) instead of `GET /servers/@emojis`'s one-page-per-server
-  shape, for a cross-server browse page that doesn't grow one section per
-  server as more servers opt in.
-
-### Fixed
-
-- Animated emojis were synced with a permanently-static CDN URL despite
-  `animated: true` being stored correctly — `disgo`'s `Emoji.URL()`
-  always defaults to PNG regardless of the emoji's animated flag (unlike
-  `Sticker.URL()`, which already inferred the right format from
-  `FormatType`). `serversync.go` now explicitly requests GIF format when
-  `Animated` is true.
-- Server `total_members`/`online_members` were only ever set once, at
-  `/setup` time, and never refreshed — there's no periodic member-count
-  sync, and the bot deliberately doesn't hold the privileged Server
-  Members intent (see `TeamCleanup`'s doc comment), so the gateway's
-  cached guild object never gets live count updates either. The existing
-  30-minute server-sync task (renamed `syncAvatars` → `syncServerMeta`)
-  now also REST-polls `GetGuild(id, true)` per server and updates both
-  counts, the same way `/setup` originally got them.
-
 ## [1.3.2] - 2026-08-17
 
 ### Added
@@ -105,6 +52,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   full-replace convention as `extra_links`); `POST`/`DELETE
   /bots/{id}/changelogs` append and remove individual entries (same
   convention as reviews). Both are public to read.
+
+  - A new `Health` route group, `GET /health/*` — one endpoint per subsystem
+  (database, API, bot/server/pack listings, blog, search, Discord auth,
+  tickets, staff panel, plus Infernoplex's and Arcadia's separate Discord
+  gateway connections), each returning a bare 200/503 with no body to
+  parse. Built for the new external status page (omni-status) to point one
+  uptime monitor at each endpoint — mirrors what Omniplex's own
+  `/about/status` page already self-probes client-side, done server-side
+  instead so an outside monitor doesn't need API-client internals.
+
+- Servers now go through the same staff review pipeline bots already do:
+  `PUT /servers` previously defaulted straight to `type = 'approved'`, so
+  every server went live immediately with zero review, unlike bots
+  (`type` default flipped to `pending` via `exp/serverreview.sql`, existing
+  rows untouched). `Claim`/`Unclaim`/`Approve`/`Deny`/`Unverify` now support
+  `Server` alongside `Bot` (shares the existing `review_bots` permission,
+  same precedent as `VoteBanAdd`/`ForceRemove` already covering multiple
+  target types under one permission), and a new `ServerQueue` panel op
+  mirrors `BotQueue`. No server equivalent of the bot-approval Discord
+  role auto-grant exists, so `Approve` stops at the state transition and
+  mod-log post for servers.
+- Some `Bot Reviews`/`Users & Votes` staff permissions (`transfer_bots`,
+  `force_remove_bots`, `manage_premium`, `manage_votes`, `ban_voters`)
+  reclassified under a new `Content Management` category — these act on
+  listed entities (transferring, deleting, granting perks, resetting
+  votes, vote-banning), not on the review queue or on user accounts, so
+  they read oddly grouped with either.
+- `GET /servers/@emojis/flat` and `GET /servers/@stickers/flat` — unnest
+  every opted-in server's emojis/stickers into one flat, item-level-paginated
+  list (60/page) instead of `GET /servers/@emojis`'s one-page-per-server
+  shape, for a cross-server browse page that doesn't grow one section per
+  server as more servers opt in.
+
+### Fixed
+
+- Animated emojis were synced with a permanently-static CDN URL despite
+  `animated: true` being stored correctly — `disgo`'s `Emoji.URL()`
+  always defaults to PNG regardless of the emoji's animated flag (unlike
+  `Sticker.URL()`, which already inferred the right format from
+  `FormatType`). `serversync.go` now explicitly requests GIF format when
+  `Animated` is true.
+- Server `total_members`/`online_members` were only ever set once, at
+  `/setup` time, and never refreshed — there's no periodic member-count
+  sync, and the bot deliberately doesn't hold the privileged Server
+  Members intent (see `TeamCleanup`'s doc comment), so the gateway's
+  cached guild object never gets live count updates either. The existing
+  30-minute server-sync task (renamed `syncAvatars` → `syncServerMeta`)
+  now also REST-polls `GetGuild(id, true)` per server and updates both
+  counts, the same way `/setup` originally got them.
 
 ## [1.3.1] - 2026-08-16
 
