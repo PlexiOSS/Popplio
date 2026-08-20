@@ -83,8 +83,12 @@ func docsFor(name string) func() *docs.Doc {
 	return func() *docs.Doc {
 		return &docs.Doc{
 			Summary:     "Health: " + name,
-			Description: "Returns 200 if " + name + " is healthy, 503 if not. No response body to parse — status code is the signal.",
-			Resp:        []byte(""),
+			Description: "Returns 200 if " + name + " is healthy, 503 if not. No response body to parse status code is the signal.",
+			// Resp deliberately omitted rather than set to some placeholder
+			// for "no body" — doclib has no such representation, and a
+			// []byte Resp renders as a misleading array-of-integers schema.
+			// Leaving it nil falls back to the standard error-struct
+			// convention every other bodyless route in this codebase uses.
 		}
 	}
 }
