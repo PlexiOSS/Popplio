@@ -23,8 +23,6 @@ func onComponent(ctx context.Context, e *events.ComponentInteractionCreate) {
 	id := e.Data.CustomID()
 
 	switch {
-	case strings.HasPrefix(id, "setup:"):
-		handleSetupComponent(ctx, e, id)
 	case strings.HasPrefix(id, "invite:"):
 		handleInviteComponent(ctx, e, id)
 	case strings.HasPrefix(id, "update:"):
@@ -36,8 +34,6 @@ func onComponent(ctx context.Context, e *events.ComponentInteractionCreate) {
 
 func onModalSubmit(ctx context.Context, e *events.ModalSubmitInteractionCreate) {
 	switch e.Data.CustomID {
-	case "setup:info":
-		handleSetupInfoModal(ctx, e)
 	case "invite:url":
 		handleInviteURLModal(ctx, e)
 	case "invite:peruser":

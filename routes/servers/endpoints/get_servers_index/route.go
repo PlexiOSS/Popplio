@@ -1,8 +1,3 @@
-// Package get_servers_index implements GET /servers/@index — "Get Servers
-// Index".
-//
-// Gets the index of the server-side of the list. Returns a `ListIndexServer`
-// object
 package get_servers_index
 
 import (
@@ -38,7 +33,6 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	listIndex := types.ListIndexServer{}
 
-	// Certified Servers
 	certRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_votes DESC LIMIT 9")
 	if err != nil {
 		return resp.Err("Error while getting certified servers", err)
@@ -48,7 +42,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing certified servers", err)
 	}
 
-	// Premium Servers
 	premRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND premium = true ORDER BY approximate_votes  DESC LIMIT 9")
 	if err != nil {
 		return resp.Err("Error while getting premium servers", err)
@@ -58,7 +51,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing premium servers", err)
 	}
 
-	// Most Viewed Servers
 	mostViewedRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY clicks DESC LIMIT 9")
 	if err != nil {
 		return resp.Err("Error while getting most viewed servers", err)
@@ -68,7 +60,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing most viewed servers", err)
 	}
 
-	// Recently Added Servers
 	recentlyAddedRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND type = 'approved' ORDER BY created_at DESC LIMIT 9")
 	if err != nil {
 		return resp.Err("Error while getting recently added servers", err)
@@ -78,7 +69,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing recently added servers", err)
 	}
 
-	// Top Voted Servers
 	topVotedRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes  DESC LIMIT 9")
 	if err != nil {
 		return resp.Err("Error while getting top voted servers", err)
@@ -88,7 +78,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing top voted servers", err)
 	}
 
-	// Featured Servers (purchased via the shop)
 	featuredRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND featured_until IS NOT NULL AND featured_until > NOW() ORDER BY featured_until DESC LIMIT 9")
 	if err != nil {
 		return resp.Err("Error while getting featured servers", err)
@@ -116,7 +105,6 @@ func processRow(ctx context.Context, rows pgx.Rows) ([]types.IndexServer, error)
 		}
 	}
 
-	// Resolve all servers concurrently, since each server's resolution is independent
 	if err := assets.ResolveIndexServers(ctx, servers); err != nil {
 		return nil, err
 	}

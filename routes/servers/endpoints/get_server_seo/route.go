@@ -1,8 +1,3 @@
-// Package get_server_seo implements GET /servers/{id}/seo — "Get Server SEO
-// Info".
-//
-// Gets the minimal SEO information about a server for embed/search purposes.
-// Used by v4 website for meta tags
 package get_server_seo
 
 import (

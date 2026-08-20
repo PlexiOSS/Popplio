@@ -13,10 +13,11 @@ const (
 	StaffTransferBots    Perm = "transfer_bots"
 	StaffForceRemoveBots Perm = "force_remove_bots"
 
-	StaffManagePremium Perm = "manage_premium"
-	StaffManageVotes   Perm = "manage_votes"
-	StaffBanVoters     Perm = "ban_voters"
-	StaffBanUsers      Perm = "ban_users"
+	StaffManagePremium   Perm = "manage_premium"
+	StaffFeatureEntities Perm = "feature_entities"
+	StaffManageVotes     Perm = "manage_votes"
+	StaffBanVoters       Perm = "ban_voters"
+	StaffBanUsers        Perm = "ban_users"
 
 	StaffViewApps    Perm = "view_apps"
 	StaffManageApps  Perm = "manage_apps"
@@ -110,7 +111,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	{
 		ID:          StaffCertifyBots,
 		Name:        "Certify Bots",
-		Description: "Grant and remove certification on a bot.",
+		Description: "Grant and remove certification on a bot or server.",
 		Category:    "Bot Reviews",
 		Legacy:      []string{"rpc.CertifyAdd", "rpc.CertifyRemove"},
 	},
@@ -137,6 +138,12 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Category:    "Content Management",
 		Dangerous:   true,
 		Legacy:      []string{"rpc.PremiumAdd", "rpc.PremiumRemove"},
+	},
+	{
+		ID:          StaffFeatureEntities,
+		Name:        "Feature Entities",
+		Description: "Feature a bot or server on the home page for a given time period, or remove it early.",
+		Category:    "Content Management",
 	},
 	{
 		ID:          StaffManageVotes,

@@ -1,12 +1,3 @@
-// Package get_servers_emojis implements GET /servers/@emojis — "Get
-// Servers Emojis".
-//
-// Returns a paginated list of every listed, public server that has opted
-// into showing its emojis/stickers (show_emojis = true), for a
-// cross-server browse page. IndexServer (GET /servers/@all) excludes
-// emoji/sticker data entirely, and the full Server struct is unnecessarily
-// heavy for bulk listing — this returns the minimal ServerEmojiPreview
-// shape instead.
 package get_servers_emojis
 
 import (

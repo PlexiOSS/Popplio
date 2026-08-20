@@ -1,8 +1,3 @@
-// Package add_server implements PUT /servers — "Add Server".
-//
-// Adds a server to the database from an invite link. Resolves the guild via
-// the invite (the tracking bot does not need to already be in the server).
-// Returns 204 on success
 package add_server
 
 import (
@@ -34,12 +29,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// createServerArgs must list values in the exact same order as
-// db.GetCols(types.CreateServer{}) (i.e. types.CreateServer's field
-// declaration order) — createServerCols/createServerParams build the SQL
-// column list from that reflection order, and args are bound to columns
-// positionally, so any drift between the two silently writes every field
-// into the wrong column instead of failing loudly.
 func createServerArgs(server types.CreateServer) []any {
 	return []any{
 		server.Invite,
@@ -179,7 +168,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Check team owner here, to avoid a race condition
 	if payload.TeamOwner != "" {
 		entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", payload.TeamOwner)
 

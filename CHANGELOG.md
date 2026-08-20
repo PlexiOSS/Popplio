@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `POST /servers/stats` — lets a server self-report `total_members`/
+  `online_members` via a server-scoped API token, the same way bots have
+  long been able to via `POST /bots/stats`. Posting at all flips a new
+  `stats_self_managed` flag on, which tells Infernoplex's periodic
+  `syncServerMeta` task to stop overwriting those two fields for that
+  server (it still keeps the icon in sync either way) — otherwise the
+  automatic sync and a server's own self-reports would just fight each
+  other every 30 minutes.
+- Staff review templates now carry an `entity_type` (`bot` or `server`)
+  column — `GET /list/staff-templates` previously only ever documented
+  itself as "used for reviewing bots," with no way to scope a template to
+  servers at all. Existing rows default to `bot`. Filter with
+  `?entity_type=bot` or `?entity_type=server`; omit it for both.
+- `CertifyAdd`/`CertifyRemove` and `PremiumAdd`/`PremiumRemove` (staff RPC
+  actions) now support servers as well as bots — same pattern
+  `Claim`/`Approve`/`Deny`/`Unverify` already established: the handler
+  branches on `TargetType` to a `*Server` counterpart. Certifying a server
+  moves it to `type = 'certified'`; uncertifying returns it to `approved`,
+  same as bots.
+- A new `FeatureAdd`/`FeatureRemove` staff RPC action (gated by a new
+  `feature_entities` permission) lets staff put a bot or server in the home
+  page's Featured section for a given time period, or pull it early —
+  previously `featured_until` was only ever settable through a shop
+  purchase (`routes/shop/assets/benefits.go`), with no staff override.
+  Storage matches the shop path exactly (stacks with a bought featured
+  slot instead of clobbering it), generalized across bots/servers via the
+  same `table`/`idCol` pattern the shop benefits code already used.
+
+### Removed
+
+- Infernoplex's `/setup` command — the website's `PUT /servers` (Add
+  Server) already resolves a server from its invite link without needing
+  the tracking bot present at all, and the staff review pipeline now
+  provides the ownership-verification step `/setup`'s `AdminOnly` check
+  used to be the only thing doing. Team creation and server-record setup
+  both already happen through the normal website flow.
+
 ## [1.3.2] - 2026-08-17
 
 ### Added
