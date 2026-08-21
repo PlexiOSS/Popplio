@@ -16,11 +16,11 @@ func TestBotAccountHoldsNothing(t *testing.T) {
 		grants StaffGrants
 	}{
 		{"roles", StaffGrants{Roles: roles, BotAccount: true}},
-		{"direct grants", StaffGrants{Extras: []Perm{StaffReviewBots, StaffViewPanel}, BotAccount: true}},
+		{"direct grants", StaffGrants{Extras: []Perm{StaffReviewEntities, StaffViewPanel}, BotAccount: true}},
 		{"the owners list", StaffGrants{ConfigOwner: true, BotAccount: true}},
 		{"everything at once", StaffGrants{
 			Roles:       roles,
-			Extras:      []Perm{StaffReviewBots},
+			Extras:      []Perm{StaffReviewEntities},
 			ConfigOwner: true,
 			BotAccount:  true,
 		}},
@@ -38,7 +38,7 @@ func TestBotAccountHoldsNothing(t *testing.T) {
 				t.Error("a bot must never read as super")
 			}
 
-			for _, p := range []Perm{StaffAdministrator, StaffReviewBots, StaffViewPanel, StaffViewStaff} {
+			for _, p := range []Perm{StaffAdministrator, StaffReviewEntities, StaffViewPanel, StaffViewStaff} {
 				if resolved.Has(p) {
 					t.Errorf("a bot should not hold %s", p)
 				}
@@ -75,10 +75,10 @@ func TestBotAccountHasNoRank(t *testing.T) {
 // A permission cannot be handed to a bot by way of a patch check either: with
 // nothing resolved, there is nothing it is allowed to keep.
 func TestBotAccountCannotBePatchedInto(t *testing.T) {
-	bot := StaffGrants{BotAccount: true, Extras: []Perm{StaffReviewBots}}
+	bot := StaffGrants{BotAccount: true, Extras: []Perm{StaffReviewEntities}}
 
 	current := bot.Resolve()
-	next := current.With(StaffReviewBots)
+	next := current.With(StaffReviewEntities)
 
 	// The manager holds the permission, so the patch itself is legitimate; what
 	// makes it meaningless is that the bot's resolved set stays empty.

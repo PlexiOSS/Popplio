@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// @ci table=servers, unfilled=1
 type IndexServer struct {
 	ServerID         string             `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name             string             `db:"name" json:"name" description:"The server's name"`
@@ -29,6 +30,7 @@ type IndexServer struct {
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
 }
 
+// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users
 type Server struct {
 	ServerID               string             `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name                   string             `db:"name" json:"name" description:"The server's name"`
@@ -104,6 +106,7 @@ type FlatSticker struct {
 	URL          string `db:"url" json:"url" description:"The sticker's CDN URL"`
 }
 
+// @ci table=servers, unfilled=1
 type CreateServer struct {
 	Invite        string      `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS Discord invite URL"`
 	Short         string      `db:"short" json:"short" validate:"required,min=30,max=150" msg:"Short description must be between 30 and 150 characters"`

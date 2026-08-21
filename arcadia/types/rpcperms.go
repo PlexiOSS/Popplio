@@ -10,14 +10,14 @@ import "popplio/perms"
 // granted together now share one permission, and the ones worth withholding on
 // their own — force removal, premium, vote resets — keep theirs.
 var rpcPermissions = map[string]perms.Perm{
-	"Claim":    perms.StaffReviewBots,
-	"Unclaim":  perms.StaffReviewBots,
-	"Approve":  perms.StaffReviewBots,
-	"Deny":     perms.StaffReviewBots,
-	"Unverify": perms.StaffReviewBots,
+	"Claim":    perms.StaffReviewEntities,
+	"Unclaim":  perms.StaffReviewEntities,
+	"Approve":  perms.StaffReviewEntities,
+	"Deny":     perms.StaffReviewEntities,
+	"Unverify": perms.StaffReviewEntities,
 
-	"CertifyAdd":    perms.StaffCertifyBots,
-	"CertifyRemove": perms.StaffCertifyBots,
+	"CertifyAdd":    perms.StaffCertifyEntities,
+	"CertifyRemove": perms.StaffCertifyEntities,
 
 	"FeatureAdd":    perms.StaffFeatureEntities,
 	"FeatureRemove": perms.StaffFeatureEntities,
@@ -25,7 +25,7 @@ var rpcPermissions = map[string]perms.Perm{
 	"BotTransferOwnershipUser": perms.StaffTransferBots,
 	"BotTransferOwnershipTeam": perms.StaffTransferBots,
 
-	"ForceRemove": perms.StaffForceRemoveBots,
+	"ForceRemove": perms.StaffForceRemoveEntities,
 
 	"PremiumAdd":    perms.StaffManagePremium,
 	"PremiumRemove": perms.StaffManagePremium,

@@ -15,8 +15,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// The verdicts on a claimed bot, gated by review_bots: approved, denied, or
-// pulled back into the queue for another look.
+// The verdicts on a claimed bot or server, gated by review_entities:
+// approved, denied, or pulled back into the queue for another look.
 //
 // Approve is the heaviest handler in the package and the only one that does
 // anything after the database write — roles for the owners, a kick from the

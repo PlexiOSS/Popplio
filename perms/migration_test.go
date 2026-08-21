@@ -15,7 +15,7 @@ import (
 const migrationPath = "../exp/rewrite/flatperms.sql"
 
 var (
-	// ('staff', 'rpc.Claim', 'review_bots')
+	// ('staff', 'rpc.Claim', 'review_entities')
 	tupleRe = regexp.MustCompile(`\('(staff|entity)',\s*'([^']+)',\s*'([^']+)'\)`)
 	// SELECT 'staff', 'rpc.*', p FROM unnest(ARRAY[...]) AS p
 	wildcardRe = regexp.MustCompile(`(?s)SELECT '(staff|entity)', '([^']+)', p\s*FROM unnest\(ARRAY\[(.*?)\]\)`)

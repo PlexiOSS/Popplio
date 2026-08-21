@@ -52,16 +52,16 @@ INSERT INTO perm_map (dom, old, new) VALUES
     ('staff', 'popplio_staging.sensitive',             'use_staging_keys'),
     ('staff', 'popplio_staging.*',                     'use_staging_keys'),
 
-    ('staff', 'rpc.Claim',                             'review_bots'),
-    ('staff', 'rpc.Unclaim',                           'review_bots'),
-    ('staff', 'rpc.Approve',                           'review_bots'),
-    ('staff', 'rpc.Deny',                              'review_bots'),
-    ('staff', 'rpc.Unverify',                          'review_bots'),
-    ('staff', 'rpc.CertifyAdd',                        'certify_bots'),
-    ('staff', 'rpc.CertifyRemove',                     'certify_bots'),
+    ('staff', 'rpc.Claim',                             'review_entities'),
+    ('staff', 'rpc.Unclaim',                           'review_entities'),
+    ('staff', 'rpc.Approve',                           'review_entities'),
+    ('staff', 'rpc.Deny',                              'review_entities'),
+    ('staff', 'rpc.Unverify',                          'review_entities'),
+    ('staff', 'rpc.CertifyAdd',                        'certify_entities'),
+    ('staff', 'rpc.CertifyRemove',                     'certify_entities'),
     ('staff', 'rpc.BotTransferOwnershipUser',          'transfer_bots'),
     ('staff', 'rpc.BotTransferOwnershipTeam',          'transfer_bots'),
-    ('staff', 'rpc.ForceRemove',                       'force_remove_bots'),
+    ('staff', 'rpc.ForceRemove',                       'force_remove_entities'),
 
     ('staff', 'rpc.PremiumAdd',                        'manage_premium'),
     ('staff', 'rpc.PremiumRemove',                     'manage_premium'),
@@ -133,7 +133,7 @@ INSERT INTO perm_map (dom, old, new) VALUES
     ('staff', 'developer.marker',                      'marker_developer'),
     ('staff', 'lead_developer.marker',                 'marker_lead_developer'),
     ('staff', 'human_resources.marker',                'marker_human_resources'),
-    ('staff', 'bot_reviewer.marker',                   'marker_bot_reviewer'),
+    ('staff', 'bot_reviewer.marker',                   'marker_reviewer'),
     ('staff', 'service_account.marker',                'marker_service_account'),
     ('staff', 'dt.marker',                             'marker_disciplinary');
 
@@ -264,7 +264,7 @@ CREATE TEMP TABLE wildcard_map (
 INSERT INTO wildcard_map (dom, old, new)
 SELECT 'staff', 'rpc.*', p
   FROM unnest(ARRAY[
-      'review_bots', 'certify_bots', 'transfer_bots', 'force_remove_bots',
+      'review_entities', 'certify_entities', 'transfer_bots', 'force_remove_entities',
       'manage_premium', 'manage_votes', 'ban_voters', 'ban_app_users'
   ]) AS p
 UNION ALL

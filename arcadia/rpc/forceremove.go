@@ -12,7 +12,8 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
-// Deleting a bot from the list outright, gated by force_remove_bots.
+// Deleting a bot, server, or pack from the list outright, gated by
+// force_remove_entities.
 //
 // This is the one action in the package that cannot be undone, hence the
 // protected-bots list: the bots the platform itself runs on cannot be kicked out

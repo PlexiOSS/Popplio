@@ -53,10 +53,10 @@ func TestPermissionSelectFitsDiscordLimits(t *testing.T) {
 // What is already held must come back preselected, or submitting the menu
 // unchanged would read as "revoke everything in this category".
 func TestPermissionSelectPreselectsHeld(t *testing.T) {
-	def, _ := perms.Staff.Lookup(perms.StaffReviewBots)
+	def, _ := perms.Staff.Lookup(perms.StaffReviewEntities)
 	s := &permSession{Category: def.Category}
 
-	held := map[perms.Perm]bool{perms.StaffReviewBots: true}
+	held := map[perms.Perm]bool{perms.StaffReviewEntities: true}
 
 	menu, ok := permissionSelect(s, held, managerContext{perms: perms.Staff.NewSet(perms.StaffAdministrator)})
 
@@ -67,7 +67,7 @@ func TestPermissionSelectPreselectsHeld(t *testing.T) {
 	var found bool
 
 	for _, opt := range menu.Options {
-		if opt.Value != string(perms.StaffReviewBots) {
+		if opt.Value != string(perms.StaffReviewEntities) {
 			continue
 		}
 
@@ -79,7 +79,7 @@ func TestPermissionSelectPreselectsHeld(t *testing.T) {
 	}
 
 	if !found {
-		t.Fatalf("review_bots is missing from the %q menu", def.Category)
+		t.Fatalf("review_entities is missing from the %q menu", def.Category)
 	}
 
 	// Nothing may be selected, and everything may be, so a category can be
@@ -96,10 +96,10 @@ func TestPermissionSelectPreselectsHeld(t *testing.T) {
 // A permission the caller cannot manage is shown, marked, rather than hidden:
 // they still need to see what a role holds.
 func TestPermissionSelectMarksUnmanageable(t *testing.T) {
-	def, _ := perms.Staff.Lookup(perms.StaffForceRemoveBots)
+	def, _ := perms.Staff.Lookup(perms.StaffForceRemoveEntities)
 
 	// A manager who can review bots but not force remove them.
-	manager := managerContext{perms: perms.Staff.NewSet(perms.StaffReviewBots)}
+	manager := managerContext{perms: perms.Staff.NewSet(perms.StaffReviewEntities)}
 
 	menu, ok := permissionSelect(&permSession{Category: def.Category}, map[perms.Perm]bool{}, manager)
 
@@ -109,7 +109,7 @@ func TestPermissionSelectMarksUnmanageable(t *testing.T) {
 
 	for _, opt := range menu.Options {
 		switch opt.Value {
-		case string(perms.StaffForceRemoveBots):
+		case string(perms.StaffForceRemoveEntities):
 			if !strings.Contains(opt.Label, "🔒") {
 				t.Errorf("an unmanageable permission should be marked, got %q", opt.Label)
 			}
@@ -118,7 +118,7 @@ func TestPermissionSelectMarksUnmanageable(t *testing.T) {
 			if !strings.Contains(opt.Label, "⚠️") {
 				t.Errorf("a dangerous permission should be marked, got %q", opt.Label)
 			}
-		case string(perms.StaffReviewBots):
+		case string(perms.StaffReviewEntities):
 			if strings.Contains(opt.Label, "🔒") {
 				t.Errorf("a manageable permission should not be marked, got %q", opt.Label)
 			}
@@ -171,7 +171,7 @@ func TestBulkCategorySelectionLeavesUnmanageableAlone(t *testing.T) {
 	// Can transfer, cannot force remove.
 	manager := managerContext{perms: perms.Staff.NewSet(perms.StaffTransferBots)}
 
-	held := map[perms.Perm]bool{perms.StaffForceRemoveBots: true}
+	held := map[perms.Perm]bool{perms.StaffForceRemoveEntities: true}
 
 	granted := bulkCategorySelection(category, held, manager, true)
 
@@ -179,7 +179,7 @@ func TestBulkCategorySelectionLeavesUnmanageableAlone(t *testing.T) {
 		t.Error("grant all should turn on a permission the caller manages")
 	}
 
-	if !slices.Contains(granted, string(perms.StaffForceRemoveBots)) {
+	if !slices.Contains(granted, string(perms.StaffForceRemoveEntities)) {
 		t.Error("grant all must keep an unmanageable permission that is already held, or the write is refused")
 	}
 
@@ -189,7 +189,7 @@ func TestBulkCategorySelectionLeavesUnmanageableAlone(t *testing.T) {
 		t.Error("revoke all should turn off a permission the caller manages")
 	}
 
-	if !slices.Contains(revoked, string(perms.StaffForceRemoveBots)) {
+	if !slices.Contains(revoked, string(perms.StaffForceRemoveEntities)) {
 		t.Error("revoke all must leave an unmanageable permission held, not try to take it")
 	}
 
@@ -197,7 +197,7 @@ func TestBulkCategorySelectionLeavesUnmanageableAlone(t *testing.T) {
 	// button, rather than submitting a change that will bounce.
 	none := managerContext{perms: perms.Staff.NewSet()}
 
-	if got := bulkCategorySelection(category, held, none, true); len(got) != 1 || got[0] != string(perms.StaffForceRemoveBots) {
+	if got := bulkCategorySelection(category, held, none, true); len(got) != 1 || got[0] != string(perms.StaffForceRemoveEntities) {
 		t.Errorf("grant all with no authority should be a no-op, got %v", got)
 	}
 }
@@ -258,9 +258,9 @@ func TestEditorButtons(t *testing.T) {
 // The category counts are what tell someone where to look before they open
 // anything.
 func TestCategorySelectCountsHeld(t *testing.T) {
-	def, _ := perms.Staff.Lookup(perms.StaffReviewBots)
+	def, _ := perms.Staff.Lookup(perms.StaffReviewEntities)
 
-	menu := categorySelect(&permSession{Category: def.Category}, map[perms.Perm]bool{perms.StaffReviewBots: true})
+	menu := categorySelect(&permSession{Category: def.Category}, map[perms.Perm]bool{perms.StaffReviewEntities: true})
 
 	var found bool
 
@@ -297,8 +297,8 @@ func TestHeldMapIsExact(t *testing.T) {
 		t.Error("administrator should be held")
 	}
 
-	if held[perms.StaffReviewBots] {
-		t.Error("administrator implies review_bots but does not store it, so the box must be unticked")
+	if held[perms.StaffReviewEntities] {
+		t.Error("administrator implies review_entities but does not store it, so the box must be unticked")
 	}
 }
 
@@ -306,9 +306,9 @@ func TestPermChangeSummary(t *testing.T) {
 	role := permTarget{role: staffRole{Name: "Moderator", RoleID: "123"}, holders: 4}
 
 	got := permChangeSummary(&permSession{RoleID: "x"}, role,
-		[]perms.Perm{perms.StaffReviewBots}, []perms.Perm{perms.StaffCertifyBots})
+		[]perms.Perm{perms.StaffReviewEntities}, []perms.Perm{perms.StaffCertifyEntities})
 
-	for _, want := range []string{"granted ``review_bots``", "revoked ``certify_bots``", "4 member(s)"} {
+	for _, want := range []string{"granted ``review_entities``", "revoked ``certify_entities``", "4 member(s)"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("summary %q should contain %q", got, want)
 		}

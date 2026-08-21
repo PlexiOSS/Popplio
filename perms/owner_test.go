@@ -46,7 +46,7 @@ func TestIsConfigOwner(t *testing.T) {
 func TestOwnerHoldsEverything(t *testing.T) {
 	owner := StaffGrants{ConfigOwner: true}
 
-	if !owner.Resolve().Has(StaffForceRemoveBots) || !owner.Resolve().Has(StaffManageStaffRoles) {
+	if !owner.Resolve().Has(StaffForceRemoveEntities) || !owner.Resolve().Has(StaffManageStaffRoles) {
 		t.Error("an owner should hold every staff permission")
 	}
 
@@ -56,13 +56,13 @@ func TestOwnerHoldsEverything(t *testing.T) {
 
 	// The bypass is additive: a member's real roles still resolve.
 	withRoles := StaffGrants{
-		Roles:       []Role{{ID: "reviewer", Index: 9, Perms: []Perm{StaffReviewBots}}},
+		Roles:       []Role{{ID: "reviewer", Index: 9, Perms: []Perm{StaffReviewEntities}}},
 		ConfigOwner: true,
 	}
 
 	set := withRoles.Resolve()
 
-	if !set.Has(StaffReviewBots) || !set.Has(StaffManageShop) {
+	if !set.Has(StaffReviewEntities) || !set.Has(StaffManageShop) {
 		t.Errorf("an owner with roles should hold both, got %v", set.Strings())
 	}
 
@@ -105,7 +105,7 @@ func TestOwnerCanManageAnything(t *testing.T) {
 
 	// Granting and revoking anything, including what they were never given
 	// explicitly, has to pass.
-	err := CheckPatch(owner, Staff.NewSet(), Staff.NewSet(StaffAdministrator, StaffForceRemoveBots, StaffManagePremium))
+	err := CheckPatch(owner, Staff.NewSet(), Staff.NewSet(StaffAdministrator, StaffForceRemoveEntities, StaffManagePremium))
 
 	if err != nil {
 		t.Errorf("an owner should be able to grant anything: %v", err)

@@ -42,6 +42,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Storage matches the shop path exactly (stacks with a bought featured
   slot instead of clobbering it), generalized across bots/servers via the
   same `table`/`idCol` pattern the shop benefits code already used.
+- Added `@ci` struct annotations to `types/server.go` (`IndexServer`,
+  `Server`, `CreateServer`). Every other entity's types file (`bot.go`,
+  `pack.go`, `user.go`, etc.) has these, wiring it into
+  `db_fields_check.py`'s struct-vs-schema validation — `server.go` was the
+  one file that never got them, so a `servers` column drifting out of sync
+  with its struct field (renamed, dropped, added and never wired up) would
+  go uncaught by CI while every other entity was protected.
+- New GIN indexes (`exp/search_gin_idx.sql`, not auto-applied — run with
+  `psql "$DATABASE_URL" -f exp/search_gin_idx.sql`) back `POST
+  /list/search`: `bots_short_fts_idx`, `servers_name_fts_idx`,
+  `servers_short_fts_idx` for the `short @@ $query` / `name @@ $query`
+  full-text matches, and `servers_name_trgm_idx` (via `pg_trgm`) for
+  `name ILIKE '%...%'`. None of the columns search queries against had an
+  index before this, so every search request was a full sequential scan
+  across every approved/certified bot and server, recomputing
+  `to_tsvector()` per row on every call.
+
+### Changed
+
+- Renamed four staff permissions that gate bot *and* server actions but
+  were named after bots only: `review_bots` → `review_entities`,
+  `certify_bots` → `certify_entities`, `force_remove_bots` →
+  `force_remove_entities`, and the `marker_bot_reviewer` marker →
+  `marker_reviewer`. Functionally nothing changes — `review_entities`
+  still gates the same `Claim`/`Unclaim`/`Approve`/`Deny`/`Unverify` RPC
+  actions it always did, and `force_remove_entities` still covers packs
+  too, same as before. `exp/rewrite/rename_reviewer_perms.sql` (not
+  auto-applied — run with `psql "$DATABASE_URL" -f
+  exp/rewrite/rename_reviewer_perms.sql`) renames the already-stored flat
+  names in `staff_positions.perms`, `staff_members.perm_overrides`, and
+  `staff_disciplinary_types.perm_limits`; safe to run more than once.
 
 ### Fixed
 
@@ -52,6 +83,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from `positions` that put both at the same (locked-out-of-everything)
   end. New `rank` field on the API response, mirroring `Rank()` exactly
   (owners get `math.MinInt32`, no-position members get `NoRank`).
+- `/health/bots`, `/health/servers`, `/health/packs`, `/health/blogs`,
+  `/health/search`, `/health/auth`, `/health/tickets`, and
+  `/health/staff-panel` all used `SELECT EXISTS(SELECT 1 FROM <table>
+  LIMIT 1)` as their check — a row-presence test, not a health check. A
+  perfectly healthy table with zero rows (an empty `blogs` table, a fresh
+  instance with no tickets yet) reported as DOWN. Now checks the table
+  exists in `information_schema.tables` instead, which still catches a
+  genuinely missing/unmigrated table without requiring it to have data.
 
 ### Removed
 

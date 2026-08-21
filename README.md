@@ -98,7 +98,7 @@ assuming a package exists.
 | `types/` | Request/response types shared across routes |
 | `state/` | Process-wide globals (Postgres pool, Redis client, Discord session, logger, parsed config) initialised once at startup |
 | `config/` | Configuration schema and the embedded `current-env` file |
-| `perms/` | The permission model: the declared catalogues of flat permissions (`review_bots`, `edit_team_members`), resolution, checking, and the staff permission loader |
+| `perms/` | The permission model: the declared catalogues of flat permissions (`review_entities`, `edit_team_members`), resolution, checking, and the staff permission loader |
 | `teams/` | Team/entity permission resolution (built on `perms/`) |
 | `webhooks/` | Outbound webhook delivery |
 | `notifications/` | Push notifications and vote reminders |

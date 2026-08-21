@@ -467,7 +467,7 @@ runs. Rust's `HashSet` iteration order was arbitrary.
 **D14. The permission model was replaced.** Upstream used kittycat's
 `namespace.action` permissions with wildcards (`rpc.*`), negators
 (`~rpc.PremiumAdd`), an `@clear` marker and position-index precedence. Popplio
-now uses flat, declared permissions (`review_bots`, `manage_shop`) resolved as a
+now uses flat, declared permissions (`review_entities`, `manage_shop`) resolved as a
 plain union of a member's roles and their extras, in the `perms` package. The
 kittycat dependency is gone.
 
@@ -479,7 +479,7 @@ Consequences for anything speaking to this service:
   external service that reads `staff_positions` must move with it.
 - **RPC methods no longer have one permission each.** `rpc.` + method name is
   replaced by `types.RPCPermission`, which maps related methods onto one
-  permission — the whole claim/approve/deny loop is `review_bots`. Withholding a
+  permission — the whole claim/approve/deny loop is `review_entities`. Withholding a
   single method within a group is no longer expressible; the groups were drawn
   around what the live roles actually negated.
 - **Denial is gone.** Nothing subtracts a permission any more, so a role either
