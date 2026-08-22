@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 
+	"popplio/config"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo"
@@ -82,6 +83,16 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 	}
 
 	client = c
+
+	// Only the prod instance is allowed to broadcast a live-looking presence,
+	// same reasoning as Popplio's main bot: staging/beta/dev must never show
+	// up as if they were the real staff bot, whether from a shared token or
+	// a local checkout pointed at real credentials.
+	if config.CurrentEnv == config.CurrentEnvProd {
+		if err := c.SetPresence(ctx, gateway.WithWatchingActivity("the review queue")); err != nil {
+			state.Logger.Error("Failed to set staff bot presence", zap.Error(err))
+		}
+	}
 
 	state.Logger.Info("Staff bot connected", zap.String("applicationID", c.ApplicationID().String()))
 

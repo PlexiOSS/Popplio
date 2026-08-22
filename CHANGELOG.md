@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Infernoplex and the staff bot (Arcadia) now set a Discord presence on
+  connect — "Watching Omniplex servers" and "Watching the review queue"
+  respectively. Neither had one before (default "Playing nothing"). Gated
+  to the prod instance only, same as Popplio's main bot: staging/beta/dev
+  never broadcast a live-looking presence, whether from a shared token or a
+  local checkout pointed at real credentials.
+- NSFW compliance signal on `Server` (`discord_nsfw_level`, `nsfw_channel_count`)
+  and the review queue/search panel ops that expose it — reviewers previously
+  had to join a server and look around by hand to check "Server: NSFW Content
+  Not Gated." Infernoplex's periodic `syncServerMeta` task now also fetches
+  the guild's channel list each cycle and counts how many have Discord's own
+  age-restricted flag set, plus the guild's own NSFW classification
+  (`guild.NSFWLevel`). New columns via `exp/server_nsfw_compliance.sql` (not
+  auto-applied — run with `psql "$DATABASE_URL" -f
+  exp/server_nsfw_compliance.sql`).
+- New `moderation` package wraps OpenAI's moderation endpoint
+  (`omni-moderation-latest`, free to call). `POST /bots` and `POST /servers`
+  now run the submitted short/long description through it right after
+  insert and store the result on `moderation_flagged`/
+  `moderation_categories`, surfaced on the review queue/search panel ops the
+  same way the NSFW compliance fields are — a reviewer signal, not an
+  auto-reject; nothing reads these columns to gate anything. Configured via
+  a new `meta.openai_api_key` config value; moderation is silently skipped
+  when it's unset, so this is a no-op until a key is added. New columns via
+  `exp/moderation_columns.sql` (not auto-applied — run with `psql
+  "$DATABASE_URL" -f exp/moderation_columns.sql`).
+
 - Full CRUD for the staff-template catalog (pre-built answers staff pick
   from when approving/denying a bot or server review) via a new
   `UpdateStaffTemplates` panel op, gated by a new `manage_templates`
@@ -49,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one file that never got them, so a `servers` column drifting out of sync
   with its struct field (renamed, dropped, added and never wired up) would
   go uncaught by CI while every other entity was protected.
-- New GIN indexes (`exp/search_gin_idx.sql`, not auto-applied — run with
+- New GIN indexes (`exp/search_gin_idx.sql`, not auto-applied run with
   `psql "$DATABASE_URL" -f exp/search_gin_idx.sql`) back `POST
   /list/search`: `bots_short_fts_idx`, `servers_name_fts_idx`,
   `servers_short_fts_idx` for the `short @@ $query` / `name @@ $query`

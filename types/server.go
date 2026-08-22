@@ -71,6 +71,10 @@ type Server struct {
 	BoostedUntil           pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
 	FeaturedUntil          pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
 	VoteBlitzUntil         pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the server's vote cooldown is halved until this time"`
+	DiscordNSFWLevel       int                `db:"discord_nsfw_level" json:"discord_nsfw_level" description:"Discord's own guild-level NSFW classification, synced periodically by the tracking bot (0=default, 1=explicit, 2=safe, 3=age-restricted)"`
+	NSFWChannelCount       int                `db:"nsfw_channel_count" json:"nsfw_channel_count" description:"How many of the server's channels currently have Discord's own age-restricted flag set, synced periodically by the tracking bot. Compare against nsfw to catch a server with gated NSFW content that isn't tagged nsfw, or vice versa"`
+	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the server's short/long description at submission time. A signal for reviewers, not a verdict"`
+	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
 }
 
 type ServerEmojiPreview struct {

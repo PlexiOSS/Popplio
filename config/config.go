@@ -34,12 +34,6 @@ type Differs[T any] struct {
 	Dev     T `yaml:"dev" required:"false" comment:"Development value, used when current-env is \"dev\"; falls back to staging when unset"`
 }
 
-/**
-* ValidateDiffers is a custom validator for Differs[T] that enforces the
-* requirement of the field corresponding to the current environment.
-*
-* It is registered against every instantiation of Differs[T] used in Config.
- */
 func ValidateDiffers(sl validator.StructLevel) {
 	current := sl.Current()
 
@@ -68,11 +62,6 @@ func ValidateDiffers(sl validator.StructLevel) {
 	}
 }
 
-/**
-* Parse returns the value of the Differs[T] corresponding to the current
-* environment. If the current environment is "beta" or "dev" and the corresponding
-* field is unset, it falls back to the "staging" value.
- */
 func (d *Differs[T]) Parse() T {
 	switch CurrentEnv {
 	case CurrentEnvProd:
@@ -179,16 +168,9 @@ type Meta struct {
 	StripeSecretKey     Differs[string] `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
 	UptimeRobotROAPIKey string          `yaml:"uptime_robot_ro_api_key" default:"" comment:"Uptime Robot Read-Only API Key" validate:"required"`
 	PopplioProxy        string          `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
+	OpenAIAPIKey        string          `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset" required:"false"`
 }
 
-/**
-* Arcadia (staff panel/bot) config
-*
-* This is a port of Arcadia's config to Popplio's config schema. It is not
-* required in "dev" these only matter once Arcadia's staff bot is actually
-* pointed at a real staff Discord server, which a local checkout usually isn't.
-* See requirednotdev in state.Setup.
- */
 type Arcadia struct {
 	Token          Differs[string] `yaml:"token" comment:"Staff bot Discord token. This is a SEPARATE Discord application from Popplio's" validate:"required"`
 	ServerPort     Differs[int]    `yaml:"server_port" default:"3010" comment:"Port the staff panel API listens on (staging 3011 / prod 3010)" validate:"required"`
@@ -215,10 +197,6 @@ type Infernoplex struct {
 	Token        Differs[string] `yaml:"token" comment:"Infernoplex bot Discord token" validate:"required"`
 }
 
-// Captcha configures the self-hosted proof-of-work vote captcha (see
-// popplio/captcha). It is intentionally not a third-party service (hCaptcha
-// etc.) the challenge/verify logic lives entirely in this codebase, signed
-// with HMACSecret so challenges can't be forged or tampered with in transit.
 type Captcha struct {
 	HMACSecret Differs[string] `yaml:"hmac_secret" comment:"Secret used to sign and verify proof-of-work vote captcha challenges. Generate with e.g. openssl rand -hex 32 — rotating it invalidates all outstanding challenges" validate:"required"`
 }

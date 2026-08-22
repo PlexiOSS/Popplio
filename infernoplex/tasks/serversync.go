@@ -177,10 +177,16 @@ func syncServerMeta(ctx context.Context) error {
 			avatar = *url
 		}
 
+		nsfwChannelCount := 0
+
+		if channels, err := dclient.Get().Rest().GetGuildChannels(guildID); err == nil {
+			nsfwChannelCount = countNSFWChannels(channels)
+		}
+
 		if target.statsSelfManaged {
 			if _, err := state.Pool.Exec(ctx,
-				"UPDATE servers SET avatar = $2 WHERE server_id = $1",
-				serverID, avatar,
+				"UPDATE servers SET avatar = $2, discord_nsfw_level = $3, nsfw_channel_count = $4 WHERE server_id = $1",
+				serverID, avatar, int(guild.NSFWLevel), nsfwChannelCount,
 			); err != nil {
 				return err
 			}
@@ -188,12 +194,41 @@ func syncServerMeta(ctx context.Context) error {
 		}
 
 		if _, err := state.Pool.Exec(ctx,
-			"UPDATE servers SET avatar = $2, total_members = $3, online_members = $4 WHERE server_id = $1",
-			serverID, avatar, guild.ApproximateMemberCount, guild.ApproximatePresenceCount,
+			"UPDATE servers SET avatar = $2, total_members = $3, online_members = $4, discord_nsfw_level = $5, nsfw_channel_count = $6 WHERE server_id = $1",
+			serverID, avatar, guild.ApproximateMemberCount, guild.ApproximatePresenceCount, int(guild.NSFWLevel), nsfwChannelCount,
 		); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func countNSFWChannels(channels []discord.GuildChannel) int {
+	count := 0
+
+	for _, ch := range channels {
+		nsfw := false
+
+		switch c := ch.(type) {
+		case discord.GuildTextChannel:
+			nsfw = c.NSFW()
+		case discord.GuildVoiceChannel:
+			nsfw = c.NSFW()
+		case discord.GuildStageVoiceChannel:
+			nsfw = c.NSFW()
+		case discord.GuildNewsChannel:
+			nsfw = c.NSFW()
+		case discord.GuildForumChannel:
+			nsfw = c.NSFW
+		case discord.GuildMediaChannel:
+			nsfw = c.NSFW
+		}
+
+		if nsfw {
+			count++
+		}
+	}
+
+	return count
 }

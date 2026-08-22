@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"popplio/db"
+	"popplio/moderation"
 	"popplio/perms"
 	"popplio/routes/servers/assets"
 	"popplio/state"
@@ -229,6 +230,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Error while committing transaction", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
+	}
+
+	// Best-effort: a reviewer signal, not a gate. Never fails the submission.
+	if result, err := moderation.CheckText(d.Context, payload.Short, payload.Long); err != nil {
+		state.Logger.Error("Failed to run moderation check on new server", zap.Error(err), zap.String("serverID", payload.ServerID))
+	} else if result.Flagged {
+		if _, err := state.Pool.Exec(d.Context,
+			"UPDATE servers SET moderation_flagged = $2, moderation_categories = $3 WHERE server_id = $1",
+			payload.ServerID, result.Flagged, result.Categories,
+		); err != nil {
+			state.Logger.Error("Failed to store moderation result for new server", zap.Error(err), zap.String("serverID", payload.ServerID))
+		}
 	}
 
 	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
