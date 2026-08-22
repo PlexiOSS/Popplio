@@ -16,6 +16,7 @@ type StaffTemplate struct {
 	Tags        []string  `db:"tags" json:"tags"`
 	Description string    `db:"description" json:"description"`
 	Type        string    `db:"type" json:"type"`
+	EntityType  string    `db:"entity_type" json:"entity_type"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }
 

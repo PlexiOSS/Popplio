@@ -327,6 +327,7 @@ func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, erro
 		Unaccounted:    unaccounted,
 		MfaVerified:    mfaVerified,
 		CreatedAt:      types.NewTimestamp(createdAt),
+		Rank:           grants.Rank(),
 		Grants:         grants,
 	}, nil
 }

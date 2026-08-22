@@ -18,6 +18,7 @@ import (
 	"popplio/routes/servers/endpoints/get_servers_emojis"
 	"popplio/routes/servers/endpoints/get_servers_index"
 	"popplio/routes/servers/endpoints/patch_server_settings"
+	"popplio/routes/servers/endpoints/post_server_stats"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/infinitybotlist/eureka/uapi"
@@ -62,6 +63,22 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_flat_stickers.Docs,
 		Handler: get_flat_stickers.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/stats",
+		OpId:    "post_server_stats",
+		Method:  uapi.POST,
+		Docs:    post_server_stats.Docs,
+		Handler: post_server_stats.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeServer,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
 	}.Route(r)
 
 	uapi.Route{

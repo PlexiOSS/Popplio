@@ -1,7 +1,3 @@
-// Package get_all_servers implements GET /servers/@all — "Get All Servers".
-//
-// Gets all servers on the list. Returns a set of paginated `IndexServer`
-// objects
 package get_all_servers
 
 import (
@@ -81,8 +77,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			ORDER BY (SELECT score FROM scored WHERE scored.target_id = servers.server_id) DESC
 			LIMIT $1 OFFSET $2`, limit, offset)
 	} else {
-		// Boosted servers (an active shop-purchased boosted_until) sort first,
-		// newest-first within each group.
+
 		rows, err = state.Pool.Query(d.Context, "SELECT "+indexServerCols+" FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public' ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC LIMIT $1 OFFSET $2", limit, offset)
 	}
 
@@ -96,7 +91,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to query servers [collect]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
 	}
 
-	// Resolve all servers concurrently, since each server's resolution is independent
 	if err := assets.ResolveIndexServers(d.Context, servers); err != nil {
 		return resp.ErrBody("Error resolving indexserver", "An error occurred while resolving index server.", err)
 	}

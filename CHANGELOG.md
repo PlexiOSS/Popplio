@@ -5,6 +5,129 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Infernoplex and the staff bot (Arcadia) now set a Discord presence on
+  connect — "Watching Omniplex servers" and "Watching the review queue"
+  respectively. Neither had one before (default "Playing nothing"). Gated
+  to the prod instance only, same as Popplio's main bot: staging/beta/dev
+  never broadcast a live-looking presence, whether from a shared token or a
+  local checkout pointed at real credentials.
+- NSFW compliance signal on `Server` (`discord_nsfw_level`, `nsfw_channel_count`)
+  and the review queue/search panel ops that expose it — reviewers previously
+  had to join a server and look around by hand to check "Server: NSFW Content
+  Not Gated." Infernoplex's periodic `syncServerMeta` task now also fetches
+  the guild's channel list each cycle and counts how many have Discord's own
+  age-restricted flag set, plus the guild's own NSFW classification
+  (`guild.NSFWLevel`). New columns via `exp/server_nsfw_compliance.sql` (not
+  auto-applied — run with `psql "$DATABASE_URL" -f
+  exp/server_nsfw_compliance.sql`).
+- New `moderation` package wraps OpenAI's moderation endpoint
+  (`omni-moderation-latest`, free to call). `POST /bots` and `POST /servers`
+  now run the submitted short/long description through it right after
+  insert and store the result on `moderation_flagged`/
+  `moderation_categories`, surfaced on the review queue/search panel ops the
+  same way the NSFW compliance fields are — a reviewer signal, not an
+  auto-reject; nothing reads these columns to gate anything. Configured via
+  a new `meta.openai_api_key` config value; moderation is silently skipped
+  when it's unset, so this is a no-op until a key is added. New columns via
+  `exp/moderation_columns.sql` (not auto-applied — run with `psql
+  "$DATABASE_URL" -f exp/moderation_columns.sql`).
+
+- Full CRUD for the staff-template catalog (pre-built answers staff pick
+  from when approving/denying a bot or server review) via a new
+  `UpdateStaffTemplates` panel op, gated by a new `manage_templates`
+  permission — previously the only way to add or edit one was a manual DB
+  insert, since nothing in Popplio or Arcadia wrote to `staff_templates`
+  at all.
+- `POST /servers/stats` — lets a server self-report `total_members`/
+  `online_members` via a server-scoped API token, the same way bots have
+  long been able to via `POST /bots/stats`. Posting at all flips a new
+  `stats_self_managed` flag on, which tells Infernoplex's periodic
+  `syncServerMeta` task to stop overwriting those two fields for that
+  server (it still keeps the icon in sync either way) — otherwise the
+  automatic sync and a server's own self-reports would just fight each
+  other every 30 minutes.
+- Staff review templates now carry an `entity_type` (`bot` or `server`)
+  column — `GET /list/staff-templates` previously only ever documented
+  itself as "used for reviewing bots," with no way to scope a template to
+  servers at all. Existing rows default to `bot`. Filter with
+  `?entity_type=bot` or `?entity_type=server`; omit it for both.
+- `CertifyAdd`/`CertifyRemove` and `PremiumAdd`/`PremiumRemove` (staff RPC
+  actions) now support servers as well as bots — same pattern
+  `Claim`/`Approve`/`Deny`/`Unverify` already established: the handler
+  branches on `TargetType` to a `*Server` counterpart. Certifying a server
+  moves it to `type = 'certified'`; uncertifying returns it to `approved`,
+  same as bots.
+- A new `FeatureAdd`/`FeatureRemove` staff RPC action (gated by a new
+  `feature_entities` permission) lets staff put a bot or server in the home
+  page's Featured section for a given time period, or pull it early —
+  previously `featured_until` was only ever settable through a shop
+  purchase (`routes/shop/assets/benefits.go`), with no staff override.
+  Storage matches the shop path exactly (stacks with a bought featured
+  slot instead of clobbering it), generalized across bots/servers via the
+  same `table`/`idCol` pattern the shop benefits code already used.
+- Added `@ci` struct annotations to `types/server.go` (`IndexServer`,
+  `Server`, `CreateServer`). Every other entity's types file (`bot.go`,
+  `pack.go`, `user.go`, etc.) has these, wiring it into
+  `db_fields_check.py`'s struct-vs-schema validation — `server.go` was the
+  one file that never got them, so a `servers` column drifting out of sync
+  with its struct field (renamed, dropped, added and never wired up) would
+  go uncaught by CI while every other entity was protected.
+- New GIN indexes (`exp/search_gin_idx.sql`, not auto-applied run with
+  `psql "$DATABASE_URL" -f exp/search_gin_idx.sql`) back `POST
+  /list/search`: `bots_short_fts_idx`, `servers_name_fts_idx`,
+  `servers_short_fts_idx` for the `short @@ $query` / `name @@ $query`
+  full-text matches, and `servers_name_trgm_idx` (via `pg_trgm`) for
+  `name ILIKE '%...%'`. None of the columns search queries against had an
+  index before this, so every search request was a full sequential scan
+  across every approved/certified bot and server, recomputing
+  `to_tsvector()` per row on every call.
+
+### Changed
+
+- Renamed four staff permissions that gate bot *and* server actions but
+  were named after bots only: `review_bots` → `review_entities`,
+  `certify_bots` → `certify_entities`, `force_remove_bots` →
+  `force_remove_entities`, and the `marker_bot_reviewer` marker →
+  `marker_reviewer`. Functionally nothing changes — `review_entities`
+  still gates the same `Claim`/`Unclaim`/`Approve`/`Deny`/`Unverify` RPC
+  actions it always did, and `force_remove_entities` still covers packs
+  too, same as before. `exp/rewrite/rename_reviewer_perms.sql` (not
+  auto-applied — run with `psql "$DATABASE_URL" -f
+  exp/rewrite/rename_reviewer_perms.sql`) renames the already-stored flat
+  names in `staff_positions.perms`, `staff_members.perm_overrides`, and
+  `staff_disciplinary_types.perm_limits`; safe to run more than once.
+
+### Fixed
+
+- `StaffMember` never exposed a way for the panel to know a viewer's actual
+  seniority rank (`perms.StaffGrants.Rank()`) — an instance owner holding
+  no explicit position had no way to be told apart from a regular staff
+  member holding none, and the frontend derived a "lowest held index"
+  from `positions` that put both at the same (locked-out-of-everything)
+  end. New `rank` field on the API response, mirroring `Rank()` exactly
+  (owners get `math.MinInt32`, no-position members get `NoRank`).
+- `/health/bots`, `/health/servers`, `/health/packs`, `/health/blogs`,
+  `/health/search`, `/health/auth`, `/health/tickets`, and
+  `/health/staff-panel` all used `SELECT EXISTS(SELECT 1 FROM <table>
+  LIMIT 1)` as their check — a row-presence test, not a health check. A
+  perfectly healthy table with zero rows (an empty `blogs` table, a fresh
+  instance with no tickets yet) reported as DOWN. Now checks the table
+  exists in `information_schema.tables` instead, which still catches a
+  genuinely missing/unmigrated table without requiring it to have data.
+
+### Removed
+
+- Infernoplex's `/setup` command — the website's `PUT /servers` (Add
+  Server) already resolves a server from its invite link without needing
+  the tracking bot present at all, and the staff review pipeline now
+  provides the ownership-verification step `/setup`'s `AdminOnly` check
+  used to be the only thing doing. Team creation and server-record setup
+  both already happen through the normal website flow.
+
 ## [1.3.2] - 2026-08-17
 
 ### Added

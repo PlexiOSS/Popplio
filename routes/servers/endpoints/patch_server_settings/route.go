@@ -1,8 +1,3 @@
-// Package patch_server_settings implements PATCH /servers/{id}/settings —
-// "Update Server Settings".
-//
-// Updates a servers settings. You must have 'Edit Server Settings' in the
-// team if the bot is in a team. Returns 204 on success
 package patch_server_settings
 
 import (
@@ -46,7 +41,6 @@ var (
 )
 
 func Setup() {
-	// Creates the updateSql
 	for i, field := range reflect.VisibleFields(reflect.TypeOf(types.ServerSettingsUpdate{})) {
 		if field.Tag.Get("db") != "" {
 			updateSql = append(updateSql, field.Tag.Get("db")+"=$"+strconv.Itoa(i+1))
@@ -77,7 +71,6 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	// Read payload from body
 	var payload types.ServerSettingsUpdate
 
 	hresp, ok := uapi.MarshalReq(r, &payload)
@@ -86,7 +79,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payloa
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -100,18 +92,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(err.Error())
 	}
 
-	// Update the bot
-	// Get the arguments to pass when adding the bot
 	serverArgs := updateServerArgs(payload)
 
 	if len(updateSql) != len(serverArgs) {
 		return resp.ErrBody("Internal Error: The number of columns and arguments do not match", "Internal Error: The number of columns and arguments do not match", nil)
 	}
 
-	// Add the bot id to the end of the args
 	serverArgs = append(serverArgs, id)
 
-	// Update the bot
 	_, err = state.Pool.Exec(d.Context, "UPDATE servers SET "+updateSqlStr+" WHERE server_id=$"+strconv.Itoa(len(serverArgs)), serverArgs...)
 
 	if err != nil {
@@ -148,16 +136,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		},
 	}
 
-	// An EmbedResource with an empty URL is itself invalid and gets the
-	// whole message rejected (50035) — Discord wants the field omitted
-	// entirely, not present-but-empty, when there's no avatar yet.
 	if avatar != "" {
 		embed.Thumbnail = &discord.EmbedResource{URL: avatar}
 	}
 
-	// Best-effort: the settings update above already succeeded and is the
-	// actual outcome the caller cares about, so a failure to post this
-	// notification shouldn't fail the whole request.
 	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Content: "",
 		Embeds:  []discord.Embed{embed},

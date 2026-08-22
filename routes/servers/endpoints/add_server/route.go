@@ -1,8 +1,3 @@
-// Package add_server implements PUT /servers — "Add Server".
-//
-// Adds a server to the database from an invite link. Resolves the guild via
-// the invite (the tracking bot does not need to already be in the server).
-// Returns 204 on success
 package add_server
 
 import (
@@ -15,6 +10,7 @@ import (
 	"time"
 
 	"popplio/db"
+	"popplio/moderation"
 	"popplio/perms"
 	"popplio/routes/servers/assets"
 	"popplio/state"
@@ -34,12 +30,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// createServerArgs must list values in the exact same order as
-// db.GetCols(types.CreateServer{}) (i.e. types.CreateServer's field
-// declaration order) — createServerCols/createServerParams build the SQL
-// column list from that reflection order, and args are bound to columns
-// positionally, so any drift between the two silently writes every field
-// into the wrong column instead of failing loudly.
 func createServerArgs(server types.CreateServer) []any {
 	return []any{
 		server.Invite,
@@ -179,7 +169,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Check team owner here, to avoid a race condition
 	if payload.TeamOwner != "" {
 		entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", payload.TeamOwner)
 
@@ -241,6 +230,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Error while committing transaction", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
+	}
+
+	// Best-effort: a reviewer signal, not a gate. Never fails the submission.
+	if result, err := moderation.CheckText(d.Context, payload.Short, payload.Long); err != nil {
+		state.Logger.Error("Failed to run moderation check on new server", zap.Error(err), zap.String("serverID", payload.ServerID))
+	} else if result.Flagged {
+		if _, err := state.Pool.Exec(d.Context,
+			"UPDATE servers SET moderation_flagged = $2, moderation_categories = $3 WHERE server_id = $1",
+			payload.ServerID, result.Flagged, result.Categories,
+		); err != nil {
+			state.Logger.Error("Failed to store moderation result for new server", zap.Error(err), zap.String("serverID", payload.ServerID))
+		}
 	}
 
 	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{

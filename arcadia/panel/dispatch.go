@@ -60,6 +60,8 @@ func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response,
 		return s.updateBotWhitelist(ctx, req.UpdateBotWhitelist)
 	case req.UpdateBadges != nil:
 		return s.updateBadges(ctx, req.UpdateBadges)
+	case req.UpdateStaffTemplates != nil:
+		return s.updateStaffTemplates(ctx, req.UpdateStaffTemplates)
 	case req.PopplioStaff != nil:
 		return s.popplioStaff(ctx, req.PopplioStaff)
 	default:

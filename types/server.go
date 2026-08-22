@@ -7,8 +7,6 @@ import (
 )
 
 // @ci table=servers, unfilled=1
-//
-// Represents a 'index server' (a small subset of the server object for use in cards etc.)
 type IndexServer struct {
 	ServerID         string             `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name             string             `db:"name" json:"name" description:"The server's name"`
@@ -32,9 +30,7 @@ type IndexServer struct {
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
 }
 
-// @ci table=servers, ignore_fields=invite+blacklisted_users+api_token+unique_clicks
-//
-// Server represents a server.
+// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users
 type Server struct {
 	ServerID               string             `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name                   string             `db:"name" json:"name" description:"The server's name"`
@@ -75,14 +71,12 @@ type Server struct {
 	BoostedUntil           pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
 	FeaturedUntil          pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
 	VoteBlitzUntil         pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the server's vote cooldown is halved until this time"`
+	DiscordNSFWLevel       int                `db:"discord_nsfw_level" json:"discord_nsfw_level" description:"Discord's own guild-level NSFW classification, synced periodically by the tracking bot (0=default, 1=explicit, 2=safe, 3=age-restricted)"`
+	NSFWChannelCount       int                `db:"nsfw_channel_count" json:"nsfw_channel_count" description:"How many of the server's channels currently have Discord's own age-restricted flag set, synced periodically by the tracking bot. Compare against nsfw to catch a server with gated NSFW content that isn't tagged nsfw, or vice versa"`
+	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the server's short/long description at submission time. A signal for reviewers, not a verdict"`
+	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
 }
 
-// @ci table=servers, unfilled=1
-//
-// ServerEmojiPreview is the minimal shape GET /servers/@emojis returns —
-// deliberately not IndexServer (which excludes emoji/sticker data
-// entirely) or the full Server (unnecessarily heavy for a bulk listing).
-// Only servers with show_emojis = true are ever returned by that route.
 type ServerEmojiPreview struct {
 	ServerID string    `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name     string    `db:"name" json:"name" description:"The server's name"`
@@ -91,12 +85,11 @@ type ServerEmojiPreview struct {
 	Stickers []Sticker `db:"stickers" json:"stickers" description:"The server's stickers"`
 }
 
-// FlatEmoji is a single emoji flattened out of every opted-in server's
-// `emojis` jsonb column, for GET /servers/@emojis/flat — item-level
-// pagination across all servers at once rather than one page per server.
-// Not @ci table-checked: id/name/animated/url come from unnesting the jsonb
-// array, not real servers columns, so there's nothing for that checker to
-// validate against.
+type ServerStats struct {
+	TotalMembers  uint64 `json:"total_members" description:"The server's total member count"`
+	OnlineMembers uint64 `json:"online_members" description:"The server's online member count"`
+}
+
 type FlatEmoji struct {
 	ServerID     string `db:"server_id" json:"server_id" description:"The ID of the server this emoji belongs to"`
 	ServerName   string `db:"server_name" json:"server_name" description:"The name of the server this emoji belongs to"`
@@ -107,8 +100,6 @@ type FlatEmoji struct {
 	URL          string `db:"url" json:"url" description:"The emoji's CDN URL"`
 }
 
-// FlatSticker is the sticker equivalent of FlatEmoji, for GET
-// /servers/@stickers/flat.
 type FlatSticker struct {
 	ServerID     string `db:"server_id" json:"server_id" description:"The ID of the server this sticker belongs to"`
 	ServerName   string `db:"server_name" json:"server_name" description:"The name of the server this sticker belongs to"`
@@ -119,6 +110,7 @@ type FlatSticker struct {
 	URL          string `db:"url" json:"url" description:"The sticker's CDN URL"`
 }
 
+// @ci table=servers, unfilled=1
 type CreateServer struct {
 	Invite        string      `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS Discord invite URL"`
 	Short         string      `db:"short" json:"short" validate:"required,min=30,max=150" msg:"Short description must be between 30 and 150 characters"`
@@ -151,10 +143,6 @@ type ServerInviteUpdate struct {
 	Invite string `db:"invite" json:"invite" validate:"required" msg:"Invite must be non-empty"`
 }
 
-// DiscordServerMeta is a preview of a Discord guild resolved from an invite
-// link, returned by Get Server Meta ahead of Add Server so a client can show
-// the server's real name/icon before the user commits to submitting it.
-// Resolving the invite does not create anything server-side.
 type DiscordServerMeta struct {
 	ServerID      string `json:"server_id" description:"The server's ID, resolved from the invite"`
 	Name          string `json:"name" description:"The server's name"`
@@ -167,7 +155,6 @@ type DiscordServerMeta struct {
 	BotInviteURL  string `json:"bot_invite_url" description:"A ready-to-use invite link for the tracking bot, shown when bot_present is false. Empty if Infernoplex couldn't be reached"`
 }
 
-// List Index
 type ListIndexServer struct {
 	Certified     []IndexServer `json:"certified" description:"The certified servers (if any)"`
 	Premium       []IndexServer `json:"premium" description:"The premium servers, usually limited to 12"`

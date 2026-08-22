@@ -1,7 +1,8 @@
 // Package get_staff_templates implements GET /list/staff-templates — "Get
 // Staff Templates".
 //
-// Returns all of the staff templates used for reviewing bots
+// Returns the staff templates used for reviewing bots and servers,
+// optionally filtered to one entity type via ?entity_type=.
 package get_staff_templates
 
 import (
@@ -28,13 +29,38 @@ var (
 func Docs() *doclib.Doc {
 	return &doclib.Doc{
 		Summary:     "Get Staff Templates",
-		Description: "Returns all of the staff templates used for reviewing bots",
+		Description: "Returns all of the staff templates used for reviewing bots and servers. Filter to one entity type with ?entity_type=bot or ?entity_type=server; omit it to get both.",
 		Resp:        types.StaffTemplateList{},
+		Params: []doclib.Parameter{
+			{
+				Name:        "entity_type",
+				Description: "Filter templates to just \"bot\" or \"server\". Omit for both.",
+				Required:    false,
+				In:          "query",
+				Schema:      doclib.IdSchema,
+			},
+		},
 	}
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+templateCols+" FROM staff_templates ORDER BY created_at DESC")
+	entityType := r.URL.Query().Get("entity_type")
+
+	if entityType != "" && entityType != "bot" && entityType != "server" {
+		return resp.BadRequest("entity_type must be \"bot\" or \"server\"")
+	}
+
+	query := "SELECT " + templateCols + " FROM staff_templates"
+	args := []any{}
+
+	if entityType != "" {
+		query += " WHERE entity_type = $1"
+		args = append(args, entityType)
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := state.Pool.Query(d.Context, query, args...)
 
 	if err != nil {
 		return resp.Err("Failed to fetch staff templates list [db fetch]", err)

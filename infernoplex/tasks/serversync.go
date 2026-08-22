@@ -76,11 +76,6 @@ func ServerSync(ctx context.Context) error {
 		syncedEmojis := make([]syncedEmoji, 0, len(emojis))
 
 		for _, e := range emojis {
-			// disgo's Emoji.URL() always defaults to PNG regardless of
-			// e.Animated — unlike Sticker.URL(), which already infers the
-			// right format from its FormatType. Has to be requested
-			// explicitly here or animated emojis get a permanently-static
-			// URL despite being flagged as animated.
 			url := e.URL()
 			if e.Animated {
 				url = e.URL(discord.WithFormat(discord.FileFormatGIF))
@@ -131,24 +126,29 @@ func stickerFormatName(t discord.StickerFormatType) string {
 	}
 }
 
+type syncTarget struct {
+	serverID         string
+	statsSelfManaged bool
+}
+
 func syncServerMeta(ctx context.Context) error {
-	rows, err := state.Pool.Query(ctx, "SELECT server_id FROM servers")
+	rows, err := state.Pool.Query(ctx, "SELECT server_id, stats_self_managed FROM servers")
 
 	if err != nil {
 		return err
 	}
 
-	var serverIDs []string
+	var targets []syncTarget
 
 	for rows.Next() {
-		var id string
+		var t syncTarget
 
-		if err := rows.Scan(&id); err != nil {
+		if err := rows.Scan(&t.serverID, &t.statsSelfManaged); err != nil {
 			rows.Close()
 			return err
 		}
 
-		serverIDs = append(serverIDs, id)
+		targets = append(targets, t)
 	}
 
 	rows.Close()
@@ -157,20 +157,14 @@ func syncServerMeta(ctx context.Context) error {
 		return err
 	}
 
-	for _, serverID := range serverIDs {
+	for _, target := range targets {
+		serverID := target.serverID
 		guildID, err := snowflake.Parse(serverID)
 
 		if err != nil {
 			continue
 		}
 
-		// The gateway-cached guild (dclient.Get().Caches().Guild) only tracks
-		// member/presence counts if the privileged Server Members intent is
-		// enabled, which this bot deliberately doesn't request (see
-		// TeamCleanup's doc comment) — so its MemberCount is just whatever
-		// was in the initial GUILD_CREATE payload and never updates. A REST
-		// fetch with with_counts=true gets a live approximate count without
-		// needing that intent, the same way /setup does on server creation.
 		guild, err := dclient.Get().Rest().GetGuild(guildID, true)
 
 		if err != nil {
@@ -183,13 +177,58 @@ func syncServerMeta(ctx context.Context) error {
 			avatar = *url
 		}
 
+		nsfwChannelCount := 0
+
+		if channels, err := dclient.Get().Rest().GetGuildChannels(guildID); err == nil {
+			nsfwChannelCount = countNSFWChannels(channels)
+		}
+
+		if target.statsSelfManaged {
+			if _, err := state.Pool.Exec(ctx,
+				"UPDATE servers SET avatar = $2, discord_nsfw_level = $3, nsfw_channel_count = $4 WHERE server_id = $1",
+				serverID, avatar, int(guild.NSFWLevel), nsfwChannelCount,
+			); err != nil {
+				return err
+			}
+			continue
+		}
+
 		if _, err := state.Pool.Exec(ctx,
-			"UPDATE servers SET avatar = $2, total_members = $3, online_members = $4 WHERE server_id = $1",
-			serverID, avatar, guild.ApproximateMemberCount, guild.ApproximatePresenceCount,
+			"UPDATE servers SET avatar = $2, total_members = $3, online_members = $4, discord_nsfw_level = $5, nsfw_channel_count = $6 WHERE server_id = $1",
+			serverID, avatar, guild.ApproximateMemberCount, guild.ApproximatePresenceCount, int(guild.NSFWLevel), nsfwChannelCount,
 		); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func countNSFWChannels(channels []discord.GuildChannel) int {
+	count := 0
+
+	for _, ch := range channels {
+		nsfw := false
+
+		switch c := ch.(type) {
+		case discord.GuildTextChannel:
+			nsfw = c.NSFW()
+		case discord.GuildVoiceChannel:
+			nsfw = c.NSFW()
+		case discord.GuildStageVoiceChannel:
+			nsfw = c.NSFW()
+		case discord.GuildNewsChannel:
+			nsfw = c.NSFW()
+		case discord.GuildForumChannel:
+			nsfw = c.NSFW
+		case discord.GuildMediaChannel:
+			nsfw = c.NSFW
+		}
+
+		if nsfw {
+			count++
+		}
+	}
+
+	return count
 }

@@ -24,9 +24,6 @@ import (
 var (
 	packColArr = db.GetCols(types.BotPack{})
 	packCols   = strings.Join(packColArr, ",")
-
-	indexBotColArr = db.GetCols(types.IndexBot{})
-	indexBotCols   = strings.Join(indexBotColArr, ",")
 )
 
 func Docs() *docs.Doc {

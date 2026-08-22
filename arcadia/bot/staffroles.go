@@ -31,7 +31,7 @@ func cmdStaffRoles() *Command {
 
 	permOption := discord.ApplicationCommandOptionString{
 		Name:        "permission",
-		Description: "Permission name, e.g. review_bots",
+		Description: "Permission name, e.g. review_entities",
 		Required:    true,
 	}
 

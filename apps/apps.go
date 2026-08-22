@@ -269,7 +269,7 @@ You can only have up to one ban appeal at any given point of time. Abusing the s
 		Name: "Certification",
 		Info: `So you want to apply for certification, eh?
 
-Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of servers, unique clicks, or votes your bot is strongest in — you don't need to clear every bar, just one.
+Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of servers, unique clicks, or votes your bot is strongest in you don't need to clear every bar, just one.
 
 Then fill out the form below and wait for a staff member to review your application. If you are accepted, you're in the club!
 
@@ -307,7 +307,7 @@ You can only have one certification application at a time. If you have already a
 		Name: "Server Certification",
 		Info: `Certification isn't just for bots servers can qualify too.
 
-Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of members, unique clicks, or votes your server is strongest in — you don't need to clear every bar, just one.
+Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of members, unique clicks, or votes your server is strongest in you don't need to clear every bar, just one.
 
 Then fill out the form below and wait for a staff member to review your application. If you are accepted, you're in the club!
 

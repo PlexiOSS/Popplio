@@ -16,22 +16,26 @@ import (
 // Entity search, one query shape per target type.
 
 type searchServerRow struct {
-	ServerID         string     `db:"server_id"`
-	Name             string     `db:"name"`
-	Avatar           string     `db:"avatar"`
-	TotalMembers     int32      `db:"total_members"`
-	OnlineMembers    int32      `db:"online_members"`
-	Short            string     `db:"short"`
-	Type             string     `db:"type"`
-	ApprovalNote     string     `db:"approval_note"`
-	ApproximateVotes int32      `db:"approximate_votes"`
-	InviteClicks     int32      `db:"invite_clicks"`
-	Clicks           int32      `db:"clicks"`
-	NSFW             bool       `db:"nsfw"`
-	Tags             []string   `db:"tags"`
-	Premium          bool       `db:"premium"`
-	ClaimedBy        *string    `db:"claimed_by"`
-	LastClaimed      *time.Time `db:"last_claimed"`
+	ServerID             string     `db:"server_id"`
+	Name                 string     `db:"name"`
+	Avatar               string     `db:"avatar"`
+	TotalMembers         int32      `db:"total_members"`
+	OnlineMembers        int32      `db:"online_members"`
+	Short                string     `db:"short"`
+	Type                 string     `db:"type"`
+	ApprovalNote         string     `db:"approval_note"`
+	ApproximateVotes     int32      `db:"approximate_votes"`
+	InviteClicks         int32      `db:"invite_clicks"`
+	Clicks               int32      `db:"clicks"`
+	NSFW                 bool       `db:"nsfw"`
+	DiscordNSFWLevel     int32      `db:"discord_nsfw_level"`
+	NSFWChannelCount     int32      `db:"nsfw_channel_count"`
+	Tags                 []string   `db:"tags"`
+	Premium              bool       `db:"premium"`
+	ClaimedBy            *string    `db:"claimed_by"`
+	LastClaimed          *time.Time `db:"last_claimed"`
+	ModerationFlagged    bool       `db:"moderation_flagged"`
+	ModerationCategories []string   `db:"moderation_categories"`
 }
 
 func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (response, error) {
@@ -46,7 +50,8 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 	case types.TargetTypeBot:
 		rows, err := state.Pool.Query(ctx,
 			`SELECT bot_id, client_id, type, approximate_votes, shards, library, invite_clicks, clicks,
-                        servers, last_claimed, claimed_by, approval_note, short, invite FROM bots
+                        servers, last_claimed, claimed_by, approval_note, short, invite,
+                        moderation_flagged, moderation_categories FROM bots
                         INNER JOIN internal_user_cache__discord discord_users ON bots.bot_id = discord_users.id
                         WHERE bot_id = $1 OR client_id = $1 OR discord_users.username ILIKE $2 ORDER BY bots.created_at`,
 			q.Query, pattern)
@@ -65,7 +70,8 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 	case types.TargetTypeServer:
 		rows, err := state.Pool.Query(ctx,
 			`SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
-                        approximate_votes, invite_clicks, clicks, nsfw, tags, premium, claimed_by, last_claimed
+                        approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
+                        tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories
                         FROM servers WHERE server_id = $1 OR name ILIKE $2 ORDER BY created_at`,
 			q.Query, pattern)
 

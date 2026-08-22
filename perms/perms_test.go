@@ -38,9 +38,9 @@ func TestCatalogueIsWellFormed(t *testing.T) {
 }
 
 func TestHas(t *testing.T) {
-	set := Staff.NewSet(StaffReviewBots, StaffViewApps)
+	set := Staff.NewSet(StaffReviewEntities, StaffViewApps)
 
-	if !set.Has(StaffReviewBots) {
+	if !set.Has(StaffReviewEntities) {
 		t.Error("a held permission should be allowed")
 	}
 
@@ -54,7 +54,7 @@ func TestHas(t *testing.T) {
 
 	admin := Staff.NewSet(StaffAdministrator)
 
-	if !admin.Has(StaffManageShop) || !admin.Has(StaffForceRemoveBots) {
+	if !admin.Has(StaffManageShop) || !admin.Has(StaffForceRemoveEntities) {
 		t.Error("administrator should imply every staff permission")
 	}
 
@@ -69,20 +69,20 @@ func TestHas(t *testing.T) {
 		t.Error("owner should imply every entity permission")
 	}
 
-	if (Set{}).Has(StaffReviewBots) {
+	if (Set{}).Has(StaffReviewEntities) {
 		t.Error("the zero set grants nothing")
 	}
 }
 
 func TestResolveIsAUnion(t *testing.T) {
 	roles := []Role{
-		{ID: "reviewer", Index: 9, Perms: []Perm{StaffReviewBots, StaffViewPanel}},
+		{ID: "reviewer", Index: 9, Perms: []Perm{StaffReviewEntities, StaffViewPanel}},
 		{ID: "manager", Index: 3, Perms: []Perm{StaffManageShop, StaffViewPanel}},
 	}
 
 	set := Staff.Resolve(roles, StaffViewTickets)
 
-	for _, p := range []Perm{StaffReviewBots, StaffViewPanel, StaffManageShop, StaffViewTickets} {
+	for _, p := range []Perm{StaffReviewEntities, StaffViewPanel, StaffManageShop, StaffViewTickets} {
 		if !set.Has(p) {
 			t.Errorf("union should include %s", p)
 		}
@@ -105,7 +105,7 @@ func TestResolveIsAUnion(t *testing.T) {
 }
 
 func TestUndeclaredPermissionsSurvive(t *testing.T) {
-	set := Staff.SetFromStrings([]string{"review_bots", "some_other_service_perm"})
+	set := Staff.SetFromStrings([]string{"review_entities", "some_other_service_perm"})
 
 	if !slices.Contains(set.Strings(), "some_other_service_perm") {
 		t.Error("a permission this catalogue does not declare must survive a round trip")
@@ -115,16 +115,16 @@ func TestUndeclaredPermissionsSurvive(t *testing.T) {
 		t.Errorf("Undeclared() = %v, want [some_other_service_perm]", got)
 	}
 
-	if !set.Has(StaffReviewBots) {
+	if !set.Has(StaffReviewEntities) {
 		t.Error("declared permissions still work alongside undeclared ones")
 	}
 }
 
 func TestStrings(t *testing.T) {
 	// Catalogue order first, undeclared names after, so output is stable.
-	set := Staff.SetFromStrings([]string{"zzz_unknown", "manage_shop", "administrator", "review_bots"})
+	set := Staff.SetFromStrings([]string{"zzz_unknown", "manage_shop", "administrator", "review_entities"})
 
-	want := []string{"administrator", "review_bots", "manage_shop", "zzz_unknown"}
+	want := []string{"administrator", "review_entities", "manage_shop", "zzz_unknown"}
 
 	if got := set.Strings(); !slices.Equal(got, want) {
 		t.Errorf("Strings() = %v, want %v", got, want)
@@ -136,11 +136,11 @@ func TestStrings(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	if err := Staff.ValidateStrings([]string{"review_bots", "manage_shop"}); err != nil {
+	if err := Staff.ValidateStrings([]string{"review_entities", "manage_shop"}); err != nil {
 		t.Errorf("declared permissions should validate: %v", err)
 	}
 
-	err := Staff.ValidateStrings([]string{"review_bots", "rpc.Approve", "bogus"})
+	err := Staff.ValidateStrings([]string{"review_entities", "rpc.Approve", "bogus"})
 
 	if err == nil {
 		t.Fatal("unknown permissions should be rejected")
@@ -210,26 +210,26 @@ func TestRank(t *testing.T) {
 }
 
 func TestSetMutationDoesNotAlias(t *testing.T) {
-	base := Staff.NewSet(StaffReviewBots)
+	base := Staff.NewSet(StaffReviewEntities)
 	grown := base.With(StaffManageShop)
-	shrunk := grown.Without(StaffReviewBots)
+	shrunk := grown.Without(StaffReviewEntities)
 
 	if base.Has(StaffManageShop) {
 		t.Error("With must not modify the original")
 	}
 
-	if !grown.Has(StaffReviewBots) {
+	if !grown.Has(StaffReviewEntities) {
 		t.Error("Without must not modify the original")
 	}
 
-	if shrunk.Has(StaffReviewBots) || !shrunk.Has(StaffManageShop) {
+	if shrunk.Has(StaffReviewEntities) || !shrunk.Has(StaffManageShop) {
 		t.Errorf("Without produced %v", shrunk.Strings())
 	}
 }
 
 func BenchmarkHas(b *testing.B) {
 	set := Staff.NewSet(
-		StaffViewPanel, StaffReviewBots, StaffCertifyBots, StaffViewApps,
+		StaffViewPanel, StaffReviewEntities, StaffCertifyEntities, StaffViewApps,
 		StaffManageShop, StaffViewShop, StaffManagePartners, StaffViewStaff,
 	)
 
@@ -244,7 +244,7 @@ func BenchmarkHas(b *testing.B) {
 
 func BenchmarkResolve(b *testing.B) {
 	roles := []Role{
-		{ID: "a", Index: 9, Perms: []Perm{StaffReviewBots, StaffViewPanel, StaffViewApps}},
+		{ID: "a", Index: 9, Perms: []Perm{StaffReviewEntities, StaffViewPanel, StaffViewApps}},
 		{ID: "b", Index: 3, Perms: []Perm{StaffManageShop, StaffViewShop}},
 		{ID: "c", Index: 1, Perms: []Perm{StaffManageStaffRoles, StaffManagePartners}},
 	}

@@ -51,7 +51,7 @@ func TestRouteListsTheWholeCatalogue(t *testing.T) {
 		t.Error("the staff endpoint returned an entity permission")
 	}
 
-	for _, want := range []string{"administrator", "review_bots", "manage_staff_roles"} {
+	for _, want := range []string{"administrator", "review_entities", "manage_staff_roles"} {
 		if !slices.Contains(ids, want) {
 			t.Errorf("catalogue is missing %q", want)
 		}
@@ -87,7 +87,7 @@ func TestDangerousSurvivesJSON(t *testing.T) {
 
 	for _, p := range decoded.Perms {
 		switch p.ID {
-		case string(perms.StaffForceRemoveBots):
+		case string(perms.StaffForceRemoveEntities):
 			dangerous = p.Dangerous
 		case string(perms.StaffViewPanel):
 			safe = !p.Dangerous
@@ -95,7 +95,7 @@ func TestDangerousSurvivesJSON(t *testing.T) {
 	}
 
 	if !dangerous {
-		t.Error("force_remove_bots should be flagged dangerous")
+		t.Error("force_remove_entities should be flagged dangerous")
 	}
 
 	if !safe {

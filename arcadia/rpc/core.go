@@ -9,10 +9,10 @@
 // they share; dispatch.go maps a method to its handler; the handlers themselves
 // are grouped by what they act on and by the permission that gates them:
 //
-//	review.go       claim, unclaim, approve, deny, unverify   review_bots
-//	certify.go      certification                             certify_bots
+//	review.go       claim, unclaim, approve, deny, unverify   review_entities
+//	certify.go      certification                             certify_entities
 //	transfer.go     ownership changes                         transfer_bots
-//	forceremove.go  deleting a bot outright                   force_remove_bots
+//	forceremove.go  deleting a bot/server/pack outright        force_remove_entities
 //	premium.go      premium                                   manage_premium
 //	votes.go        vote bans and vote resets                 manage_votes, ban_voters
 //	apps.go         application bans                          ban_app_users

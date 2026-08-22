@@ -10,17 +10,17 @@ import (
 )
 
 func TestResolvePermission(t *testing.T) {
-	got, err := resolvePermission("review_bots")
+	got, err := resolvePermission("review_entities")
 
-	if err != nil || got != perms.StaffReviewBots {
+	if err != nil || got != perms.StaffReviewEntities {
 		t.Errorf("resolvePermission(exact) = %q, %v", got, err)
 	}
 
 	// Backticks and case are what people actually type after copying a name out
 	// of an embed.
-	got, err = resolvePermission(" ``Review_Bots`` ")
+	got, err = resolvePermission(" ``Review_Entities`` ")
 
-	if err != nil || got != perms.StaffReviewBots {
+	if err != nil || got != perms.StaffReviewEntities {
 		t.Errorf("resolvePermission(decorated) = %q, %v", got, err)
 	}
 
@@ -91,14 +91,14 @@ func TestPermissionFields(t *testing.T) {
 		t.Errorf("administrator should render as everything, got %+v", fields)
 	}
 
-	fields = permissionFields(perms.Staff.NewSet(perms.StaffReviewBots, perms.StaffManageShop))
+	fields = permissionFields(perms.Staff.NewSet(perms.StaffReviewEntities, perms.StaffManageShop))
 
 	if len(fields) != 2 {
 		t.Fatalf("two permissions in two categories should be two fields, got %d", len(fields))
 	}
 
 	// Permissions belonging to another service are shown, not hidden.
-	fields = permissionFields(perms.Staff.SetFromStrings([]string{"review_bots", "some_other_service"}))
+	fields = permissionFields(perms.Staff.SetFromStrings([]string{"review_entities", "some_other_service"}))
 
 	var found bool
 

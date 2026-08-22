@@ -8,15 +8,16 @@ const (
 	StaffViewSensitive Perm = "view_sensitive_data"
 	StaffUseStagingKey Perm = "use_staging_keys"
 
-	StaffReviewBots      Perm = "review_bots"
-	StaffCertifyBots     Perm = "certify_bots"
-	StaffTransferBots    Perm = "transfer_bots"
-	StaffForceRemoveBots Perm = "force_remove_bots"
+	StaffReviewEntities      Perm = "review_entities"
+	StaffCertifyEntities     Perm = "certify_entities"
+	StaffTransferBots        Perm = "transfer_bots"
+	StaffForceRemoveEntities Perm = "force_remove_entities"
 
-	StaffManagePremium Perm = "manage_premium"
-	StaffManageVotes   Perm = "manage_votes"
-	StaffBanVoters     Perm = "ban_voters"
-	StaffBanUsers      Perm = "ban_users"
+	StaffManagePremium   Perm = "manage_premium"
+	StaffFeatureEntities Perm = "feature_entities"
+	StaffManageVotes     Perm = "manage_votes"
+	StaffBanVoters       Perm = "ban_voters"
+	StaffBanUsers        Perm = "ban_users"
 
 	StaffViewApps    Perm = "view_apps"
 	StaffManageApps  Perm = "manage_apps"
@@ -43,8 +44,9 @@ const (
 	StaffModerateGuild Perm = "moderate_guild"
 	StaffWarnUsers     Perm = "warn_users"
 
-	StaffManageBadges Perm = "manage_badges"
-	StaffAssignBadges Perm = "assign_badges"
+	StaffManageBadges    Perm = "manage_badges"
+	StaffAssignBadges    Perm = "assign_badges"
+	StaffManageTemplates Perm = "manage_templates"
 
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
@@ -54,7 +56,7 @@ const (
 	StaffMarkerDeveloper      Perm = "marker_developer"
 	StaffMarkerLeadDeveloper  Perm = "marker_lead_developer"
 	StaffMarkerHumanResources Perm = "marker_human_resources"
-	StaffMarkerBotReviewer    Perm = "marker_bot_reviewer"
+	StaffMarkerReviewer       Perm = "marker_reviewer"
 	StaffMarkerServiceAccount Perm = "marker_service_account"
 	StaffMarkerDisciplinary   Perm = "marker_disciplinary"
 )
@@ -101,17 +103,17 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	},
 
 	{
-		ID:          StaffReviewBots,
-		Name:        "Review Bots",
-		Description: "Claim, unclaim, approve, deny and unverify bots in the review queue.",
-		Category:    "Bot Reviews",
+		ID:          StaffReviewEntities,
+		Name:        "Review Entities",
+		Description: "Claim, unclaim, approve, deny and unverify bots and servers in the review queue.",
+		Category:    "Entity Reviews",
 		Legacy:      []string{"rpc.Claim", "rpc.Unclaim", "rpc.Approve", "rpc.Deny", "rpc.Unverify"},
 	},
 	{
-		ID:          StaffCertifyBots,
-		Name:        "Certify Bots",
-		Description: "Grant and remove certification on a bot.",
-		Category:    "Bot Reviews",
+		ID:          StaffCertifyEntities,
+		Name:        "Certify Entities",
+		Description: "Grant and remove certification on a bot or server.",
+		Category:    "Entity Reviews",
 		Legacy:      []string{"rpc.CertifyAdd", "rpc.CertifyRemove"},
 	},
 	{
@@ -122,9 +124,9 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Legacy:      []string{"rpc.BotTransferOwnershipUser", "rpc.BotTransferOwnershipTeam"},
 	},
 	{
-		ID:          StaffForceRemoveBots,
-		Name:        "Force Remove Bots",
-		Description: "Delete a bot from the list outright. This cannot be undone.",
+		ID:          StaffForceRemoveEntities,
+		Name:        "Force Remove Entities",
+		Description: "Delete a bot, server, or pack from the list outright. This cannot be undone.",
 		Category:    "Content Management",
 		Dangerous:   true,
 		Legacy:      []string{"rpc.ForceRemove"},
@@ -137,6 +139,12 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Category:    "Content Management",
 		Dangerous:   true,
 		Legacy:      []string{"rpc.PremiumAdd", "rpc.PremiumRemove"},
+	},
+	{
+		ID:          StaffFeatureEntities,
+		Name:        "Feature Entities",
+		Description: "Feature a bot or server on the home page for a given time period, or remove it early.",
+		Category:    "Content Management",
 	},
 	{
 		ID:          StaffManageVotes,
@@ -321,6 +329,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	},
 
 	{
+		ID:          StaffManageTemplates,
+		Name:        "Manage Templates",
+		Description: "Create, edit and delete the pre-built answers staff pick from when approving, denying, or otherwise reviewing a bot or server.",
+		Category:    "Entity Reviews",
+	},
+
+	{
 		ID:          StaffViewCDN,
 		Name:        "View CDN",
 		Description: "List CDN scopes and read the files in them.",
@@ -357,9 +372,9 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Legacy:      []string{"human_resources.marker"},
 	},
 	{
-		ID:          StaffMarkerBotReviewer,
-		Name:        "Bot Reviewer",
-		Description: "Marks the holder as a bot reviewer. Carries no power on its own.",
+		ID:          StaffMarkerReviewer,
+		Name:        "Reviewer",
+		Description: "Marks the holder as a bot/server reviewer. Carries no power on its own.",
 		Category:    "Markers",
 		Legacy:      []string{"bot_reviewer.marker"},
 	},

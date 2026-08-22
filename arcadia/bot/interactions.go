@@ -236,30 +236,6 @@ func cmdRPC() *Command {
 	}
 }
 
-// rpcMethodChoices exposes the 18 RPC methods as slash-command choices. Upstream
-// autocompleted them; a choice list is a better fit here because the whole set
-// fits inside Discord's 25-choice limit and needs no round trip.
-func rpcMethodChoices() []discord.ApplicationCommandOptionChoiceString {
-	choices := make([]discord.ApplicationCommandOptionChoiceString, 0, len(types.RPCMethodVariants))
-
-	for _, name := range types.RPCMethodVariants {
-		method, err := types.EmptyRPCMethod(name)
-
-		if err != nil {
-			continue
-		}
-
-		// The label is what staff read; the value is the variant name the
-		// dispatcher needs.
-		choices = append(choices, discord.ApplicationCommandOptionChoiceString{
-			Name:  truncate(method.Label(), 100),
-			Value: name,
-		})
-	}
-
-	return choices
-}
-
 func targetTypeChoices() []discord.ApplicationCommandOptionChoiceString {
 	choices := make([]discord.ApplicationCommandOptionChoiceString, 0, len(types.TargetTypeVariants))
 

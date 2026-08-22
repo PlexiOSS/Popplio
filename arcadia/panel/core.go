@@ -47,10 +47,6 @@ func writeNoContent() response {
 	return response{status: http.StatusNoContent, noBody: true}
 }
 
-func writeStream(status int, body io.ReadCloser) response {
-	return response{status: status, stream: body}
-}
-
 func (r response) write(w http.ResponseWriter) {
 	switch {
 	case r.stream != nil:

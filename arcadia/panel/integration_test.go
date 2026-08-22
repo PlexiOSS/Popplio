@@ -131,7 +131,7 @@ func TestAuthValidators(t *testing.T) {
 	})
 
 	t.Run("pending session fails CheckAuth but passes insecure", func(t *testing.T) {
-		f := seedStaff(t, []string{"review_bots"}, "pending")
+		f := seedStaff(t, []string{"review_entities"}, "pending")
 
 		data, err := impls.CheckAuthInsecure(ctx, f.Token)
 
@@ -149,7 +149,7 @@ func TestAuthValidators(t *testing.T) {
 	})
 
 	t.Run("active session passes both", func(t *testing.T) {
-		f := seedStaff(t, []string{"review_bots"}, "active")
+		f := seedStaff(t, []string{"review_entities"}, "active")
 
 		if _, err := impls.CheckAuth(ctx, f.Token); err != nil {
 			t.Errorf("CheckAuth: %v", err)
