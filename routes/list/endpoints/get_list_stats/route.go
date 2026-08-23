@@ -107,20 +107,68 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to fetch vote-banned bot count", err)
 	}
 
+	var totalServers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers").Scan(&totalServers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch server count", err)
+	}
+
+	var totalApprovedServers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE type = 'approved'").Scan(&totalApprovedServers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch approved server count", err)
+	}
+
+	var totalCertifiedServers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE type = 'certified'").Scan(&totalCertifiedServers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch certified server count", err)
+	}
+
+	var totalPendingServers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE type = 'pending'").Scan(&totalPendingServers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch pending server count", err)
+	}
+
+	var totalDeniedServers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE type = 'denied'").Scan(&totalDeniedServers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch denied server count", err)
+	}
+
+	var totalVoteBannedServers int64
+	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE vote_banned = true").Scan(&totalVoteBannedServers)
+
+	if err != nil {
+		return resp.Err("Failed to fetch vote-banned server count", err)
+	}
+
 	return uapi.HttpResponse{
 		Json: types.ListStats{
-			TotalBots:           totalBots,
-			TotalApprovedBots:   totalApprovedBots,
-			TotalCertifiedBots:  totalCertifiedBots,
-			TotalPendingBots:    totalPendingBots,
-			TotalDeniedBots:     totalDeniedBots,
-			TotalStaff:          totalStaff,
-			TotalUsers:          totalUsers,
-			TotalVotes:          totalVotes,
-			TotalPacks:          totalPacks,
-			TotalTickets:        totalTickets,
-			TotalBannedUsers:    totalBannedUsers,
-			TotalVoteBannedBots: totalVoteBannedBots,
+			TotalBots:              totalBots,
+			TotalApprovedBots:      totalApprovedBots,
+			TotalCertifiedBots:     totalCertifiedBots,
+			TotalPendingBots:       totalPendingBots,
+			TotalDeniedBots:        totalDeniedBots,
+			TotalStaff:             totalStaff,
+			TotalUsers:             totalUsers,
+			TotalVotes:             totalVotes,
+			TotalPacks:             totalPacks,
+			TotalTickets:           totalTickets,
+			TotalBannedUsers:       totalBannedUsers,
+			TotalVoteBannedBots:    totalVoteBannedBots,
+			TotalServers:           totalServers,
+			TotalApprovedServers:   totalApprovedServers,
+			TotalCertifiedServers:  totalCertifiedServers,
+			TotalPendingServers:    totalPendingServers,
+			TotalDeniedServers:     totalDeniedServers,
+			TotalVoteBannedServers: totalVoteBannedServers,
 		},
 	}
 }

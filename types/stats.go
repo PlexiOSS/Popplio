@@ -15,6 +15,13 @@ type ListStats struct {
 	TotalTickets        int64 `json:"total_tickets" description:"The total number of tickets created on the list"`
 	TotalBannedUsers    int64 `json:"total_banned_users" description:"The total number of users banned from the list"`
 	TotalVoteBannedBots int64 `json:"total_vote_banned_bots" description:"The total number of bots banned from voting"`
+
+	TotalServers           int64 `json:"total_servers" description:"The total number of servers on the list"`
+	TotalApprovedServers   int64 `json:"total_approved_servers" description:"The total number of approved servers on the list"`
+	TotalCertifiedServers  int64 `json:"total_certified_servers" description:"The total number of certified servers on the list"`
+	TotalPendingServers    int64 `json:"total_pending_servers" description:"The total number of servers awaiting review"`
+	TotalDeniedServers     int64 `json:"total_denied_servers" description:"The total number of servers denied on review"`
+	TotalVoteBannedServers int64 `json:"total_vote_banned_servers" description:"The total number of servers banned from voting"`
 }
 
 type StatusDocs struct {
