@@ -77,7 +77,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	for _, route := range baseRoutes {
 		sitemap.Urls = append(sitemap.Urls, &seo.SitemapURL{
-			Loc:        state.Config.Sites.Frontend.Parse() + route,
+			Loc:        state.Config.Sites.Frontend + route,
 			LastMod:    today,
 			ChangeFreq: "daily",
 			Priority:   "0.3",
@@ -157,7 +157,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Add the next page as a sitemap
 	sitemap.Urls = append(sitemap.Urls, &seo.SitemapURL{
-		Loc:     state.Config.Sites.API.Parse() + "/list/sitemap.xml?page=" + strconv.FormatUint(pageNum+1, 10),
+		Loc:     state.Config.Sites.API + "/list/sitemap.xml?page=" + strconv.FormatUint(pageNum+1, 10),
 		LastMod: today,
 	})
 

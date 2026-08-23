@@ -228,7 +228,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				// The legacy SvelteKit panel this used to link to
 				// (Sites.Panel + "/panel/apps") is superseded by
 				// Omniplex's own /admin/applications.
-				URL:         state.Config.Sites.Frontend.Production() + "/admin/applications",
+				URL:         state.Config.Sites.Frontend + "/admin/applications",
 				Description: desc,
 				Color:       0x00ff00,
 				Fields: []discord.EmbedField{

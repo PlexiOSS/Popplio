@@ -58,7 +58,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	rssFeed.Version = "2.0"
 	rssFeed.Channel = &seo.RssChannel{
 		Title:         "Omniplex",
-		Link:          state.Config.Sites.Frontend.Parse(),
+		Link:          state.Config.Sites.Frontend,
 		Description:   "Search our vast list of bots for an exciting start to your server.",
 		Language:      "en-us",
 		LastBuildDate: time.Now().Format(time.RFC822),
@@ -69,7 +69,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		AtomLink: []*seo.RssAtomLink{
 			{
 				Href: func() string {
-					d := state.Config.Sites.API.Parse() + r.URL.Path
+					d := state.Config.Sites.API + r.URL.Path
 
 					if r.URL.RawQuery != "" {
 						d += "?" + r.URL.RawQuery
@@ -81,23 +81,23 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				Type: "application/rss+xml",
 			},
 			{
-				Href: state.Config.Sites.API.Parse() + "/list/rss.xml",
+				Href: state.Config.Sites.API + "/list/rss.xml",
 				Rel:  "first",
 				Type: "application/rss+xml",
 			},
 			{
-				Href: state.Config.Sites.API.Parse() + "/list/rss.xml?page=" + strconv.FormatUint(pageNum+1, 10),
+				Href: state.Config.Sites.API + "/list/rss.xml?page=" + strconv.FormatUint(pageNum+1, 10),
 				Rel:  "next",
 				Type: "application/rss+xml",
 			},
 		},
 		Links: []*seo.RssLink{
 			{
-				Href: state.Config.Sites.API.Parse() + "/list/rss.xml",
+				Href: state.Config.Sites.API + "/list/rss.xml",
 				Rel:  "first",
 			},
 			{
-				Href: state.Config.Sites.API.Parse() + "/list/rss.xml?page=" + strconv.FormatUint(pageNum+1, 10),
+				Href: state.Config.Sites.API + "/list/rss.xml?page=" + strconv.FormatUint(pageNum+1, 10),
 				Rel:  "next",
 			},
 		},
@@ -106,12 +106,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if pageNum > 1 {
 		rssFeed.Channel.AtomLink = append(rssFeed.Channel.AtomLink, &seo.RssAtomLink{
-			Href: state.Config.Sites.API.Parse() + "/list/rss.xml?page=" + strconv.FormatUint(pageNum-1, 10),
+			Href: state.Config.Sites.API + "/list/rss.xml?page=" + strconv.FormatUint(pageNum-1, 10),
 			Rel:  "prev",
 			Type: "application/rss+xml",
 		})
 		rssFeed.Channel.Links = append(rssFeed.Channel.Links, &seo.RssLink{
-			Href: state.Config.Sites.API.Parse() + "/list/rss.xml?page=" + strconv.FormatUint(pageNum-1, 10),
+			Href: state.Config.Sites.API + "/list/rss.xml?page=" + strconv.FormatUint(pageNum-1, 10),
 			Rel:  "prev",
 		})
 

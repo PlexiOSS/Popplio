@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"popplio/arcadia/types"
-	"popplio/config"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -45,7 +44,7 @@ func New() *Server {
 	)
 
 	s.http = &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", state.Config.Arcadia.ServerPort.Parse()),
+		Addr:    fmt.Sprintf("0.0.0.0:%d", state.Config.Arcadia.ServerPort),
 		Handler: handler,
 
 		// TIMEOUTS (§14c): long read/write windows were sized for 1 GB chunked
@@ -205,16 +204,7 @@ func maxBodyMiddleware(next http.Handler) http.Handler {
 
 // instanceDescription is the panel instance blurb in the Hello response.
 func instanceDescription() string {
-	switch config.CurrentEnv {
-	case config.CurrentEnvStaging:
-		return "Arcadia Staging Panel Instance"
-	case config.CurrentEnvBeta:
-		return "Arcadia Beta Panel Instance"
-	case config.CurrentEnvDev:
-		return "Arcadia Development Panel Instance"
-	default:
-		return "Arcadia Production Panel Instance"
-	}
+	return "Arcadia Production Panel Instance"
 }
 
 // serverIDs renders the configured guild ids as strings for CoreConstants.

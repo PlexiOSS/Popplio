@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"runtime/debug"
 
-	"popplio/config"
 	"popplio/validators"
 
 	"github.com/disgoorg/disgo/discord"
@@ -44,7 +43,6 @@ func cmdStats() *Command {
 						{Name: "Git Commit:", Value: revision, Inline: validators.TruePtr},
 						{Name: "Modified:", Value: modified, Inline: validators.TruePtr},
 						{Name: "Built On:", Value: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH), Inline: validators.TruePtr},
-						{Name: "Current Environment:", Value: config.CurrentEnv, Inline: validators.TruePtr},
 					},
 				}},
 			})

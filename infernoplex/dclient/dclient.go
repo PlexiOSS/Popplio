@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"popplio/config"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo"
@@ -29,7 +28,7 @@ func Ready() bool {
 }
 
 func Setup(ctx context.Context, listeners ...bot.EventListener) error {
-	token := state.Config.Infernoplex.Token.Parse()
+	token := state.Config.Infernoplex.Token
 
 	if token == "" {
 		return errors.New("infernoplex.token is empty: Infernoplex needs its own Discord token")
@@ -60,14 +59,8 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 
 	client = c
 
-	// Only the prod instance is allowed to broadcast a live-looking presence,
-	// same reasoning as Popplio's main bot: staging/beta/dev must never show
-	// up as if they were the real tracking bot, whether from a shared token
-	// or a local checkout pointed at real credentials.
-	if config.CurrentEnv == config.CurrentEnvProd {
-		if err := c.SetPresence(ctx, gateway.WithWatchingActivity("Omniplex servers")); err != nil {
-			state.Logger.Error("Failed to set Infernoplex presence", zap.Error(err))
-		}
+	if err := c.SetPresence(ctx, gateway.WithWatchingActivity("Omniplex servers")); err != nil {
+		state.Logger.Error("Failed to set Infernoplex presence", zap.Error(err))
 	}
 
 	state.Logger.Info("Infernoplex connected", zap.String("applicationID", c.ApplicationID().String()))

@@ -25,13 +25,13 @@ var helloWorld []byte
 var helloWorldB Hello
 
 func Setup() {
-	var docsSite string = state.Config.Sites.API.Parse() + "/docs"
+	var docsSite string = state.Config.Sites.API + "/docs"
 
 	// This is done here to avoid constant remarshalling
 	helloWorldB = Hello{
 		Message:     "Hello world from the Omniplex API!",
 		Docs:        docsSite,
-		FrontendURL: state.Config.Sites.Frontend.Parse(),
+		FrontendURL: state.Config.Sites.Frontend,
 	}
 
 	var err error

@@ -20,7 +20,7 @@ func CheckUserBoosterStatus(id snowflake.ID) types.BoosterStatus {
 	}
 
 	// Check if member has booster role
-	roles := state.Config.Roles.PremiumRoles.Parse()
+	roles := state.Config.Roles.PremiumRoles
 	for _, role := range m.RoleIDs {
 		if slices.Contains(roles, role) {
 			// Member has booster role

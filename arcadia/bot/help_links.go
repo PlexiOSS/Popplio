@@ -20,7 +20,7 @@ func registerHelpLinkCommands() {
 // instance of this bot the staff server it answers in is shared across
 // environments, and a link should always send someone somewhere real.
 func frontendURL() string {
-	return state.Config.Sites.Frontend.Production()
+	return state.Config.Sites.Frontend
 }
 
 func cmdKb() *Command {

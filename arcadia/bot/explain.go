@@ -1,11 +1,5 @@
 package bot
 
-// explainText holds the explainme texts verbatim, including the leading and
-// trailing whitespace the Rust raw strings carry. These are user-visible and
-// frozen.
-//
-// Interpreted string literals are used rather than raw ones because the texts
-// contain double backticks, which would terminate a Go raw string.
 func explainText(option string) string {
 	switch option {
 	case "Claim":

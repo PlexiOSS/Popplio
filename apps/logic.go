@@ -202,7 +202,7 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 		Embeds: []discord.Embed{
 			{
 				Title:       "Bot Resubmitted!",
-				URL:         state.Config.Sites.Frontend.Parse() + "/bots/" + botID,
+				URL:         state.Config.Sites.Frontend + "/bots/" + botID,
 				Description: "User <@" + d.Auth.ID + "> has resubmitted their bot",
 				Color:       0x00ff00,
 				Fields: []discord.EmbedField{
@@ -404,7 +404,7 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 			Embeds: []discord.Embed{
 				{
 					Title:       "Bot Certified!",
-					URL:         state.Config.Sites.Frontend.Parse() + "/bots/" + botID,
+					URL:         state.Config.Sites.Frontend + "/bots/" + botID,
 					Description: "<@" + d.Auth.ID + "> has certified bot <@" + botID + ">",
 					Color:       0x00ff00,
 					Fields: []discord.EmbedField{
@@ -483,7 +483,7 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 			Embeds: []discord.Embed{
 				{
 					Title:       "Server Certified!",
-					URL:         state.Config.Sites.Frontend.Parse() + "/servers/" + serverID,
+					URL:         state.Config.Sites.Frontend + "/servers/" + serverID,
 					Description: "<@" + d.Auth.ID + "> has certified server " + serverID,
 					Color:       0x00ff00,
 					Fields: []discord.EmbedField{

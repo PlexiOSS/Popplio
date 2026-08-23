@@ -9,12 +9,6 @@ import (
 	"popplio/perms"
 )
 
-// The command registry: the one list of what the staff bot answers to, and the
-// two helpers every command that reaches the action layer goes through.
-//
-// Each command's own file holds its handler. Adding one is a line here and a
-// constructor there.
-
 func registerCommands() {
 	register(
 		cmdRegister(),
@@ -43,9 +37,6 @@ func registerCommands() {
 	registerHelpLinkCommands()
 }
 
-// cmdRegister is poise's owner-only application-command registration helper.
-// disgo has no button-driven equivalent, so this syncs the guild commands
-// directly.
 func cmdRegister() *Command {
 	return &Command{
 		Name:        "register",
@@ -62,8 +53,6 @@ func cmdRegister() *Command {
 	}
 }
 
-// runRPCWithTarget executes an RPC against an explicit target type. The modal
-// driver is the only caller that needs a target type other than Bot.
 func runRPCWithTarget(c *Ctx, method types.RPCMethod, targetType types.TargetType) (rpc.Success, error) {
 	return rpc.Execute(c.Context, method, rpc.Handle{
 		UserID:     c.Author.ID.String(),
@@ -71,7 +60,6 @@ func runRPCWithTarget(c *Ctx, method types.RPCMethod, targetType types.TargetTyp
 	})
 }
 
-// requirePerm resolves the caller's permissions and checks one of them.
 func requirePerm(c *Ctx, perm perms.Perm) error {
 	sp, err := impls.GetUserPerms(c.Context, c.Author.ID.String())
 
@@ -86,8 +74,6 @@ func requirePerm(c *Ctx, perm perms.Perm) error {
 	return nil
 }
 
-// runRPC is the shared path from a Discord command into the RPC layer. Every
-// command except the modal driver targets a bot.
 func runRPC(c *Ctx, method types.RPCMethod) (rpc.Success, error) {
 	return runRPCWithTarget(c, method, types.TargetTypeBot)
 }

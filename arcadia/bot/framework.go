@@ -229,7 +229,7 @@ func Listener(ctx context.Context) bot.EventListener {
 
 // prefix is the configured command prefix for the current environment.
 func prefix() string {
-	return state.Config.Arcadia.Prefix.Parse()
+	return state.Config.Arcadia.Prefix
 }
 
 func onMessageCreate(ctx context.Context, e *events.MessageCreate) {

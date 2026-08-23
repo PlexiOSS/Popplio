@@ -10,12 +10,6 @@ import (
 	"testing"
 )
 
-// Every reply the bot makes is an embed. A bare Content message is
-// indistinguishable from a staff member talking, so this walks the package for
-// any message built with a Content field, which is how one would creep back in.
-//
-// Ctx.Say/Ok/Fail and modalReply are the sanctioned ways to answer; they all
-// build the embed themselves, so nothing outside them should set Content.
 func TestRepliesAreEmbeds(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 
@@ -23,8 +17,6 @@ func TestRepliesAreEmbeds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// closePermEditor blanks the content deliberately, so that an editor being
-	// closed does not leave earlier text sitting above the note.
 	const allowed = "permeditor_apply.go"
 
 	for _, path := range files {

@@ -177,7 +177,7 @@ func queueComponents(s *queueSession, bot queueBot) []discord.ContainerComponent
 		discord.ActionRowComponent{
 			discord.NewLinkButton("Invite", safeInvite),
 			discord.NewLinkButton("Invite (DB, Unsafe)", bot.Invite),
-			discord.NewLinkButton("View Page", state.Config.Sites.Frontend.Parse()+"/bots/"+bot.BotID),
+			discord.NewLinkButton("View Page", state.Config.Sites.Frontend+"/bots/"+bot.BotID),
 		},
 	}
 }

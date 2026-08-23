@@ -1,22 +1,3 @@
-// Package dbconform verifies every SQL statement the port issues against a real
-// database.
-//
-// The Rust original used sqlx's compile-time query verification, so a typo'd
-// column name could not survive a build. Go has no equivalent, which §13 of the
-// port brief calls out as the single biggest regression: without this, a bad
-// column name only surfaces when a staff member triggers that code path in
-// production.
-//
-// Rather than maintain a hand-written list of statements that would drift, this
-// walks the arcadia source with go/ast, pulls out every SQL string literal, and
-// PREPAREs it against Postgres. Preparing parses and plans the statement -
-// validating every table, column and function reference and inferring parameter
-// types - without executing anything or touching a row.
-//
-// Run with:
-//
-//	ARCADIA_TEST_DATABASE_URL=postgres://user:pass@127.0.0.1/infinity \
-//	  go test -ldflags=-checklinkname=0 ./arcadia/dbconform/
 package dbconform
 
 import (
@@ -34,13 +15,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// sqlLeadingKeywords are the statement kinds Postgres can PREPARE. DDL and LOCK
-// cannot be prepared, so they are recognised but skipped.
 var sqlLeadingKeywords = []string{"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "select", "insert", "update", "delete"}
 
 var unpreparable = []string{"CREATE", "LOCK", "create", "lock"}
 
-// statement is one SQL literal found in the source.
 type statement struct {
 	SQL  string
 	Pos  string
@@ -88,9 +66,6 @@ func TestEverySQLStatementPrepares(t *testing.T) {
 	}
 }
 
-// TestComposedStatements covers the statements that are built at runtime rather
-// than written as a single literal, so the extractor above cannot see them
-// whole.
 func TestComposedStatements(t *testing.T) {
 	url := os.Getenv("ARCADIA_TEST_DATABASE_URL")
 
@@ -113,8 +88,6 @@ func TestComposedStatements(t *testing.T) {
 		sql  string
 	}{
 		{
-			// impls.GetStaffDisciplinaries appends the interval predicate when
-			// active is true.
 			name: "active disciplinaries",
 			sql: `SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
         t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
@@ -123,8 +96,6 @@ func TestComposedStatements(t *testing.T) {
         WHERE d.user_id = $1 AND NOW() - d.created_at < d.expiry`,
 		},
 		{
-			// tasks.AssetCleaner builds one of these per entity from a fixed
-			// allow-list.
 			name: "asset cleaner bots",
 			sql:  "SELECT bot_id::text FROM bots WHERE bot_id::text = $1::text",
 		},
@@ -134,8 +105,6 @@ func TestComposedStatements(t *testing.T) {
 		{name: "asset cleaner partners", sql: "SELECT id::text FROM partners WHERE id::text = $1::text"},
 		{name: "asset cleaner tickets", sql: "SELECT id::text FROM tickets WHERE id::text = $1::text"},
 		{
-			// tasks.GenericCleaner builds one of these per entity kind, against
-			// each table carrying a target_id column. entity_votes is a real one.
 			name: "generic cleaner select",
 			sql:  `select target_id, target_type from "entity_votes" where target_type = $1 and not exists (select 1 from "bots" where "bot_id"::text = target_id)`,
 		},
@@ -154,8 +123,6 @@ func TestComposedStatements(t *testing.T) {
 	}
 }
 
-// TestGenericCleanerTablesExist checks the discovery query the generic cleaner
-// relies on actually finds tables, and that each survives the identifier filter.
 func TestGenericCleanerTablesExist(t *testing.T) {
 	url := os.Getenv("ARCADIA_TEST_DATABASE_URL")
 
@@ -192,7 +159,6 @@ func TestGenericCleanerTablesExist(t *testing.T) {
 	t.Logf("generic cleaner would act on %d tables: %s", len(tables), strings.Join(tables, ", "))
 }
 
-// collectStatements walks the arcadia packages and extracts SQL string literals.
 func collectStatements(t *testing.T, root string) []statement {
 	t.Helper()
 
@@ -251,8 +217,6 @@ func collectStatements(t *testing.T, root string) []statement {
 	return out
 }
 
-// looksLikeSQL decides whether a string literal is a whole SQL statement worth
-// preparing. Fragments, format templates and DDL are excluded.
 func looksLikeSQL(s string) bool {
 	trimmed := strings.TrimSpace(s)
 
@@ -279,7 +243,6 @@ func looksLikeSQL(s string) bool {
 		return false
 	}
 
-	// fmt templates are covered explicitly by TestComposedStatements.
 	if strings.Contains(trimmed, "%s") || strings.Contains(trimmed, "%d") || strings.Contains(trimmed, "%v") {
 		return false
 	}
@@ -287,7 +250,6 @@ func looksLikeSQL(s string) bool {
 	return true
 }
 
-// collapse renders a multi-line statement on one line for readable failures.
 func collapse(sql string) string {
 	return strings.Join(strings.Fields(sql), " ")
 }

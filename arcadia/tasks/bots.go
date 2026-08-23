@@ -151,7 +151,7 @@ func DeletedBots(ctx context.Context) error {
 			state.Logger.Warn("Bot is not in internal_user_cache__discord, forcing indexing of bot", zap.String("botID", botID))
 
 			// Ask Popplio to index the user, then skip this round.
-			url := fmt.Sprintf("%s/platform/user/%s?platform=discord", state.Config.Sites.API.Parse(), botID)
+			url := fmt.Sprintf("%s/platform/user/%s?platform=discord", state.Config.Sites.API, botID)
 
 			resp, err := httpGet(ctx, url)
 
@@ -214,7 +214,7 @@ func DeletedBots(ctx context.Context) error {
 			Content: owners.MentionUsers(),
 			Embeds: []discord.Embed{{
 				Title:       "Bot Deleted From Discord!",
-				URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend.Parse(), botID),
+				URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, botID),
 				Description: fmt.Sprintf("`%s` has been deleted from Discord, and so will be removed from list!", botID),
 				Fields: []discord.EmbedField{
 					{Name: "Bot", Value: botID, Inline: impls.InlineTrue()},

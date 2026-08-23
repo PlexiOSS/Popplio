@@ -17,7 +17,7 @@ import (
 // segments escape the API base. Legitimate input - an absolute path with an
 // optional query string - resolves identically here.
 func safeJoinPopplio(rawPath string) (string, error) {
-	base, err := url.Parse(state.Config.Sites.API.Parse())
+	base, err := url.Parse(state.Config.Sites.API)
 
 	if err != nil {
 		return "", err

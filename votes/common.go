@@ -1,9 +1,3 @@
-// Package votes implements voting on entities and the credits votes earn.
-//
-// It covers both halves of the system: recording and counting votes against
-// any votable entity, and converting accumulated votes into redeemable
-// credits. Queries take a DbConn rather than the pool directly so callers
-// can run them inside a transaction they already opened.
 package votes
 
 import (
@@ -33,12 +27,6 @@ type DbConn interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// GetDoubleVote reports whether the Friday-through-Sunday double-vote
-// weekend bonus is active right now. Pinned to UTC explicitly rather than
-// relying on time.Now()'s implicit host-local zone — the boundary needs to
-// be the same instant for every caller regardless of what timezone the
-// process happens to be running in, and it's the boundary documented to
-// users (see the Voting Rules KB article).
 func GetDoubleVote() bool {
 	weekday := time.Now().UTC().Weekday()
 	return weekday == time.Friday || weekday == time.Saturday || weekday == time.Sunday
@@ -51,9 +39,8 @@ type EntityInfo struct {
 	Avatar  string
 }
 
-// GetEntityInfo returns information about the entity that is being voted for including vote bans etc.
 func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (*EntityInfo, error) {
-	// Handle entity specific checks here, such as ensuring the entity actually exists
+
 	switch targetType {
 	case "bot":
 		var botType string
@@ -83,12 +70,9 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, err
 		}
 
-		// Set entityInfo for log. VoteURL matches URL rather than a
-		// dedicated "/vote" sub-route — no such route exists in the
-		// frontend, voting happens inline on the entity's own page.
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/bots/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/bots/" + targetId,
+			URL:     state.Config.Sites.Frontend + "/bots/" + targetId,
+			VoteURL: state.Config.Sites.Frontend + "/bots/" + targetId,
 			Name:    botObj.Username,
 			Avatar:  botObj.Avatar,
 		}, nil
@@ -110,8 +94,8 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 		}
 
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/packs/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/packs/" + targetId,
+			URL:     state.Config.Sites.Frontend + "/packs/" + targetId,
+			VoteURL: state.Config.Sites.Frontend + "/packs/" + targetId,
 			Name:    targetId,
 		}, nil
 	case "team":
@@ -132,10 +116,9 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, errors.New("team is vote banned and cannot be voted for right now")
 		}
 
-		// Set entityInfo for log
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/teams/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/teams/" + targetId,
+			URL:     state.Config.Sites.Frontend + "/teams/" + targetId,
+			VoteURL: state.Config.Sites.Frontend + "/teams/" + targetId,
 			Name:    name,
 		}, nil
 	case "server":
@@ -156,16 +139,15 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, errors.New("server is vote banned and cannot be voted for right now")
 		}
 
-		// Set entityInfo for log
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/servers/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/servers/" + targetId,
+			URL:     state.Config.Sites.Frontend + "/servers/" + targetId,
+			VoteURL: state.Config.Sites.Frontend + "/servers/" + targetId,
 			Name:    name,
 		}, nil
 	case "blog":
 		return &EntityInfo{
-			URL:     state.Config.Sites.Frontend.Parse() + "/blog/" + targetId,
-			VoteURL: state.Config.Sites.Frontend.Parse() + "/blog/" + targetId,
+			URL:     state.Config.Sites.Frontend + "/blog/" + targetId,
+			VoteURL: state.Config.Sites.Frontend + "/blog/" + targetId,
 			Name:    targetId,
 		}, nil
 	default:
@@ -173,25 +155,19 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 	}
 }
 
-// Returns core vote info about the entity (such as the amount of cooldown time the entity has)
-//
-// # If user id is specified, then in the future special perks for the user will be returned as well
-//
-// If vote time is negative, then it is not possible to revote
 func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) (*types.VoteInfo, error) {
 	var voteEntity = types.VoteInfo{
-		PerUser:           1,     // 1 vote per user
-		VoteTime:          12,    // per day
-		MultipleVotes:     true,  // Multiple votes per time interval
-		VoteCredits:       false, // Vote credits are not supported unless opted in
-		SupportsUpvotes:   true,  // Upvotes are supported (usually)
-		SupportsDownvotes: true,  // Downvotes are supported (usually)
+		PerUser:           1,
+		VoteTime:          12,
+		MultipleVotes:     true,
+		VoteCredits:       false,
+		SupportsUpvotes:   true,
+		SupportsDownvotes: true,
 	}
 
-	// Add other special cases of entities not following the basic voting system rules
 	switch targetType {
 	case "bot":
-		voteEntity.VoteCredits = true // Bots support vote credits
+		voteEntity.VoteCredits = true
 
 		var premium bool
 		var voteBlitzUntil pgtype.Timestamptz
@@ -201,20 +177,16 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 			return nil, err
 		}
 
-		// Premium bots get vote time of 4
 		if premium {
 			voteEntity.VoteTime = 4
 		} else {
-			// Bot is not premium
 			if GetDoubleVote() {
-				voteEntity.PerUser = 2  // 2 votes per user
-				voteEntity.VoteTime = 6 // Half of the normal vote time
+				voteEntity.PerUser = 2
+				voteEntity.VoteTime = 6
 				voteEntity.WeekendBonus = true
 			}
 		}
 
-		// A purchased vote blitz halves whatever vote time was just computed,
-		// stacking with premium/double-vote rather than overriding them.
 		if voteBlitzUntil.Valid && voteBlitzUntil.Time.After(time.Now()) {
 			voteEntity.VoteTime = max(voteEntity.VoteTime/2, 1)
 		}
@@ -229,46 +201,40 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 			return nil, err
 		}
 
-		// Premium servers get vote time of 4
 		if premium {
 			voteEntity.VoteTime = 4
 		} else {
-			// Server is not premium
 			if GetDoubleVote() {
-				voteEntity.PerUser = 2  // 2 votes per user
-				voteEntity.VoteTime = 6 // Half of the normal vote time
+				voteEntity.PerUser = 2
+				voteEntity.VoteTime = 6
 				voteEntity.WeekendBonus = true
 			}
 		}
 
-		// A purchased vote blitz halves whatever vote time was just computed,
-		// stacking with premium/double-vote rather than overriding them.
 		if voteBlitzUntil.Valid && voteBlitzUntil.Time.After(time.Now()) {
 			voteEntity.VoteTime = max(voteEntity.VoteTime/2, 1)
 		}
 	case "blog":
 		voteEntity.MultipleVotes = false
-		voteEntity.PerUser = 1 // Only 1 vote per blog post
+		voteEntity.PerUser = 1
 	case "team":
-		// Teams cannot be premium yet
 		if GetDoubleVote() {
-			voteEntity.PerUser = 2  // 2 votes per user
-			voteEntity.VoteTime = 6 // Half of the normal vote time
+			voteEntity.PerUser = 2
+			voteEntity.VoteTime = 6
 			voteEntity.WeekendBonus = true
 		}
 	case "pack":
 		// Packs cannot be premium yet
 		if GetDoubleVote() {
 			voteEntity.WeekendBonus = true
-			voteEntity.PerUser = 2  // 2 votes per user
-			voteEntity.VoteTime = 6 // Half of the normal vote time
+			voteEntity.PerUser = 2
+			voteEntity.VoteTime = 6
 		}
 	}
 
 	return &voteEntity, nil
 }
 
-// Checks whether or not a user has voted for an entity
 func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType string) (*types.UserVote, error) {
 	vi, err := EntityVoteInfo(ctx, c, targetId, targetType)
 
@@ -300,13 +266,10 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 
 	var vw *types.VoteWait
 
-	// If there is a valid vote in this period and the entity supports multiple votes, figure out how long the user has to wait
 	var hasVoted bool
 
-	// Case 1: Multiple votes
 	if vi.MultipleVotes {
 		if len(validVotes) > 0 {
-			// Check if the user has voted in the last vote time
 			hasVoted = validVotes[0].CreatedAt.Add(time.Duration(vi.VoteTime) * time.Hour).After(time.Now())
 
 			if hasVoted {
@@ -328,7 +291,6 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 			}
 		}
 	} else {
-		// Case 2: Single vote entity
 		hasVoted = len(validVotes) > 0
 	}
 
@@ -340,7 +302,6 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 	}, nil
 }
 
-// Returns the exact (non-cached/approximate) vote count for an entity
 func EntityGetVoteCount(ctx context.Context, c DbConn, targetId, targetType string) (int, error) {
 	var upvotes int
 	var downvotes int
@@ -358,9 +319,7 @@ func EntityGetVoteCount(ctx context.Context, c DbConn, targetId, targetType stri
 	return upvotes - downvotes, nil
 }
 
-// Helper function to give votes to an entity based on vote info
 func EntityGiveVotes(ctx context.Context, c DbConn, upvote bool, author, targetType, targetId string, vi *types.VoteInfo) error {
-	// Keep adding votes until, but not including vi.VoteInfo.PerUser
 	for i := 0; i < vi.PerUser; i++ {
 		_, err := c.Exec(ctx, "INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num) VALUES ($1, $2, $3, $4, $5)", author, targetId, targetType, upvote, i)
 
@@ -371,7 +330,6 @@ func EntityGiveVotes(ctx context.Context, c DbConn, upvote bool, author, targetT
 	return nil
 }
 
-// Helper function to perform post-vote tasks
 func EntityPostVote(ctx context.Context, c DbConn, targetType, targetId string) error {
 	nvc, err := EntityGetVoteCount(ctx, c, targetId, targetType)
 
@@ -379,7 +337,6 @@ func EntityPostVote(ctx context.Context, c DbConn, targetType, targetId string) 
 		return fmt.Errorf("failed to get vote count: %w", err)
 	}
 
-	// Set the approximate vote count
 	switch targetType {
 	case "bot":
 		_, err = c.Exec(ctx, "UPDATE bots SET approximate_votes = $1 WHERE bot_id = $2", nvc, targetId)

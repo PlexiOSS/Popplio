@@ -8,7 +8,6 @@ import (
 
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
-	"popplio/config"
 	"popplio/perms"
 	"popplio/state"
 
@@ -17,15 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// onGuildsReady runs the startup fixups the Rust Ready handler did.
-//
-// ORDERING (§14c): upstream started the panel API from inside the Ready handler
-// so the Discord cache was warm before the API accepted traffic. Here Popplio
-// owns the Discord connection and starts the panel from main, so the panel can
-// come up before the cache fills. The paths that read the cache (dovewing tier 1,
-// role validation in staff positions, member checks in RPC) all already treat an
-// uncached guild as "not found" and degrade rather than fail, and dovewing falls
-// through to Postgres. See CONFORMANCE.md.
 func onGuildsReady(ctx context.Context, _ *events.GuildsReady) {
 	self, ok := dclient.Get().Caches().SelfUser()
 
@@ -47,14 +37,7 @@ func onGuildsReady(ctx context.Context, _ *events.GuildsReady) {
 	}
 }
 
-// onGuildMemberJoin announces new members and bots in the main guild.
-//
-// The whole handler is a no-op outside of production.
 func onGuildMemberJoin(e *events.GuildMemberJoin) {
-	if config.CurrentEnv != config.CurrentEnvProd {
-		return
-	}
-
 	if e.GuildID != state.Config.Servers.Main {
 		return
 	}
@@ -104,9 +87,6 @@ func onGuildMemberJoin(e *events.GuildMemberJoin) {
 	}
 }
 
-// --- Command guards (§11.4) ---
-
-// mainServer requires the command to be run in the main guild.
 func mainServer(c *Ctx) error {
 	if c.GuildID != state.Config.Servers.Main {
 		return errors.New("You are not in the main server")
@@ -115,7 +95,6 @@ func mainServer(c *Ctx) error {
 	return nil
 }
 
-// staffServer requires the command to be run in the staff guild.
 func staffServer(c *Ctx) error {
 	if c.GuildID != state.Config.Servers.Staff {
 		return errors.New("You are not in the staff server")
@@ -124,7 +103,6 @@ func staffServer(c *Ctx) error {
 	return nil
 }
 
-// testingServer requires the command to be run in the testing guild.
 func testingServer(c *Ctx) error {
 	if c.GuildID != state.Config.Servers.Testing {
 		return errors.New("You are not in the testing server")
@@ -133,11 +111,7 @@ func testingServer(c *Ctx) error {
 	return nil
 }
 
-// isStaff ERRORS rather than returning false, which is how the message reaches
-// the user.
 func isStaff(c *Ctx) error {
-	// An instance owner is staff before the resync has ever written a row for
-	// them, which is what makes a fresh instance usable.
 	if perms.IsConfigOwner(c.Author.ID.String()) {
 		return nil
 	}

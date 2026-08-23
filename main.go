@@ -14,7 +14,6 @@ import (
 	poplapps "popplio/apps"
 	"popplio/arcadia"
 	"popplio/bgtasks"
-	"popplio/config"
 	"popplio/constants"
 	"popplio/infernoplex"
 	"popplio/notifications/votereminders"
@@ -87,7 +86,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 
 		if origin == "" {
-			origin = state.Config.Sites.Frontend.Parse()
+			origin = state.Config.Sites.Frontend
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -112,7 +111,7 @@ func main() {
 	var err error
 
 	docs.DocsSetupData = &docs.SetupData{
-		URL:         state.Config.Sites.API.Parse(),
+		URL:         state.Config.Sites.API,
 		ErrorStruct: types.ApiError{},
 		Info: docs.Info{
 			Title:          "Omniplex API",
@@ -204,19 +203,10 @@ func main() {
 	})
 
 	r.Get("/docs/{srv}", func(w http.ResponseWriter, r *http.Request) {
-		var docMap map[string]string
-		if config.CurrentEnv != config.CurrentEnvProd {
-			docMap = map[string]string{
-				"popplio":     "/openapi",
-				"arcadia":     "https://staging--panel-api.omniplex.gg/openapi",
-				"infernoplex": "https://infernoplex-staging.omniplex.gg/openapi",
-			}
-		} else {
-			docMap = map[string]string{
-				"popplio":     "/openapi",
-				"arcadia":     "https://prod--panel-api.omniplex.gg/openapi",
-				"infernoplex": "https://infernoplex.omniplex.gg/openapi",
-			}
+		docMap := map[string]string{
+			"popplio":     "/openapi",
+			"arcadia":     "https://prod--panel-api.omniplex.gg/openapi",
+			"infernoplex": "https://infernoplex.omniplex.gg/openapi",
 		}
 
 		srv := chi.URLParam(r, "srv")
@@ -281,7 +271,7 @@ func main() {
 			}
 		}()
 
-		ln, err := upg.Listen("tcp", state.Config.Meta.Port.Parse())
+		ln, err := upg.Listen("tcp", state.Config.Meta.Port)
 
 		if err != nil {
 			state.Logger.Fatal("Error binding to socket", zap.Error(err))
@@ -308,7 +298,7 @@ func main() {
 		<-upg.Exit()
 	} else {
 		state.Logger.Warn("Tableflip not supported on this platform, this is not a production-capable server.")
-		err = http.ListenAndServe(state.Config.Meta.Port.Parse(), r)
+		err = http.ListenAndServe(state.Config.Meta.Port, r)
 
 		if err != nil {
 			state.Logger.Fatal("Error binding to socket", zap.Error(err))

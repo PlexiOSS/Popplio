@@ -296,7 +296,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	botAddedEmbed := discord.Embed{
-		URL:   state.Config.Sites.Frontend.Parse() + "/bots/" + payload.BotID,
+		URL:   state.Config.Sites.Frontend + "/bots/" + payload.BotID,
 		Title: "New Bot Added",
 		Fields: []discord.EmbedField{
 			{
@@ -313,7 +313,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				Name: "Owner",
 				Value: func() string {
 					if payload.TeamOwner != "" {
-						return fmt.Sprintf("[Team %s](%s/teams/%s)", payload.TeamOwner, state.Config.Sites.Frontend.Parse(), payload.TeamOwner)
+						return fmt.Sprintf("[Team %s](%s/teams/%s)", payload.TeamOwner, state.Config.Sites.Frontend, payload.TeamOwner)
 					}
 					return fmt.Sprintf("<@%s>", d.Auth.ID)
 				}(),

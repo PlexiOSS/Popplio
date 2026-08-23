@@ -41,9 +41,9 @@ func (s *Server) hello(ctx context.Context, q *types.QHello) (response, error) {
 		AuthData:    authData,
 		StaffMember: staffMember,
 		CoreConstants: types.CoreConstants{
-			FrontendURL:    state.Config.Sites.Frontend.Parse(),
-			InfernoplexURL: state.Config.Sites.Infernoplex.Parse(),
-			PopplioURL:     state.Config.Sites.API.Parse(),
+			FrontendURL:    state.Config.Sites.Frontend,
+			InfernoplexURL: state.Config.Sites.Infernoplex,
+			PopplioURL:     state.Config.Sites.API,
 			Servers:        serverIDs(),
 		},
 		TargetTypes: types.TargetTypeVariants,

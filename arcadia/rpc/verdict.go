@@ -75,7 +75,7 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
 			Title:       " Approved!",
-			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend.Parse(), m.TargetID),
+			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID),
 			Description: fmt.Sprintf("<@!%s> has approved <@!%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				{Name: "Feedback", Value: m.Reason, Inline: impls.InlineTrue()},
@@ -189,7 +189,7 @@ func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
 			Title:       "Server Approved",
-			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend.Parse(), m.TargetID),
+			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID),
 			Description: fmt.Sprintf("<@!%s> has approved server `%s`", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				{Name: "Feedback", Value: m.Reason, Inline: impls.InlineTrue()},
@@ -255,7 +255,7 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
 			Title:       " Denied!",
-			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend.Parse(), m.TargetID),
+			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID),
 			Description: fmt.Sprintf("<@%s> has denied <@%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				reasonField(m.Reason),
@@ -313,7 +313,7 @@ func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
 			Title:       "Server Denied",
-			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend.Parse(), m.TargetID),
+			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID),
 			Description: fmt.Sprintf("<@%s> has denied server `%s`", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				reasonField(m.Reason),

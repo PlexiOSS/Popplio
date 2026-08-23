@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 	state.Logger = zap.NewNop()
 	state.Config = &config.Config{
 		Arcadia: config.Arcadia{
-			ServerPort: config.Differs[int]{Staging: 3011, Prod: 3010},
+			ServerPort: 3010,
 		},
 	}
 
@@ -217,11 +217,7 @@ func TestMaxBodySize(t *testing.T) {
 func TestListenAddress(t *testing.T) {
 	s := New()
 
-	want := "0.0.0.0:3011"
-
-	if config.CurrentEnv == config.CurrentEnvProd {
-		want = "0.0.0.0:3010"
-	}
+	want := "0.0.0.0:3010"
 
 	if s.http.Addr != want {
 		t.Errorf("Addr = %q, want %q", s.http.Addr, want)

@@ -20,7 +20,6 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/sharding"
-	"github.com/disgoorg/snowflake/v2"
 	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	hredis "github.com/infinitybotlist/eureka/hotcache/redis"
 	"github.com/infinitybotlist/eureka/ratelimit"
@@ -58,7 +57,6 @@ var (
 )
 
 func nonVulgar(fl validator.FieldLevel) bool {
-	// get the field value
 	switch fl.Field().Kind() {
 	case reflect.String:
 		value := fl.Field().String()
@@ -80,27 +78,6 @@ func Setup() {
 	Validator.RegisterValidation("nospaces", snippets.ValidatorNoSpaces)
 	Validator.RegisterValidation("https", snippets.ValidatorIsHttps)
 	Validator.RegisterValidation("httporhttps", snippets.ValidatorIsHttpOrHttps)
-
-	// Like "required", but not enforced in "dev" — for fields (Arcadia's
-	// staff server channels/roles/IDs) that only matter once Arcadia is
-	// actually pointed at a real staff Discord server, which a local
-	// checkout usually isn't.
-	Validator.RegisterValidation("requirednotdev", func(fl validator.FieldLevel) bool {
-		if config.CurrentEnv == config.CurrentEnvDev {
-			return true
-		}
-		return !fl.Field().IsZero()
-	})
-
-	// One call per instantiation of config.Differs[T] actually used in
-	// Config, generics make each a distinct type as far as the validator
-	// is concerned.
-	Validator.RegisterStructValidation(
-		config.ValidateDiffers,
-		config.Differs[string]{},
-		config.Differs[int]{},
-		config.Differs[[]snowflake.ID]{},
-	)
 
 	genconfig.GenConfig(config.Config{})
 
@@ -128,7 +105,7 @@ func Setup() {
 		panic(err)
 	}
 
-	rOptions, err := redis.ParseURL(Config.Meta.RedisURL.Parse())
+	rOptions, err := redis.ParseURL(Config.Meta.RedisURL)
 
 	if err != nil {
 		panic(err)
@@ -136,8 +113,8 @@ func Setup() {
 
 	Redis = redis.NewClient(rOptions)
 
-	Discord, err = disgo.New(Config.DiscordAuth.Token.Parse(),
-		bot.WithRestClientConfigOpts(ProxyRestOpts(Config.DiscordAuth.Token.Parse())...),
+	Discord, err = disgo.New(Config.DiscordAuth.Token,
+		bot.WithRestClientConfigOpts(ProxyRestOpts(Config.DiscordAuth.Token)...),
 		bot.WithShardManagerConfigOpts(
 			sharding.WithShardIDs(0, 1),
 			sharding.WithShardCount(2),
@@ -157,26 +134,7 @@ func Setup() {
 			OnGuildsReady: func(event *events.GuildsReady) {
 				Logger.Info("All guilds ready", zap.Int("shardID", event.ShardID()))
 
-				// Popplio runs sharded (OpenShardManager), not a single
-				// gateway (OpenGateway) — SetPresence only ever checks
-				// Discord's single-gateway field and unconditionally
-				// returns "no gateway configured" on a sharded bot, no
-				// matter how ready the shards are. GuildsReady also fires
-				// once per shard, not once globally, so set presence per
-				// shard via SetPresenceForShard using the event's shard ID.
-				//
-				// Only the prod instance is allowed to broadcast this —
-				// staging/beta/dev must never be able to show up as the
-				// bot's live presence, whether that's because of a
-				// misconfigured shared token or someone running a local
-				// checkout against real credentials. Non-prod shards simply
-				// leave the presence untouched instead of overwriting it.
-				if config.CurrentEnv != config.CurrentEnvProd {
-					Logger.Info("Skipping presence update: not the prod instance", zap.String("env", config.CurrentEnv), zap.Int("shardID", event.ShardID()))
-					return
-				}
-
-				if presenceErr := Discord.SetPresenceForShard(Context, event.ShardID(), gateway.WithWatchingActivity(Config.Sites.Frontend.Parse())); presenceErr != nil {
+				if presenceErr := Discord.SetPresenceForShard(Context, event.ShardID(), gateway.WithWatchingActivity(Config.Sites.Frontend)); presenceErr != nil {
 					Logger.Error("error while setting presence", zap.Error(presenceErr), zap.Int("shardID", event.ShardID()))
 				}
 			},
@@ -196,7 +154,6 @@ func Setup() {
 
 	Logger = snippets.CreateZap()
 
-	// Load dovewing state
 	BaseDovewingState = dovewing.BaseState{
 		Pool:    Pool,
 		Logger:  Logger,
@@ -225,14 +182,7 @@ func Setup() {
 		},
 	})
 
-	c, err := paypal.NewClient(Config.Meta.PaypalClientID.Parse(), Config.Meta.PaypalSecret.Parse(), func() string {
-		// Only real production talks to Paypal's live API — staging and dev
-		// both use the sandbox, since both use test keys.
-		if config.CurrentEnv == config.CurrentEnvProd {
-			return paypal.APIBaseLive
-		}
-		return paypal.APIBaseSandBox
-	}())
+	c, err := paypal.NewClient(Config.Meta.PaypalClientID, Config.Meta.PaypalSecret, paypal.APIBaseLive)
 
 	if err != nil {
 		Logger.Error("Paypal setup failed, disabling paypal support", zap.Error(err))
@@ -246,18 +196,13 @@ func Setup() {
 		}
 	}
 
-	stripe.Key = Config.Meta.StripeSecretKey.Parse()
+	stripe.Key = Config.Meta.StripeSecretKey
 
 	go func() {
-		// A transient failure here (Stripe API hiccup, network blip) should
-		// disable Stripe webhook support, not take down the whole process —
-		// same graceful-degradation treatment as the Paypal setup above.
 
-		// Get all current webhooks
 		i := webhookendpoint.List(&stripe.WebhookEndpointListParams{})
 
 		for i.Next() {
-			// Delete it
 			_, err := webhookendpoint.Del(i.WebhookEndpoint().ID, nil)
 
 			if err != nil {
@@ -266,9 +211,8 @@ func Setup() {
 			}
 		}
 
-		// Add/update stripe webhook
 		params := &stripe.WebhookEndpointParams{
-			URL: stripe.String(Config.Sites.API.Parse() + "/payments/stripe/webhook"),
+			URL: stripe.String(Config.Sites.API + "/payments/stripe/webhook"),
 			EnabledEvents: stripe.StringSlice([]string{
 				"checkout.session.completed",
 				"checkout.session.async_payment_succeeded",
@@ -285,7 +229,6 @@ func Setup() {
 
 		StripeWebhSecret = wh.Secret
 
-		// Next fetch the IP list
 		resp, err := http.Get("https://stripe.com/files/ips/ips_webhooks.txt")
 
 		if err != nil {
@@ -302,10 +245,6 @@ func Setup() {
 			return
 		}
 
-		// Split the body into lines, dropping empty ones. Built into a new
-		// slice rather than filtered in place — mutating StripeWebhIPList
-		// while ranging over its original indices would skip the element
-		// that shifts into each removed slot.
 		lines := strings.Split(string(body), "\n")
 		ipList := make([]string, 0, len(lines))
 		for _, v := range lines {
