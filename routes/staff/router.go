@@ -6,6 +6,7 @@ package staff
 
 import (
 	"popplio/routes/staff/endpoints/get_app_list"
+	"popplio/routes/staff/endpoints/get_public_team"
 	"popplio/routes/staff/endpoints/get_shop_purchases"
 	"popplio/routes/staff/endpoints/get_staff_permissions"
 	"popplio/routes/staff/endpoints/manage_app"
@@ -55,5 +56,13 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.PATCH,
 		Docs:    manage_app.Docs,
 		Handler: manage_app.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/team",
+		OpId:    "get_public_team",
+		Method:  uapi.GET,
+		Docs:    get_public_team.Docs,
+		Handler: get_public_team.Route,
 	}.Route(r)
 }
