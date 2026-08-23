@@ -38,24 +38,20 @@ without a default in the sample (tokens, client secrets, API keys) are
 required and Popplio will refuse to start without them (`validator` tags
 enforce this at startup).
 
-### Environment (staging, production, and dev)
+### Environment
 
-Many config keys are split into `staging`/`prod` pairs (see the `Differs[T]`
-wrapper in `config/config.go`). Which one is actually used is controlled by
-`config/current-env`, a plain text file embedded into the binary at build
-time (`staging`, `prod`, or `dev`), not an environment variable. Edit that
-file and rebuild to switch environments.
+Popplio runs as a single deployment, there is no build-time
+staging/beta/dev split. Every config key takes one plain value; there's
+nothing to keep in sync across environment variants. For local development,
+just point `config.yaml` at your own Discord bot application(s)
+(`discord_auth.token`, `arcadia.token`) and your own database.
 
-Every `Differs[T]` key also accepts an optional `dev` value alongside
-`staging`/`prod`, only consulted when `current-env` is `dev`, and only used
-if actually set — an unset `dev` value falls back to `staging`. This exists
-so a local checkout can run against things like a personal Discord bot
-application (`discord_auth.token`, `arcadia.token`) without touching the
-real staging config, and without needing to set every single `dev` key just
-to override the one or two that matter for a given local setup. Background
-tasks that talk to real guilds (Arcadia's staff bot tasks, member-join
-announcements) and anything gated to "real production" treat `dev` the same
-as `staging` — only `current-env: prod` runs them.
+The one thing that still varies per *caller* rather than per deployment is
+the Bug Hunter-only sign-in restriction: it checks the calling frontend's
+OAuth `redirect_uri` (or, for already-authenticated requests, the `Origin`
+header) against the configured production frontend (`sites.frontend`), so a
+non-production frontend pointed at the same shared backend can still be
+restricted to Bug Hunters without needing a separate deployment.
 
 ## Building and running
 
@@ -70,7 +66,7 @@ or during development:
 go run .
 ```
 
-Popplio listens on the port configured in `meta.port` (per environment).
+Popplio listens on the port configured in `meta.port`.
 On Linux and macOS it uses [tableflip](https://github.com/cloudflare/tableflip)
 for zero-downtime restarts on `SIGHUP`; on other platforms (including
 Windows) it falls back to a plain `http.ListenAndServe` with a startup
@@ -97,7 +93,7 @@ assuming a package exists.
 | `routes/` | Public API route handlers, one package per resource (bots, servers, teams, packs, users, votes, webhooks, ...) |
 | `types/` | Request/response types shared across routes |
 | `state/` | Process-wide globals (Postgres pool, Redis client, Discord session, logger, parsed config) initialised once at startup |
-| `config/` | Configuration schema and the embedded `current-env` file |
+| `config/` | Configuration schema (`config.go`) |
 | `perms/` | The permission model: the declared catalogues of flat permissions (`review_entities`, `edit_team_members`), resolution, checking, and the staff permission loader |
 | `teams/` | Team/entity permission resolution (built on `perms/`) |
 | `webhooks/` | Outbound webhook delivery |
@@ -111,11 +107,11 @@ assuming a package exists.
 ## API documentation
 
 Live OpenAPI docs are served by the running instance at `/docs`
-(production: https://spider.omniplex.gg/docs).
+(production: https://api.omniplex.gg/docs).
 
 ## Working with Discord users
 
 Always fetch Discord user data through `dovewing.GetUser`, not a raw
-Discord API call it transparently handles gateway cache, Redis, and
+Discord API call, it transparently handles gateway cache, Redis, and
 in-memory caching, and every other part of the codebase assumes user data
 went through it.

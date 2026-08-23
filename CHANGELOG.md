@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `GET /staff/team` — a public, unauthenticated staff roster for the
+  website's team page: user ID, username, avatar, and the position(s) each
+  member holds (name/icon/rank only). Unlike everything else under
+  `/staff/*` this deliberately skips auth, same reasoning as the existing
+  `/staff/meta/permissions`: it's who holds a title, not what any
+  individual permission grant is. Permissions, disciplinaries, and
+  sync/security metadata never leave the staff panel.
+- `GET /list/stats` now reports server counts alongside the existing bot
+  ones: `total_servers`, `total_approved_servers`,
+  `total_certified_servers`, `total_pending_servers`,
+  `total_denied_servers`, `total_vote_banned_servers`. The endpoint had
+  bot review-pipeline and vote-ban counts from the start but never grew a
+  server equivalent, so the moderation transparency page could only ever
+  show half the picture.
+
+### Changed
+
+- Popplio no longer has a build-time `staging`/`beta`/`dev` environment —
+  `config.Differs[T]` and the `//go:embed current-env` mechanism are gone,
+  and every config value that used to need up to four variants
+  (`token`, `redis_url`, port numbers, PayPal/Stripe keys, etc.) is now a
+  single plain value. Staging and beta/dev instances of Popplio, Arcadia,
+  and Infernoplex were deprecated; keeping a whole generic config layer
+  and a dozen `if CurrentEnv == ...` branches around for environments that
+  no longer exist was just a trap for the next person who forgets to keep
+  all four variants of a secret in sync. The "only run this in prod"
+  guards (Discord presence, background tasks, vote reminders) are gone
+  too — there's only one deployment now, so they were permanently true.
+  PayPal always talks to the live API rather than switching to sandbox
+  outside of prod, for the same reason.
+- The Bug Hunter-only sign-in restriction (previously scoped to
+  `CurrentEnv == beta || staging`) is now scoped by which frontend is
+  actually calling, not which binary is running: it compares the OAuth
+  `redirect_uri` (at login) or the request's `Origin` header (on every
+  authenticated request) against the configured production frontend.
+  Multiple frontends (a staging/beta site, local dev) can still point at
+  the one shared backend; this is what actually varies per request now
+  that the backend itself doesn't.
+
+### Removed
+
+- The `staging`/`beta`/`dev` config sections (and `config.Differs[T]`
+  itself) — see Changed above. `config.yaml` now takes a single value per
+  field instead of nesting one per environment; `config.yaml.sample`
+  regenerates itself flat the next time the binary starts.
+- `validators.StagingCheckSensitive`, the payments perk-gating check that
+  used to require a special staff permission to touch PayPal/Stripe
+  outside of prod (since staging used test keys). There's only one set of
+  keys now, so the thing it was protecting against can't happen anymore.
+
 ## [1.3.3] - 2026-08-22
 
 ### Added
