@@ -152,7 +152,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				Title: "Application Approved",
 				// The legacy SvelteKit panel (Sites.Panel + "/panel/apps") is
 				// superseded by Omniplex's own /admin/applications.
-				URL:         state.Config.Sites.Frontend.Production() + "/admin/applications",
+				URL:         state.Config.Sites.Frontend + "/admin/applications",
 				Description: fmt.Sprintf("<@%s> has approved an application by <@%s> for the position of %s", d.Auth.ID, app.UserID, app.Position),
 				Color:       0x00ff00,
 				Fields: []discord.EmbedField{
@@ -205,7 +205,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				Title: "Application Denied",
 				// The legacy SvelteKit panel (Sites.Panel + "/panel/apps") is
 				// superseded by Omniplex's own /admin/applications.
-				URL:         state.Config.Sites.Frontend.Production() + "/admin/applications",
+				URL:         state.Config.Sites.Frontend + "/admin/applications",
 				Description: fmt.Sprintf("<@%s> has denied an application by <@%s> for the position of %s", d.Auth.ID, app.UserID, app.Position),
 				Color:       0xff0000,
 				Fields: []discord.EmbedField{

@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"popplio/config"
 	"popplio/infernoplex/bot"
 	"popplio/infernoplex/dclient"
 	"popplio/infernoplex/sorbet"
@@ -39,11 +38,7 @@ func Start(parent context.Context) *Infernoplex {
 		}
 	}()
 
-	if config.CurrentEnv == config.CurrentEnvProd {
-		i.tasks = tasks.Start(ctx)
-	} else {
-		state.Logger.Info("Skipping Infernoplex background tasks outside of production", zap.String("env", config.CurrentEnv))
-	}
+	i.tasks = tasks.Start(ctx)
 
 	return i
 }

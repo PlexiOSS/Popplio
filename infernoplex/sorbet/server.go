@@ -29,7 +29,7 @@ func New() *Server {
 	handler := recoverMiddleware(loggingMiddleware(corsMiddleware(maxBodyMiddleware(mux))))
 
 	s.http = &http.Server{
-		Addr:              fmt.Sprintf("127.0.0.1:%d", state.Config.Infernoplex.ServerPort.Parse()),
+		Addr:              fmt.Sprintf("127.0.0.1:%d", state.Config.Infernoplex.ServerPort),
 		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       30 * time.Second,

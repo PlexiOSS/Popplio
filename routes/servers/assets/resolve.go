@@ -84,7 +84,7 @@ func CheckBotGuildPresence(ctx context.Context, guildID string) BotGuildPresence
 
 	cli := http.Client{Timeout: 5 * time.Second}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", state.Config.Sites.Infernoplex.Parse()+"/", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", state.Config.Sites.Infernoplex+"/", bytes.NewReader(reqBody))
 
 	if err != nil {
 		return BotGuildPresence{}

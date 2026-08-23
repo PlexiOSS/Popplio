@@ -15,7 +15,6 @@ import (
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/panel"
 	"popplio/arcadia/tasks"
-	"popplio/config"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -57,11 +56,7 @@ func Start(parent context.Context) *Arcadia {
 		}
 	}()
 
-	if config.CurrentEnv == config.CurrentEnvProd {
-		a.tasks = tasks.Start(ctx)
-	} else {
-		state.Logger.Info("Skipping arcadia background tasks outside of production", zap.String("env", config.CurrentEnv))
-	}
+	a.tasks = tasks.Start(ctx)
 
 	return a
 }

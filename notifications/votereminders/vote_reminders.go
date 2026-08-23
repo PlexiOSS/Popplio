@@ -1,13 +1,8 @@
 // Package votereminders notifies users when they are able to vote again.
-//
-// The reminder loop only runs in production: staging shares the same user
-// rows, so letting it run there would deliver duplicate reminders to real
-// users.
 package votereminders
 
 import (
 	"fmt"
-	"popplio/config"
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
@@ -19,11 +14,6 @@ import (
 )
 
 func VrLoop() {
-	if config.CurrentEnv != config.CurrentEnvProd {
-		state.Logger.Info("Skipping vrCheck due to non-prod environment")
-		return
-	}
-
 	for {
 		err := vrCheck()
 

@@ -94,7 +94,7 @@ func cmdStaffGuide() *Command {
 		Run: func(c *Ctx) error {
 			return c.Say(fmt.Sprintf(
 				"The staff guide can be found at %s/staff/guide. Please **do not** bookmark this page as the URL may change in the future",
-				state.Config.Sites.Frontend.Parse()))
+				state.Config.Sites.Frontend))
 		},
 	}
 }

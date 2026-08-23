@@ -118,8 +118,9 @@ func TestGoldenPanelStrings(t *testing.T) {
 		"Invalid method",
 		"Path must start with /",
 
-		// Hello instance config.
-		"Arcadia Staging Panel Instance",
+		// Hello instance config. Only one deployed instance exists now
+		// (staging/beta/dev were deprecated), so this is permanently
+		// "Production".
 		"Arcadia Production Panel Instance",
 	}
 

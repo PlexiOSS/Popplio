@@ -16,12 +16,6 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
-// Staff tooling that acts on the platform: the staff roster, a bot's Discord
-// roles, forcing a dovewing refresh, and the catalogue of RPC actions.
-//
-// The RPC actions themselves are driven from interactions.go, which builds a
-// modal per method; this file only lists what exists.
-
 func cmdStaff() *Command {
 	return &Command{
 		Name:        "staff",
@@ -35,9 +29,7 @@ func cmdStaff() *Command {
 				Name:        "list",
 				Category:    "Staff",
 				Description: "Get the list of staff members",
-				// DISABLED upstream: the body is commented out and the command
-				// always errors. Reproduced as a disabled stub.
-				Run: nil,
+				Run:         nil,
 			},
 			{
 				Name:        "guildlist",
@@ -229,8 +221,6 @@ func cmdRefresh() *Command {
 				return err
 			}
 
-			// The command uses a limit of 3; the weekly task uses 0. See
-			// CONFORMANCE.md.
 			stats, err := tasks.QueryTopReviewers(c.Context, 3)
 
 			if err != nil {

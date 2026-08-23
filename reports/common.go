@@ -33,7 +33,7 @@ type TargetInfo struct {
 // able to report something that's already banned, e.g. to add detail or
 // flag a fresh violation.
 func GetTargetInfo(ctx context.Context, c DbConn, targetType, targetId string) (*TargetInfo, error) {
-	frontend := state.Config.Sites.Frontend.Parse()
+	frontend := state.Config.Sites.Frontend
 
 	switch targetType {
 	case "bot":

@@ -1,15 +1,3 @@
-// Package dclient owns the staff bot's Discord connection.
-//
-// Arcadia runs its own gateway connection under its own bot identity, separate
-// from Popplio's. Keeping the client here rather than in popplio/state means:
-//
-//   - the staff bot's presence, prefix and slash commands belong to the Arcadia
-//     application, so mod-log embeds and audit-log entries are attributed to it
-//   - Popplio's session keeps its narrower intents; only this client asks for the
-//     staff-side ones
-//   - either half can be restarted without dropping the other's gateway
-//
-// Everything in arcadia/ talks to Discord through Get().
 package dclient
 
 import (
@@ -17,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"popplio/config"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo"
@@ -27,13 +14,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// client is the staff bot's Discord client. It is nil until Setup runs.
 var client bot.Client
 
-// Get returns the staff bot's Discord client.
-//
-// It panics if called before Setup, which would be a wiring mistake rather than
-// a runtime condition: every caller runs after arcadia.Start.
 func Get() bot.Client {
 	if client == nil {
 		panic("arcadia: Discord client used before dclient.Setup")
@@ -41,17 +23,12 @@ func Get() bot.Client {
 	return client
 }
 
-// Ready reports whether the client has been built, so callers on Popplio's side
-// can degrade instead of panicking if the staff bot failed to start.
 func Ready() bool {
 	return client != nil
 }
 
-// Setup builds the staff bot client and opens its gateway connection.
-//
-// listeners are attached before connecting so no early event is missed.
 func Setup(ctx context.Context, listeners ...bot.EventListener) error {
-	token := state.Config.Arcadia.Token.Parse()
+	token := state.Config.Arcadia.Token
 
 	if token == "" {
 		return errors.New("arcadia.token is empty: the staff bot needs its own Discord token")
@@ -64,9 +41,6 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 			gateway.WithCompress(true),
 		),
 		bot.WithCacheConfigOpts(
-			// Guilds, members and presences back dovewing's live tier and the
-			// member checks in the RPC layer; roles back the staff position
-			// validation in the panel.
 			cache.WithCaches(cache.FlagGuilds | cache.FlagMembers | cache.FlagPresences | cache.FlagRoles),
 		),
 		bot.WithEventListeners(listeners...),
@@ -84,14 +58,8 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 
 	client = c
 
-	// Only the prod instance is allowed to broadcast a live-looking presence,
-	// same reasoning as Popplio's main bot: staging/beta/dev must never show
-	// up as if they were the real staff bot, whether from a shared token or
-	// a local checkout pointed at real credentials.
-	if config.CurrentEnv == config.CurrentEnvProd {
-		if err := c.SetPresence(ctx, gateway.WithWatchingActivity("the review queue")); err != nil {
-			state.Logger.Error("Failed to set staff bot presence", zap.Error(err))
-		}
+	if err := c.SetPresence(ctx, gateway.WithWatchingActivity("the review queue")); err != nil {
+		state.Logger.Error("Failed to set staff bot presence", zap.Error(err))
 	}
 
 	state.Logger.Info("Staff bot connected", zap.String("applicationID", c.ApplicationID().String()))
@@ -99,10 +67,6 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 	return nil
 }
 
-// intents returns the gateway intents the staff bot needs.
-//
-// Message Content is privileged and only requested when prefix commands are
-// enabled; slash commands are the primary interface and need none of it.
 func intents() gateway.Intents {
 	i := gateway.IntentGuilds |
 		gateway.IntentGuildMembers |
@@ -116,7 +80,6 @@ func intents() gateway.Intents {
 	return i
 }
 
-// Close shuts the gateway connection down.
 func Close(ctx context.Context) {
 	if client == nil {
 		return

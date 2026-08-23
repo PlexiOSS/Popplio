@@ -7,10 +7,10 @@ import (
 	"net/url"
 
 	"popplio/api/resp"
-	"popplio/config"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
+	"popplio/validators"
 
 	"github.com/infinitybotlist/eureka/crypto"
 	"github.com/infinitybotlist/eureka/jsonimpl"
@@ -294,15 +294,22 @@ func checkBanScope(ctx context.Context, userID, scope string) error {
 	return nil
 }
 
-// checkBugHunterOnly restricts sign-in on beta and staging to Bug Hunters,
-// bypassing for instance owners so they can't lock themselves out of their
-// own environment. users.bug_hunters is kept in sync with the Bug Hunter
-// Discord role by SpecRoleSync (arcadia/tasks/discord.go), the same source
-// of truth this reads — there's a real, small staleness window right after
-// someone is first granted the role until the next sync tick (it runs every
-// 50s), same as everywhere else that column is read.
-func checkBugHunterOnly(ctx context.Context, userID string) error {
-	if config.CurrentEnv != config.CurrentEnvBeta && config.CurrentEnv != config.CurrentEnvStaging {
+// checkBugHunterOnly restricts sign-in from any non-production frontend
+// (staging/beta, or anything else whose redirect_uri isn't the real
+// production frontend) to Bug Hunters, bypassing for instance owners so
+// they can't lock themselves out of their own environment. Popplio itself
+// only runs one deployment now — this used to key off a build-time
+// CurrentEnv flag, but with a single shared backend the thing that
+// actually varies per login is which frontend initiated it, read straight
+// off the redirect_uri the caller already had to get allowlisted in
+// Config.DiscordAuth.AllowedRedirects. users.bug_hunters is kept in sync
+// with the Bug Hunter Discord role by SpecRoleSync
+// (arcadia/tasks/discord.go), the same source of truth this reads —
+// there's a real, small staleness window right after someone is first
+// granted the role until the next sync tick (it runs every 50s), same as
+// everywhere else that column is read.
+func checkBugHunterOnly(ctx context.Context, userID, redirectURI string) error {
+	if !validators.IsNonProdFrontend(redirectURI, state.Config.Sites.Frontend) {
 		return nil
 	}
 

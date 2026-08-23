@@ -46,7 +46,7 @@ func (t *TeamFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 
 			return "This team seems to be a bit mysterious indeed!"
 		}(),
-		URL:       fmt.Sprintf("%s/teams/%s", state.Config.Sites.Frontend.Production(), id),
+		URL:       fmt.Sprintf("%s/teams/%s", state.Config.Sites.Frontend, id),
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 	}, nil
@@ -81,7 +81,7 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 			AvatarURL:   pu.Avatar,
 			Name:        pu.Username,
 			Description: "This user seems to be on a distant island somewhere???",
-			URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend.Production(), id),
+			URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend, id),
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		}, nil
@@ -103,7 +103,7 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 		AvatarURL:   pu.Avatar,
 		Name:        pu.Username,
 		Description: about,
-		URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend.Production(), id),
+		URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend, id),
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 	}, nil
@@ -159,7 +159,7 @@ func (b *BotFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string)
 		Name:        botUser.Username,
 		AvatarURL:   botUser.Avatar,
 		Description: short,
-		URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend.Production(), id),
+		URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, id),
 		Author:      resolvedOwner,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,

@@ -60,7 +60,7 @@ type Solution struct {
 }
 
 func secret() []byte {
-	return []byte(state.Config.Captcha.HMACSecret.Parse())
+	return []byte(state.Config.Captcha.HMACSecret)
 }
 
 func sign(salt string, difficulty int, expires int64) string {

@@ -176,7 +176,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	if err := checkBugHunterOnly(d.Context, user.ID); err != nil {
+	if err := checkBugHunterOnly(d.Context, user.ID, req.RedirectURI); err != nil {
 		return oauthFailure(err, headers)
 	}
 

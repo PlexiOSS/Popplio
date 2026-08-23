@@ -6,7 +6,6 @@ import (
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
-	"popplio/validators"
 	"strconv"
 
 	"github.com/disgoorg/disgo/discord"
@@ -57,12 +56,6 @@ func FindPerks(ctx context.Context, payload PerkData) (*types.PaymentPlan, error
 
 	if payload.UserID == "" {
 		return nil, errors.New("internal error: user id is required")
-	}
-
-	err := validators.StagingCheckSensitive(ctx, payload.UserID)
-
-	if err != nil {
-		return nil, err
 	}
 
 	table, idCol, entityLabel, err := entityTarget(payload.ForType)
@@ -137,12 +130,6 @@ func entityTarget(forType string) (table, idCol, label string, err error) {
 }
 
 func GivePerks(ctx context.Context, perkData PerkData) error {
-	err := validators.StagingCheckSensitive(ctx, perkData.UserID)
-
-	if err != nil {
-		return err
-	}
-
 	perk, err := FindPerks(ctx, perkData)
 
 	if err != nil {

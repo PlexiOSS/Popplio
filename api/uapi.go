@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"popplio/config"
 	"popplio/constants"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
+	"popplio/validators"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -191,12 +191,14 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				return uapi.AuthData{}, uapi.DefaultResponse(http.StatusInternalServerError), false
 			}
 
-			// Beta and staging are restricted to Bug Hunters (bypassing for
-			// instance owners so they can't lock themselves out of their own
-			// environment). users.bug_hunters is kept in sync with the Bug
-			// Hunter Discord role by SpecRoleSync, same source of truth
-			// everywhere it's used.
-			if (config.CurrentEnv == config.CurrentEnvBeta || config.CurrentEnv == config.CurrentEnvStaging) &&
+			// Non-prod frontends (staging/beta/local dev, identified by the
+			// caller's Origin not matching the production frontend) are
+			// restricted to Bug Hunters (bypassing for instance owners so
+			// they can't lock themselves out of their own environment).
+			// users.bug_hunters is kept in sync with the Bug Hunter Discord
+			// role by SpecRoleSync, same source of truth everywhere it's
+			// used.
+			if validators.IsNonProdFrontend(req.Header.Get("Origin"), state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
 				return uapi.AuthData{}, uapi.HttpResponse{
 					Status: http.StatusForbidden,
