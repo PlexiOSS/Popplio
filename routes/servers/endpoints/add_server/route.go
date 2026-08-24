@@ -242,6 +242,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		); err != nil {
 			state.Logger.Error("Failed to store moderation result for new server", zap.Error(err), zap.String("serverID", payload.ServerID))
 		}
+
+		if err := moderation.FileAutoReport(d.Context, "server", payload.ServerID, result.Categories); err != nil {
+			state.Logger.Error("Failed to auto-file report for flagged server", zap.Error(err), zap.String("serverID", payload.ServerID))
+		}
 	}
 
 	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{

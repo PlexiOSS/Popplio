@@ -22,14 +22,14 @@ type Review struct {
 }
 
 type CreateReview struct {
-	Content     string `db:"content" json:"content" validate:"required,min=5,max=4000" msg:"Content must be between 5 and 4000 characters"`
+	Content     string `db:"content" json:"content" validate:"required,min=5,max=4000,noxss" msg:"Content must be between 5 and 4000 characters"`
 	Stars       int32  `db:"stars" json:"stars" validate:"required,min=1,max=5" msg:"Stars must be between 1 and 5 stars"`
 	ParentID    string `db:"parent_id" json:"parent_id" validate:"omitempty,uuid" msg:"Parent ID must be a valid UUID if provided"`
 	OwnerReview bool   `db:"owner_review" json:"owner_review" description:"Whether or not the review is an owner review"`
 }
 
 type EditReview struct {
-	Content string `db:"content" json:"content" validate:"required,min=5,max=4000" msg:"Content must be between 5 and 4000 characters"`
+	Content string `db:"content" json:"content" validate:"required,min=5,max=4000,noxss" msg:"Content must be between 5 and 4000 characters"`
 	Stars   int32  `db:"stars" json:"stars" validate:"required,min=1,max=5" msg:"Stars must be between 1 and 5 stars"`
 }
 

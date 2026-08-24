@@ -74,6 +74,7 @@ func nonVulgar(fl validator.FieldLevel) bool {
 
 func Setup() {
 	Validator.RegisterValidation("nonvulgar", nonVulgar)
+	Validator.RegisterValidation("noxss", noXSS)
 	Validator.RegisterValidation("notblank", validators.NotBlank)
 	Validator.RegisterValidation("nospaces", snippets.ValidatorNoSpaces)
 	Validator.RegisterValidation("https", snippets.ValidatorIsHttps)

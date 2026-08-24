@@ -34,6 +34,13 @@ func All() []Task {
 			Interval:    5 * time.Minute,
 			Run:         BotUptimeCheck,
 		},
+		{
+			Name:        "moderation_scan",
+			Description: "Re-running OpenAI moderation against listed bots/servers on a rolling basis and auto-filing a report on anything newly flagged",
+			Enabled:     true,
+			Interval:    30 * time.Minute,
+			Run:         ModerationScan,
+		},
 	}
 }
 

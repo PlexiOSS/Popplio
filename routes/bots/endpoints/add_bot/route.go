@@ -293,6 +293,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		); err != nil {
 			state.Logger.Error("Failed to store moderation result for new bot", zap.Error(err), zap.String("botID", payload.BotID))
 		}
+
+		if err := moderation.FileAutoReport(d.Context, "bot", payload.BotID, result.Categories); err != nil {
+			state.Logger.Error("Failed to auto-file report for flagged bot", zap.Error(err), zap.String("botID", payload.BotID))
+		}
 	}
 
 	botAddedEmbed := discord.Embed{
@@ -322,9 +326,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		},
 	}
 
-	// An EmbedResource with an empty URL is itself invalid and gets the
-	// whole message rejected (50035) — Discord wants the field omitted
-	// entirely, not present-but-empty, when there's no avatar.
 	if metadata.Avatar != "" {
 		botAddedEmbed.Thumbnail = &discord.EmbedResource{URL: metadata.Avatar}
 	}
