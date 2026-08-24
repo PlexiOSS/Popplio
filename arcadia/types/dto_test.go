@@ -78,8 +78,9 @@ func TestActionUnionsRoundTrip(t *testing.T) {
 	}
 }
 
-// Every one of the 18 RPC methods must round-trip, since rpc_logs.data stores
-// exactly this encoding.
+// Every RPC method variant must round-trip, since rpc_logs.data stores
+// exactly this encoding. The length check below keeps this test honest as
+// variants are added.
 func TestRPCMethodsRoundTrip(t *testing.T) {
 	wire := map[string]string{
 		"Claim":                    `{"Claim":{"target_id":"1","force":true}}`,
@@ -96,6 +97,10 @@ func TestRPCMethodsRoundTrip(t *testing.T) {
 		"ForceRemove":              `{"ForceRemove":{"target_id":"1","reason":"r","kick":false}}`,
 		"CertifyAdd":               `{"CertifyAdd":{"target_id":"1","reason":"r"}}`,
 		"CertifyRemove":            `{"CertifyRemove":{"target_id":"1","reason":"r"}}`,
+		"FeatureAdd":               `{"FeatureAdd":{"target_id":"1","reason":"r","time_period_hours":24}}`,
+		"FeatureRemove":            `{"FeatureRemove":{"target_id":"1","reason":"r"}}`,
+		"SpotlightAdd":             `{"SpotlightAdd":{"target_id":"1","reason":"r","time_period_hours":24}}`,
+		"SpotlightRemove":          `{"SpotlightRemove":{"target_id":"1","reason":"r"}}`,
 		"BotTransferOwnershipUser": `{"BotTransferOwnershipUser":{"target_id":"1","reason":"r","new_owner":"2"}}`,
 		"BotTransferOwnershipTeam": `{"BotTransferOwnershipTeam":{"target_id":"1","reason":"r","new_team":"2"}}`,
 		"AppBanUser":               `{"AppBanUser":{"target_id":"1","reason":"r"}}`,

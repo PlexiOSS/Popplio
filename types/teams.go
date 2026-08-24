@@ -69,7 +69,7 @@ type TeamMember struct {
 
 type CreateEditTeam struct {
 	Name       string    `json:"name" validate:"required,nonvulgar,min=3,max=32" msg:"Team name must be between 3 and 32 characters long"`
-	Short      *string   `json:"short" validate:"omitempty,max=150" msg:"Short description must be a maximum of 150 characters"` // impld
+	Short      *string   `json:"short" validate:"omitempty,max=150,noxss" msg:"Short description must be a maximum of 150 characters"` // impld
 	Tags       *[]string `json:"tags" validate:"omitempty,unique,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There may a maximum of 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	ExtraLinks *[]Link   `json:"extra_links" description:"The team's links that it wishes to advertise"`
 	NSFW       *bool     `json:"nsfw" description:"Whether the team is NSFW (primarily makes NSFW content)"`

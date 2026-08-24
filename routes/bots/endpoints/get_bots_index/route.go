@@ -102,6 +102,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing featured bots", err)
 	}
 
+	// Spotlight Bots (set by staff, distinct from shop-purchased Featured)
+	spotlightRows, err := state.Pool.Query(d.Context, "SELECT "+indexBotCols+" FROM bots WHERE (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9")
+	if err != nil {
+		return resp.Err("Error while getting spotlight bots", err)
+	}
+	listIndex.Spotlight, err = processRow(d.Context, spotlightRows)
+	if err != nil {
+		return resp.Err("Error while processing spotlight bots", err)
+	}
+
 	// Packs
 	rows, err := state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs ORDER BY created_at DESC LIMIT 12")
 

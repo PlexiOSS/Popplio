@@ -143,7 +143,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	{
 		ID:          StaffFeatureEntities,
 		Name:        "Feature Entities",
-		Description: "Feature a bot or server on the home page for a given time period, or remove it early.",
+		Description: "Feature or spotlight a bot or server on the home page for a given time period, or remove it early.",
 		Category:    "Content Management",
 	},
 	{

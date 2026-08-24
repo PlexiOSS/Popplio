@@ -28,6 +28,7 @@ type IndexServer struct {
 	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge" description:"Whether the server's owner has purchased the cosmetic supporter badge from the shop"`
 	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the server appears in the home page's Spotlight section until this time"`
 }
 
 // @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users
@@ -70,6 +71,7 @@ type Server struct {
 	SupporterBadge         bool               `db:"supporter_badge" json:"supporter_badge" description:"Whether the server's owner has purchased the cosmetic supporter badge from the shop"`
 	BoostedUntil           pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
 	FeaturedUntil          pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
+	SpotlightedUntil       pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the server appears in the home page's Spotlight section until this time"`
 	VoteBlitzUntil         pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the server's vote cooldown is halved until this time"`
 	DiscordNSFWLevel       int                `db:"discord_nsfw_level" json:"discord_nsfw_level" description:"Discord's own guild-level NSFW classification, synced periodically by the tracking bot (0=default, 1=explicit, 2=safe, 3=age-restricted)"`
 	NSFWChannelCount       int                `db:"nsfw_channel_count" json:"nsfw_channel_count" description:"How many of the server's channels currently have Discord's own age-restricted flag set, synced periodically by the tracking bot. Compare against nsfw to catch a server with gated NSFW content that isn't tagged nsfw, or vice versa"`
@@ -162,6 +164,7 @@ type ListIndexServer struct {
 	RecentlyAdded []IndexServer `json:"recently_added" description:"The recently added servers, usually limited to 12"`
 	TopVoted      []IndexServer `json:"top_voted" description:"The top voted servers, usually limited to 12"`
 	Featured      []IndexServer `json:"featured" description:"Servers with an active featured_until from a shop purchase"`
+	Spotlight     []IndexServer `json:"spotlight" description:"Servers with an active spotlighted_until, set by staff"`
 }
 
 type RandomServers struct {

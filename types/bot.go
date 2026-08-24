@@ -33,6 +33,7 @@ type IndexBot struct {
 	SupporterBadge   bool                    `db:"supporter_badge" json:"supporter_badge" description:"Whether the bot's owner has purchased the cosmetic supporter badge from the shop"`
 	BoostedUntil     pgtype.Timestamptz      `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the bot gets priority placement in listings until this time"`
 	FeaturedUntil    pgtype.Timestamptz      `db:"featured_until" json:"featured_until" description:"If set and in the future, the bot appears in the home page's Featured section until this time"`
+	SpotlightedUntil pgtype.Timestamptz      `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the bot appears in the home page's Spotlight section until this time"`
 	VoteBlitzUntil   pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
 }
 
@@ -99,6 +100,7 @@ type Bot struct {
 	SupporterBadge       bool                    `db:"supporter_badge" json:"supporter_badge" description:"Whether the bot's owner has purchased the cosmetic supporter badge from the shop"`
 	BoostedUntil         pgtype.Timestamptz      `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the bot gets priority placement in listings until this time"`
 	FeaturedUntil        pgtype.Timestamptz      `db:"featured_until" json:"featured_until" description:"If set and in the future, the bot appears in the home page's Featured section until this time"`
+	SpotlightedUntil     pgtype.Timestamptz      `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the bot appears in the home page's Spotlight section until this time"`
 	VoteBlitzUntil       pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
 	ModerationFlagged    bool                    `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the bot's short/long description at submission time. A signal for reviewers, not a verdict"`
 	ModerationCategories []string                `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
@@ -151,6 +153,7 @@ type ListIndexBot struct {
 	RecentlyAdded []IndexBot `json:"recently_added" description:"The recently added bots"`
 	TopVoted      []IndexBot `json:"top_voted" description:"The top voted bots"`
 	Featured      []IndexBot `json:"featured" description:"Bots with an active featured_until from a shop purchase"`
+	Spotlight     []IndexBot `json:"spotlight" description:"Bots with an active spotlighted_until, set by staff"`
 }
 
 type DiscordBotMeta struct {

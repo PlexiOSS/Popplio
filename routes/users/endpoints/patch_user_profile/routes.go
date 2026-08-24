@@ -59,6 +59,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("About me is over 1000 characters!")
 	}
 
+	if state.ContainsSuspiciousMarkup(profile.About) {
+		return resp.BadRequest("About me contains markup that isn't allowed (scripts, event handlers, or similar)")
+	}
+
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
