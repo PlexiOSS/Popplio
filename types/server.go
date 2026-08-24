@@ -113,8 +113,8 @@ type FlatSticker struct {
 // @ci table=servers, unfilled=1
 type CreateServer struct {
 	Invite        string      `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS Discord invite URL"`
-	Short         string      `db:"short" json:"short" validate:"required,min=30,max=150" msg:"Short description must be between 30 and 150 characters"`
-	Long          string      `db:"long" json:"long" validate:"required,min=500" msg:"Long description must be at least 500 characters"`
+	Short         string      `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"`
+	Long          string      `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`
 	ExtraLinks    []Link      `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`
 	Tags          []string    `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	NSFW          bool        `db:"nsfw" json:"nsfw"`
@@ -128,9 +128,9 @@ type CreateServer struct {
 }
 
 type ServerSettingsUpdate struct {
-	Short                  string   `db:"short" json:"short" validate:"required,min=30,max=150" msg:"Short description must be between 30 and 150 characters"` // impld
-	Long                   string   `db:"long" json:"long" validate:"required,min=500" msg:"Long description must be at least 500 characters"`                 // impld
-	ExtraLinks             []Link   `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                   // Impld
+	Short                  string   `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
+	Long                   string   `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
+	ExtraLinks             []Link   `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
 	State                  string   `db:"state" json:"state" validate:"required,oneof=public private unlisted defunct" msg:"State must be one of public, private, unlisted or defunct"`
 	Tags                   []string `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	NSFW                   bool     `db:"nsfw" json:"nsfw"`
