@@ -23,6 +23,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bot review-pipeline and vote-ban counts from the start but never grew a
   server equivalent, so the moderation transparency page could only ever
   show half the picture.
+- A `noxss` field validator (`state/xss.go`, registered alongside the
+  existing `nonvulgar` one), rejecting `<script>`, `javascript:`/
+  `vbscript:` URLs, inline event handlers (`onerror=`, `onload=`, ...),
+  `<svg>`/`<object>`/`<embed>`/`<meta>`, and legacy CSS `expression()`
+  injection. Applied to every large free-text field that reaches the API:
+  `CreateBot`/`BotSettingsUpdate` and `CreateServer`/
+  `ServerSettingsUpdate` (`short`/`long`), and `CreateReview`/`EditReview`
+  (`content`). Deliberately does not flag `<iframe>` Omniplex's own
+  markdown renderer allows it by explicit product decision for bot-owner
+  embeds (see its `sanitizeSchema.ts`), so rejecting it here would just
+  reject legitimate submissions. Also extended to `CreateEditTeam.Short`,
+  packs' `CreatePack.Short`/`PatchPack.Short`, and user profile bios
+  (`PATCH /users/{id}` inlines a `state.ContainsSuspiciousMarkup` check
+  instead, since that route does not validate its payload via struct
+  tags).
+- Staff can now spotlight a bot or server on the home page, alongside the
+  existing Feature action, two new RPC methods, `SpotlightAdd`/
+  `SpotlightRemove` (`arcadia/rpc/spotlight.go`), mirroring `FeatureAdd`/
+  `FeatureRemove` exactly (same `time_period_hours` field, same
+  `GREATEST(COALESCE(...), NOW()) + make_interval(...)` extension
+  behaviour), gated by the same `feature_entities` permission. Backed by
+  a new `spotlighted_until` column on `bots`/`servers`
+  (`exp/spotlight_columns.sql`, not auto-applied) and exposed on both
+  list-index endpoints (`GET /bots`, `GET /servers`) as a new `spotlight`
+  array, the same way `featured` already was.
+- `moderation.FileAutoReport` a newly-flagged bot/server now gets an
+  actual report filed (reason `tos_violation`, a fixed
+  `system:moderation` reporter) so it lands in the staff review queue,
+  not just a passive `moderation_flagged` column nobody's necessarily
+  looking at. Wired into both the submission-time check (`add_bot`,
+  `add_server`) and the new `moderation_scan` background task below.
+- New `moderation_scan` background task (`bgtasks/moderation_scan.go`,
+  every 30 minutes, batched to 25 bots + 25 servers per run): re-runs
+  OpenAI moderation against listed bots/servers on a rolling ~7-day
+  cadence, not just at submission time. Catches entries that predate
+  `moderation_flagged` entirely and edits made after initial submission
+  (`PATCH .../settings` never re-runs the check). Tracked via a new
+  `moderation_checked_at` column (`exp/moderation_scan_columns.sql`, not
+  auto-applied — run with `psql "$DATABASE_URL" -f
+  exp/moderation_scan_columns.sql`); no-ops entirely when
+  `meta.openai_api_key` is unset, same as the existing check.
+
+### Fixed
+
+- `PremiumAdd`/`FeatureAdd`/`SpotlightAdd`'s `time_period_hours` field
+  metadata claimed "Format: X years/days/hours" — the field has only ever
+  accepted a bare hour count (`int32`), never a compound duration string,
+  so that placeholder was actively misleading staff filling out the field
+  through the panel. Placeholder now reads "Duration, in hours (e.g. 720
+  for 30 days)".
 
 ### Changed
 

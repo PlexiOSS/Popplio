@@ -41,6 +41,10 @@ func handleMethod(ctx context.Context, method types.RPCMethod, h Handle) (Succes
 		return featureAdd(ctx, method.FeatureAdd, h)
 	case method.FeatureRemove != nil:
 		return featureRemove(ctx, method.FeatureRemove, h)
+	case method.SpotlightAdd != nil:
+		return spotlightAdd(ctx, method.SpotlightAdd, h)
+	case method.SpotlightRemove != nil:
+		return spotlightRemove(ctx, method.SpotlightRemove, h)
 	case method.BotTransferOwnershipUser != nil:
 		return transferOwnershipUser(ctx, method.BotTransferOwnershipUser, h)
 	case method.BotTransferOwnershipTeam != nil:

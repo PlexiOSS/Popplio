@@ -28,9 +28,9 @@ var compiledMessages = uapi.CompileValidationErrors(PatchPack{})
 // immutable after creation (see types.BotPack.PackType doc comment), so
 // there is simply nothing here to change it with.
 type PatchPack struct {
-	Name    string                    `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
-	Short   string                    `json:"short" validate:"required,min=10,max=100" msg:"Description must be between 10 and 100 characters"`
-	Tags    []string                  `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	Name    string                 `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
+	Short   string                 `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
+	Tags    []string               `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	Bots    []string               `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
 	Servers []string               `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
 	Emojis  []types.PackEmojiInput `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`

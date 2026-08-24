@@ -22,6 +22,9 @@ var rpcPermissions = map[string]perms.Perm{
 	"FeatureAdd":    perms.StaffFeatureEntities,
 	"FeatureRemove": perms.StaffFeatureEntities,
 
+	"SpotlightAdd":    perms.StaffFeatureEntities,
+	"SpotlightRemove": perms.StaffFeatureEntities,
+
 	"BotTransferOwnershipUser": perms.StaffTransferBots,
 	"BotTransferOwnershipTeam": perms.StaffTransferBots,
 

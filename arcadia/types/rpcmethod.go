@@ -23,6 +23,8 @@ type RPCMethod struct {
 	CertifyRemove            *RPCTargetReason
 	FeatureAdd               *RPCFeatureAdd
 	FeatureRemove            *RPCTargetReason
+	SpotlightAdd             *RPCSpotlightAdd
+	SpotlightRemove          *RPCTargetReason
 	BotTransferOwnershipUser *RPCBotTransferOwnershipUser
 	BotTransferOwnershipTeam *RPCBotTransferOwnershipTeam
 	AppBanUser               *RPCTargetReason
@@ -50,6 +52,12 @@ type RPCPremiumAdd struct {
 }
 
 type RPCFeatureAdd struct {
+	TargetID        string `json:"target_id"`
+	Reason          string `json:"reason"`
+	TimePeriodHours int32  `json:"time_period_hours"`
+}
+
+type RPCSpotlightAdd struct {
 	TargetID        string `json:"target_id"`
 	Reason          string `json:"reason"`
 	TimePeriodHours int32  `json:"time_period_hours"`
@@ -100,6 +108,8 @@ var RPCMethodVariants = []string{
 	"CertifyRemove",
 	"FeatureAdd",
 	"FeatureRemove",
+	"SpotlightAdd",
+	"SpotlightRemove",
 	"BotTransferOwnershipUser",
 	"BotTransferOwnershipTeam",
 	"AppBanUser",
@@ -144,6 +154,10 @@ func (m RPCMethod) variant() (string, any) {
 		return "FeatureAdd", m.FeatureAdd
 	case m.FeatureRemove != nil:
 		return "FeatureRemove", m.FeatureRemove
+	case m.SpotlightAdd != nil:
+		return "SpotlightAdd", m.SpotlightAdd
+	case m.SpotlightRemove != nil:
+		return "SpotlightRemove", m.SpotlightRemove
 	case m.BotTransferOwnershipUser != nil:
 		return "BotTransferOwnershipUser", m.BotTransferOwnershipUser
 	case m.BotTransferOwnershipTeam != nil:
@@ -210,6 +224,10 @@ func EmptyRPCMethod(name string) (RPCMethod, error) {
 		m.FeatureAdd = &RPCFeatureAdd{}
 	case "FeatureRemove":
 		m.FeatureRemove = &RPCTargetReason{}
+	case "SpotlightAdd":
+		m.SpotlightAdd = &RPCSpotlightAdd{}
+	case "SpotlightRemove":
+		m.SpotlightRemove = &RPCTargetReason{}
 	case "BotTransferOwnershipUser":
 		m.BotTransferOwnershipUser = &RPCBotTransferOwnershipUser{}
 	case "BotTransferOwnershipTeam":
@@ -271,7 +289,7 @@ func (m RPCMethod) SupportedTargetTypes() []TargetType {
 		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypePack}
 	case "Claim", "Unclaim", "Approve", "Deny", "Unverify":
 		return []TargetType{TargetTypeBot, TargetTypeServer}
-	case "CertifyAdd", "CertifyRemove", "PremiumAdd", "PremiumRemove", "FeatureAdd", "FeatureRemove":
+	case "CertifyAdd", "CertifyRemove", "PremiumAdd", "PremiumRemove", "FeatureAdd", "FeatureRemove", "SpotlightAdd", "SpotlightRemove":
 		return []TargetType{TargetTypeBot, TargetTypeServer}
 	case "AppBanUser", "AppUnbanUser", "BanUser", "UnbanUser":
 		return []TargetType{TargetTypeUser}
@@ -318,6 +336,10 @@ func (m RPCMethod) Description() string {
 		return "Features a bot or server on the home page for a given time period"
 	case "FeatureRemove":
 		return "Removes a bot or server from the home page's Featured section"
+	case "SpotlightAdd":
+		return "Spotlights a bot or server on the home page for a given time period"
+	case "SpotlightRemove":
+		return "Removes a bot or server from the home page's Spotlight section"
 	case "BotTransferOwnershipUser":
 		return "Transfers the ownership of a bot to a new user"
 	case "BotTransferOwnershipTeam":
@@ -373,6 +395,10 @@ func (m RPCMethod) Label() string {
 		return "Add Featured"
 	case "FeatureRemove":
 		return "Remove Featured"
+	case "SpotlightAdd":
+		return "Add Spotlight"
+	case "SpotlightRemove":
+		return "Remove Spotlight"
 	case "BotTransferOwnershipUser":
 		return "Set Bot Owner [User]"
 	case "BotTransferOwnershipTeam":
@@ -450,10 +476,10 @@ func (m RPCMethod) Fields() []RPCField {
 			rpcFieldTargetID(),
 			{
 				ID:          "time_period_hours",
-				Label:       "Time [X unit(s)]",
+				Label:       "Duration",
 				FieldType:   FieldTypeHour,
 				Icon:        "material-symbols:timer",
-				Placeholder: "Time period. Format: X years/days/hours",
+				Placeholder: "Duration, in hours (e.g. 720 for 30 days)",
 			},
 			rpcFieldReason(),
 		}
@@ -462,10 +488,22 @@ func (m RPCMethod) Fields() []RPCField {
 			rpcFieldTargetID(),
 			{
 				ID:          "time_period_hours",
-				Label:       "Time [X unit(s)]",
+				Label:       "Duration",
 				FieldType:   FieldTypeHour,
 				Icon:        "material-symbols:timer",
-				Placeholder: "Time period. Format: X years/days/hours",
+				Placeholder: "Duration, in hours (e.g. 720 for 30 days)",
+			},
+			rpcFieldReason(),
+		}
+	case "SpotlightAdd":
+		return []RPCField{
+			rpcFieldTargetID(),
+			{
+				ID:          "time_period_hours",
+				Label:       "Duration",
+				FieldType:   FieldTypeHour,
+				Icon:        "material-symbols:timer",
+				Placeholder: "Duration, in hours (e.g. 720 for 30 days)",
 			},
 			rpcFieldReason(),
 		}

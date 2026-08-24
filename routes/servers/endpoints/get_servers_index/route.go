@@ -87,6 +87,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing featured servers", err)
 	}
 
+	// Spotlight Servers (set by staff, distinct from shop-purchased Featured)
+	spotlightRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9")
+	if err != nil {
+		return resp.Err("Error while getting spotlight servers", err)
+	}
+	listIndex.Spotlight, err = processRow(d.Context, spotlightRows)
+	if err != nil {
+		return resp.Err("Error while processing spotlight servers", err)
+	}
+
 	return uapi.HttpResponse{
 		Json: listIndex,
 	}
