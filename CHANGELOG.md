@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-24
+
+### Added
+
+- Guild moderation commands for Arcadia, restricted to the main and testing
+  servers: `/purge` (bulk-delete up to 100 messages, optionally filtered to
+  one user), `/lock`/`/unlock` (deny or restore `@everyone`'s Send Messages
+  on a channel), and `/modlogs` (look up a member's recent moderation
+  history). Every kick/ban/timeout/warn/purge/lock/unlock action, plus
+  auto-mod actions, is now recorded in a new `mod_cases` table so it's
+  queryable rather than living only in the mod-log Discord channel.
+- Passive auto-moderation for Arcadia (spam, invite links, mass mentions),
+  off by default behind a new `arcadia.auto_mod` config flag. Deletes the
+  offending message, DMs the author, and logs the action attributed to the
+  bot itself rather than a staff member.
+- Three new staff permissions backing the above: `purge_messages`,
+  `lock_channels`, `view_mod_cases`.
+- A curated, staff-authored changelog system covering both Popplio and
+  Omniplex: `GET /changelogs/@all` (public, optionally filtered by
+  `?project=popplio|omniplex`) and a full create/update/delete/list
+  implementation behind the Arcadia panel's `UpdateChangelog` action, gated
+  by a new `manage_changelog` permission. This replaces an earlier draft
+  (`changelogs` table + `UpdateChangelog` DTOs) that was scaffolded but
+  deliberately left as a hard 403 stub — the table now has its own
+  `project`/`itag`/`published` columns so Popplio and Omniplex entries can
+  coexist instead of colliding on a bare `version` primary key.
+
 ### Fixed
 
 - `Keel/ratelimit`'s exceeded check ran against the pre-increment request
