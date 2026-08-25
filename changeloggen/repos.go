@@ -14,6 +14,7 @@ type repo struct {
 var projectRepos = map[string]repo{
 	"popplio":  {Owner: "PlexiOSS", Repo: "Popplio"},
 	"omniplex": {Owner: "PlexiOSS", Repo: "Omniplex"},
+	"keel":     {Owner: "PlexiOSS", Repo: "Keel"},
 }
 
 // RepoFor returns the GitHub owner/repo for a changelog project, or false if

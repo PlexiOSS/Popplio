@@ -30,11 +30,11 @@ var (
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get Changelog List",
-		Description: "Gets published changelog entries for Popplio and/or Omniplex, newest first.",
+		Description: "Gets published changelog entries for Popplio, Omniplex, and/or Keel, newest first.",
 		Params: []docs.Parameter{
 			{
 				Name:        "project",
-				Description: "Filter to one project: 'popplio' or 'omniplex'. Omit for both.",
+				Description: "Filter to one project: 'popplio', 'omniplex', or 'keel'. Omit for all.",
 				Required:    false,
 				In:          "query",
 				Schema:      docs.IdSchema,

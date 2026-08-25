@@ -292,7 +292,7 @@ type changelogRow struct {
 // constraint, checked here too so a bad value 400s with a clear message
 // instead of a raw Postgres constraint-violation error.
 func validChangelogProject(project string) bool {
-	return project == "popplio" || project == "omniplex"
+	return project == "popplio" || project == "omniplex" || project == "keel"
 }
 
 func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog) (response, error) {
@@ -348,7 +348,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		entry := q.Action.CreateEntry
 
 		if !validChangelogProject(entry.Project) {
-			return writeText(http.StatusBadRequest, "project must be 'popplio' or 'omniplex'"), nil
+			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
 		_, err := state.Pool.Exec(ctx,
@@ -359,6 +359,8 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return response{}, newError(err)
 		}
 
+		announceChangelogEntry(*entry)
+
 		return writeNoContent(), nil
 	case q.Action.UpdateEntry != nil:
 		if !userPerms.Has(perms.StaffManageChangelog) {
@@ -368,7 +370,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		entry := q.Action.UpdateEntry
 
 		if !validChangelogProject(entry.Project) {
-			return writeText(http.StatusBadRequest, "project must be 'popplio' or 'omniplex'"), nil
+			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
 		itag, err := uuid.Parse(entry.Itag)
@@ -430,7 +432,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		gen := q.Action.Generate
 
 		if !validChangelogProject(gen.Project) {
-			return writeText(http.StatusBadRequest, "project must be 'popplio' or 'omniplex'"), nil
+			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
 		owner, repoName, ok := changeloggen.RepoFor(gen.Project)
@@ -541,6 +543,8 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 		if err != nil {
 			return response{}, newError(err)
 		}
+
+		announceBlogPost(*entry)
 
 		return writeNoContent(), nil
 	case q.Action.UpdateEntry != nil:

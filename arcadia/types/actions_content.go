@@ -97,7 +97,7 @@ type Partners struct {
 }
 
 // ChangelogAction is the union of changelog operations: curated, staff-
-// authored release entries for both Popplio and Omniplex.
+// authored release entries for both Popplio, Omniplex, and Keel.
 type ChangelogAction struct {
 	ListEntries *Unit
 	CreateEntry *ChangelogCreateEntry

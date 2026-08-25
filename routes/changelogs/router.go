@@ -1,7 +1,7 @@
 // Package changelogs mounts the "Changelog" group of API routes.
 //
 // These API endpoints are related to the curated, staff-authored release
-// history for Popplio and Omniplex.
+// history for Popplio, Omniplex, and Keel.
 package changelogs
 
 import (
@@ -17,7 +17,7 @@ const tagName = "Changelog"
 type Router struct{}
 
 func (c Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to the curated, staff-authored release history for Popplio and Omniplex."
+	return tagName, "These API endpoints are related to the curated, staff-authored release history for Popplio, Omniplex, and Keel."
 }
 
 func (c Router) Routes(r *chi.Mux) {

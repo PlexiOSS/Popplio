@@ -22,7 +22,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS changelogs (
     itag               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project             TEXT NOT NULL CHECK (project IN ('popplio', 'omniplex')),
+    project             TEXT NOT NULL CHECK (project IN ('popplio', 'omniplex', 'keel')),
     version             TEXT NOT NULL,
     added               TEXT[] NOT NULL DEFAULT '{}',
     updated             TEXT[] NOT NULL DEFAULT '{}',
@@ -54,7 +54,7 @@ BEGIN
             ALTER TABLE changelogs ADD COLUMN project TEXT DEFAULT 'popplio';
             UPDATE changelogs SET project = 'popplio' WHERE project IS NULL;
             ALTER TABLE changelogs ALTER COLUMN project SET NOT NULL;
-            ALTER TABLE changelogs ADD CONSTRAINT changelogs_project_check CHECK (project IN ('popplio', 'omniplex'));
+            ALTER TABLE changelogs ADD CONSTRAINT changelogs_project_check CHECK (project IN ('popplio', 'omniplex', 'keel'));
         END IF;
 
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'changelogs' AND column_name = 'published') THEN

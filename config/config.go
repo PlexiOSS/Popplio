@@ -55,6 +55,9 @@ type Channels struct {
 	System        snowflake.ID `yaml:"system" default:"762958420277067786" comment:"System Channel" validate:"required"`
 	Uptime        snowflake.ID `yaml:"uptime" default:"1083108330442076292" comment:"Uptime Channel" validate:"required"`
 	StaffLogs     snowflake.ID `yaml:"staff_logs" default:"1186195848497999912" comment:"Staff Logs Channel" validate:"required"`
+
+	BlogAnnouncements      snowflake.ID `yaml:"blog_announcements" default:"0" comment:"Channel a new (published) blog post is announced to. Announcements are skipped entirely when this is unset" required:"false"`
+	ChangelogAnnouncements snowflake.ID `yaml:"changelog_announcements" default:"0" comment:"Channel a new (published) changelog entry is announced to. Announcements are skipped entirely when this is unset" required:"false"`
 }
 
 type JAPI struct {
@@ -85,6 +88,9 @@ type Meta struct {
 	PopplioProxy    string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
 	OpenAIAPIKey    string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset" required:"false"`
 	GithubToken     string   `yaml:"github_token" default:"" comment:"GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+" required:"false"`
+
+	BlogAnnounceMentions      string `yaml:"blog_announce_mentions" default:"" comment:"Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty" required:"false"`
+	ChangelogAnnounceMentions string `yaml:"changelog_announce_mentions" default:"" comment:"Role mention(s) included in the changelog-entry announcement, same shape as blog_announce_mentions. Skipped when empty" required:"false"`
 }
 
 type Arcadia struct {

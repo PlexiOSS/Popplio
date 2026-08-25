@@ -286,7 +286,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	{
 		ID:          StaffManageChangelog,
 		Name:        "Manage Changelog",
-		Description: "Create, edit and delete changelog entries for Popplio and Omniplex.",
+		Description: "Create, edit and delete changelog entries for Popplio, Omniplex, and Keel.",
 		Category:    "Content Management",
 	},
 
