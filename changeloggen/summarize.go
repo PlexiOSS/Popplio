@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -210,7 +211,11 @@ func callChat(ctx context.Context, apiKey, systemPrompt, userContent string) (Dr
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return Draft{}, fmt.Errorf("summarize endpoint returned status %d", resp.StatusCode)
+		// Same reasoning as githubRequest: a bare status code can't tell a
+		// per-minute rate limit apart from an exhausted billing quota, and
+		// those need different fixes.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
+		return Draft{}, fmt.Errorf("summarize endpoint returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var parsed chatResponse
