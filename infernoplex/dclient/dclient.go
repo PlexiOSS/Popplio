@@ -59,7 +59,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 
 	client = c
 
-	if err := c.SetPresence(ctx, gateway.WithWatchingActivity("Omniplex servers")); err != nil {
+	if err := c.SetPresence(ctx, gateway.WithCustomActivity("Watching the Server list")); err != nil {
 		state.Logger.Error("Failed to set Infernoplex presence", zap.Error(err))
 	}
 
