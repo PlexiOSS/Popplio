@@ -1,6 +1,9 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // PartnerAction is the union of partner operations.
 type PartnerAction struct {
@@ -137,6 +140,9 @@ type ChangelogCreateEntry struct {
 	Updated          []string `json:"updated"`
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
+	// CreatedAt lets staff backfill a release's real date instead of the
+	// moment the entry happened to be drafted -- nil falls back to NOW().
+	CreatedAt *time.Time `json:"created_at"`
 }
 
 type ChangelogUpdateEntry struct {
@@ -150,6 +156,9 @@ type ChangelogUpdateEntry struct {
 	Updated          []string `json:"updated"`
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
+	// CreatedAt, like on Create, is nil to leave the entry's existing date
+	// untouched -- an update never resets it to "now" on its own.
+	CreatedAt *time.Time `json:"created_at"`
 }
 
 type ChangelogDeleteEntry struct {

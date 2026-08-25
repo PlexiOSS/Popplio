@@ -352,8 +352,8 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		}
 
 		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO changelogs (project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-			entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, authData.UserID)
+			"INSERT INTO changelogs (project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, NOW()))",
+			entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, authData.UserID, entry.CreatedAt)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -390,8 +390,8 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		}
 
 		_, err = state.Pool.Exec(ctx,
-			"UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, removed = $7, extra_description = $8, prerelease = $9, published = $10 WHERE itag = $1",
-			itag, entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published)
+			"UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, removed = $7, extra_description = $8, prerelease = $9, published = $10, created_at = COALESCE($11, created_at) WHERE itag = $1",
+			itag, entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, entry.CreatedAt)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -441,13 +441,13 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "no GitHub repo is configured for this project"), nil
 		}
 
-		prs, stats, err := changeloggen.ComparePRs(ctx, owner, repoName, gen.Base, gen.Head)
+		cmp, err := changeloggen.Compare(ctx, owner, repoName, gen.Base, gen.Head)
 
 		if err != nil {
 			return writeText(http.StatusBadRequest, "Failed to compare refs on GitHub: "+err.Error()), nil
 		}
 
-		draft, err := changeloggen.Summarize(ctx, prs, stats)
+		draft, err := changeloggen.Summarize(ctx, cmp)
 
 		if err != nil {
 			return response{}, newError(err)

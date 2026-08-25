@@ -29,6 +29,15 @@ var summarizeHTTPClient = &http.Client{Timeout: 45 * time.Second}
 // adding much signal for a one-line changelog bullet.
 const maxBodyChars = 500
 
+// maxPatchChars bounds how much of one file's diff gets sent to the model
+// in the no-PRs fallback -- large generated/vendored files would otherwise
+// dominate the prompt budget for no summarization value.
+const maxPatchChars = 1500
+
+// maxTotalDiffChars caps the combined diff content sent across all files,
+// so a release touching hundreds of files still fits a reasonable prompt.
+const maxTotalDiffChars = 12000
+
 type chatRequest struct {
 	Model          string            `json:"model"`
 	ResponseFormat map[string]string `json:"response_format"`
@@ -48,26 +57,55 @@ type chatResponse struct {
 	} `json:"choices"`
 }
 
-const systemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. Given a list of merged pull request titles/descriptions and overall diff stats, categorize the changes into Added, Updated, Fixed, and Removed. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention PR numbers, internal file names, or implementation details unless they're the actual user-facing feature. Skip purely internal changes (refactors, test additions, CI/tooling, dependency bumps) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
+const prSystemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. Given a list of merged pull request titles/descriptions and overall diff stats, categorize the changes into Added, Updated, Fixed, and Removed. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention PR numbers, internal file names, or implementation details unless they're the actual user-facing feature. Skip purely internal changes (refactors, test additions, CI/tooling, dependency bumps) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
 
 Respond with ONLY a JSON object of this exact shape:
 {"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "extra_description": "..."}`
 
-// Summarize turns raw PR data into a Draft. When Meta.OpenAIAPIKey is unset
-// it falls back to bucketing PR titles by a title-prefix heuristic, verbatim
-// -- rougher output, but the feature still works rather than erroring out,
-// same contract as moderation.CheckText.
-func Summarize(ctx context.Context, prs []PullRequest, stats FileStats) (Draft, error) {
-	if len(prs) == 0 {
+const diffSystemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. This repository pushes commits straight to its branch instead of merging pull requests, so there are no PR titles to summarize -- instead you're given the raw commit subjects (often terse or unhelpful, e.g. "fix some stuff") AND the actual code diff for each changed file. Read the diff itself to figure out what really changed; do not just rephrase the commit messages, since they're often misleading or too vague to use directly. Categorize what you find into Added, Updated, Fixed, and Removed. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention file names, function names, or line numbers unless that's genuinely the most useful way to describe a developer-facing library change. Skip purely internal changes (formatting, comments, tests, CI/tooling) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
+
+Respond with ONLY a JSON object of this exact shape:
+{"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "extra_description": "..."}`
+
+// Summarize turns a GitHub compare result into a Draft. When
+// Meta.OpenAIAPIKey is unset it falls back to a title/commit-bucketing
+// heuristic -- rougher output, but the feature still works rather than
+// erroring out, same contract as moderation.CheckText.
+func Summarize(ctx context.Context, cmp CompareResult) (Draft, error) {
+	apiKey := state.Config.Meta.OpenAIAPIKey
+
+	if len(cmp.PRs) > 0 {
+		if apiKey == "" {
+			return heuristicDraftFromTitles(titlesOf(cmp.PRs)), nil
+		}
+
+		return callChat(ctx, apiKey, prSystemPrompt, prPrompt(cmp.PRs, cmp.Stats))
+	}
+
+	if len(cmp.Files) == 0 && len(cmp.CommitMessages) == 0 {
 		return Draft{}, nil
 	}
 
-	apiKey := state.Config.Meta.OpenAIAPIKey
-
 	if apiKey == "" {
-		return heuristicDraft(prs), nil
+		// No LLM available to actually read the diff -- bucket the raw
+		// commit subjects instead, same as the PR-title heuristic.
+		return heuristicDraftFromTitles(cmp.CommitMessages), nil
 	}
 
+	return callChat(ctx, apiKey, diffSystemPrompt, diffPrompt(cmp.CommitMessages, cmp.Files, cmp.Stats))
+}
+
+func titlesOf(prs []PullRequest) []string {
+	titles := make([]string, len(prs))
+
+	for i, pr := range prs {
+		titles[i] = pr.Title
+	}
+
+	return titles
+}
+
+func prPrompt(prs []PullRequest, stats FileStats) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "Diff stats: %d files changed, +%d/-%d lines.\n\nMerged pull requests:\n",
@@ -87,12 +125,66 @@ func Summarize(ctx context.Context, prs []PullRequest, stats FileStats) (Draft, 
 		}
 	}
 
+	return b.String()
+}
+
+func diffPrompt(commitMessages []string, files []FileDiff, stats FileStats) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "Diff stats: %d files changed, +%d/-%d lines.\n\n", stats.FilesChanged, stats.Additions, stats.Deletions)
+
+	if len(commitMessages) > 0 {
+		b.WriteString("Commit subjects (for context only -- may be unhelpful, verify against the diff below):\n")
+
+		for _, m := range commitMessages {
+			fmt.Fprintf(&b, "- %s\n", m)
+		}
+
+		b.WriteString("\n")
+	}
+
+	b.WriteString("File changes:\n")
+
+	remaining := maxTotalDiffChars
+
+	for _, f := range files {
+		if remaining <= 0 {
+			b.WriteString("\n(remaining files omitted for space)\n")
+			break
+		}
+
+		fmt.Fprintf(&b, "\n--- %s (%s) ---\n", f.Filename, f.Status)
+
+		patch := f.Patch
+
+		if patch == "" {
+			b.WriteString("(no diff available -- binary or too large)\n")
+			continue
+		}
+
+		if len(patch) > maxPatchChars {
+			patch = patch[:maxPatchChars] + "\n...(truncated)"
+		}
+
+		if len(patch) > remaining {
+			patch = patch[:remaining] + "\n...(truncated)"
+		}
+
+		b.WriteString(patch)
+		b.WriteString("\n")
+		remaining -= len(patch)
+	}
+
+	return b.String()
+}
+
+func callChat(ctx context.Context, apiKey, systemPrompt, userContent string) (Draft, error) {
 	reqBody, err := json.Marshal(chatRequest{
 		Model:          "gpt-4o-mini",
 		ResponseFormat: map[string]string{"type": "json_object"},
 		Messages: []chatMessage{
 			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: b.String()},
+			{Role: "user", Content: userContent},
 		},
 	})
 
@@ -140,13 +232,14 @@ func Summarize(ctx context.Context, prs []PullRequest, stats FileStats) (Draft, 
 	return draft, nil
 }
 
-// heuristicDraft buckets PR titles by a simple prefix match when no OpenAI
-// key is configured. Titles are used verbatim -- no rewriting.
-func heuristicDraft(prs []PullRequest) Draft {
+// heuristicDraftFromTitles buckets plain title/subject strings (PR titles or
+// commit subjects) by a simple prefix match when no OpenAI key is
+// configured. Used verbatim -- no rewriting.
+func heuristicDraftFromTitles(titles []string) Draft {
 	var draft Draft
 
-	for _, pr := range prs {
-		title := strings.TrimSpace(pr.Title)
+	for _, raw := range titles {
+		title := strings.TrimSpace(raw)
 		lower := strings.ToLower(title)
 
 		switch {
