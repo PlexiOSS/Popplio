@@ -37,6 +37,7 @@ func Docs() *docs.Doc {
 				Description: "Filter to one project: 'popplio' or 'omniplex'. Omit for both.",
 				Required:    false,
 				In:          "query",
+				Schema:      docs.IdSchema,
 			},
 		},
 		Resp: types.ChangelogList{},

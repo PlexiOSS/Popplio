@@ -73,6 +73,7 @@ arcadia:
   token:  # Staff bot Discord token. This is a SEPARATE Discord application from Popplio's
   server_port: 3010 # Port the staff panel API listens on
   prefix_commands: false # Enable legacy prefix commands. Requires the privileged Message Content intent to be granted
+  auto_mod: false # Enable passive auto-moderation (spam/invite-link/mass-mention scanning) in the main and testing servers. Requires the privileged Message Content intent, same as prefix_commands
   prefix: ibs! # Staff bot prefix, only used when prefix_commands is on
   owners:
     - 510065483693817867
