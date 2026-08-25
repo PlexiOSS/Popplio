@@ -115,6 +115,7 @@ type ChangelogCreateEntry struct {
 	Published        bool     `json:"published"`
 	Added            []string `json:"added"`
 	Updated          []string `json:"updated"`
+	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
 }
 
@@ -127,6 +128,7 @@ type ChangelogUpdateEntry struct {
 	Published        bool     `json:"published"`
 	Added            []string `json:"added"`
 	Updated          []string `json:"updated"`
+	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
 }
 
@@ -183,6 +185,7 @@ type ChangelogEntry struct {
 	Version          string    `json:"version"`
 	Added            []string  `json:"added"`
 	Updated          []string  `json:"updated"`
+	Fixed            []string  `json:"fixed"`
 	Removed          []string  `json:"removed"`
 	CreatedBy        string    `json:"created_by"`
 	CreatedAt        Timestamp `json:"created_at"`

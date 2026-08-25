@@ -278,6 +278,7 @@ type changelogRow struct {
 	Version          string      `db:"version"`
 	Added            []string    `db:"added"`
 	Updated          []string    `db:"updated"`
+	Fixed            []string    `db:"fixed"`
 	Removed          []string    `db:"removed"`
 	ExtraDescription string      `db:"extra_description"`
 	Prerelease       bool        `db:"prerelease"`
@@ -306,7 +307,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		// reachable only with a valid staff session already (see the
 		// authorize call above), same as blog's listing.
 		rows, err := state.Pool.Query(ctx,
-			"SELECT itag, project, version, added, updated, removed, extra_description, prerelease, published, created_by, created_at FROM changelogs ORDER BY created_at DESC")
+			"SELECT itag, project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by, created_at FROM changelogs ORDER BY created_at DESC")
 
 		if err != nil {
 			return response{}, newError(err)
@@ -327,6 +328,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 				Version:          row.Version,
 				Added:            types.NonNilStrings(row.Added),
 				Updated:          types.NonNilStrings(row.Updated),
+				Fixed:            types.NonNilStrings(row.Fixed),
 				Removed:          types.NonNilStrings(row.Removed),
 				ExtraDescription: row.ExtraDescription,
 				Prerelease:       row.Prerelease,
@@ -349,8 +351,8 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		}
 
 		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO changelogs (project, version, added, updated, removed, extra_description, prerelease, published, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-			entry.Project, entry.Version, entry.Added, entry.Updated, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, authData.UserID)
+			"INSERT INTO changelogs (project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+			entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, authData.UserID)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -385,8 +387,8 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		}
 
 		_, err = state.Pool.Exec(ctx,
-			"UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, removed = $6, extra_description = $7, prerelease = $8, published = $9 WHERE itag = $1",
-			itag, entry.Project, entry.Version, entry.Added, entry.Updated, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published)
+			"UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, removed = $7, extra_description = $8, prerelease = $9, published = $10 WHERE itag = $1",
+			itag, entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published)
 
 		if err != nil {
 			return response{}, newError(err)

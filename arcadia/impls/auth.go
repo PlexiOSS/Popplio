@@ -20,7 +20,12 @@ var (
 )
 
 func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error) {
-	_, err := state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE created_at < NOW() - INTERVAL '1 hour'")
+	// Sliding expiration: an active session's clock is last_seen_at, bumped
+	// to NOW() on every successful CheckAuth call below — so this prunes
+	// sessions that have been idle for an hour, not sessions that are simply
+	// over an hour old. created_at is untouched and still means "when this
+	// row was first created."
+	_, err := state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE last_seen_at < NOW() - INTERVAL '1 hour'")
 
 	if err != nil {
 		return types.AuthData{}, err
@@ -99,6 +104,13 @@ func CheckAuth(ctx context.Context, token string) (types.AuthData, error) {
 
 	if data.State != "active" {
 		return types.AuthData{}, ErrSessionNotActive
+	}
+
+	// Sliding expiration: every successful authenticated call for an active
+	// session resets its idle clock, so a session in continuous use never
+	// hits the 1-hour prune above.
+	if _, err := state.Pool.Exec(ctx, "UPDATE staffpanel__authchain SET last_seen_at = NOW() WHERE token = $1", token); err != nil {
+		return types.AuthData{}, err
 	}
 
 	return data, nil
