@@ -22,7 +22,7 @@ func TestActionUnionsRoundTrip(t *testing.T) {
 		{"BlogAction DeleteEntry", `{"DeleteEntry":{"itag":"x"}}`, func() json.Unmarshaler { return &BlogAction{} }},
 
 		{"ChangelogAction unit", `"ListEntries"`, func() json.Unmarshaler { return &ChangelogAction{} }},
-		{"ChangelogAction DeleteEntry", `{"DeleteEntry":{"version":"1.0"}}`, func() json.Unmarshaler { return &ChangelogAction{} }},
+		{"ChangelogAction DeleteEntry", `{"DeleteEntry":{"itag":"x"}}`, func() json.Unmarshaler { return &ChangelogAction{} }},
 
 		{"StaffPositionAction unit", `"ListPositions"`, func() json.Unmarshaler { return &StaffPositionAction{} }},
 		{"StaffPositionAction SwapIndex", `{"SwapIndex":{"a":"1","b":"2"}}`, func() json.Unmarshaler { return &StaffPositionAction{} }},

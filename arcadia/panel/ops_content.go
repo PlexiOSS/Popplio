@@ -272,10 +272,166 @@ func partnerExists(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-// updateChangelog is a hard stub: it always returns 403 regardless of input or
-// authentication. The ChangelogAction DTOs still parse, which is why they exist.
-func (s *Server) updateChangelog(_ context.Context, _ *types.QUpdateChangelog) (response, error) {
-	return writeText(http.StatusForbidden, "You do not have permission to create changelog entries [not implemented]"), nil
+type changelogRow struct {
+	Itag             pgtype.UUID `db:"itag"`
+	Project          string      `db:"project"`
+	Version          string      `db:"version"`
+	Added            []string    `db:"added"`
+	Updated          []string    `db:"updated"`
+	Removed          []string    `db:"removed"`
+	ExtraDescription string      `db:"extra_description"`
+	Prerelease       bool        `db:"prerelease"`
+	Published        bool        `db:"published"`
+	CreatedBy        string      `db:"created_by"`
+	CreatedAt        time.Time   `db:"created_at"`
+}
+
+// validChangelogProject mirrors changelogs' own CHECK (project IN (...))
+// constraint, checked here too so a bad value 400s with a clear message
+// instead of a raw Postgres constraint-violation error.
+func validChangelogProject(project string) bool {
+	return project == "popplio" || project == "omniplex"
+}
+
+func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog) (response, error) {
+	authData, userPerms, err := authorize(ctx, q.LoginToken)
+
+	if err != nil {
+		return response{}, err
+	}
+
+	switch {
+	case q.Action.ListEntries != nil:
+		// No permission check: this is the staff panel's own listing,
+		// reachable only with a valid staff session already (see the
+		// authorize call above), same as blog's listing.
+		rows, err := state.Pool.Query(ctx,
+			"SELECT itag, project, version, added, updated, removed, extra_description, prerelease, published, created_by, created_at FROM changelogs ORDER BY created_at DESC")
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		changelogRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[changelogRow])
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		entries := make([]types.ChangelogEntry, 0, len(changelogRows))
+
+		for _, row := range changelogRows {
+			entries = append(entries, types.ChangelogEntry{
+				Itag:             impls.UUIDString(row.Itag),
+				Project:          row.Project,
+				Version:          row.Version,
+				Added:            types.NonNilStrings(row.Added),
+				Updated:          types.NonNilStrings(row.Updated),
+				Removed:          types.NonNilStrings(row.Removed),
+				ExtraDescription: row.ExtraDescription,
+				Prerelease:       row.Prerelease,
+				Published:        row.Published,
+				CreatedBy:        row.CreatedBy,
+				CreatedAt:        types.NewTimestamp(row.CreatedAt),
+			})
+		}
+
+		return writeJSON(http.StatusOK, entries), nil
+	case q.Action.CreateEntry != nil:
+		if !userPerms.Has(perms.StaffManageChangelog) {
+			return writeText(http.StatusForbidden, "You do not have permission to create changelog entries [manage_changelog]"), nil
+		}
+
+		entry := q.Action.CreateEntry
+
+		if !validChangelogProject(entry.Project) {
+			return writeText(http.StatusBadRequest, "project must be 'popplio' or 'omniplex'"), nil
+		}
+
+		_, err := state.Pool.Exec(ctx,
+			"INSERT INTO changelogs (project, version, added, updated, removed, extra_description, prerelease, published, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+			entry.Project, entry.Version, entry.Added, entry.Updated, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, authData.UserID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		return writeNoContent(), nil
+	case q.Action.UpdateEntry != nil:
+		if !userPerms.Has(perms.StaffManageChangelog) {
+			return writeText(http.StatusForbidden, "You do not have permission to update changelog entries [manage_changelog]"), nil
+		}
+
+		entry := q.Action.UpdateEntry
+
+		if !validChangelogProject(entry.Project) {
+			return writeText(http.StatusBadRequest, "project must be 'popplio' or 'omniplex'"), nil
+		}
+
+		itag, err := uuid.Parse(entry.Itag)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		exists, err := changelogExists(ctx, itag)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if !exists {
+			return writeText(http.StatusBadRequest, "Entry does not exist"), nil
+		}
+
+		_, err = state.Pool.Exec(ctx,
+			"UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, removed = $6, extra_description = $7, prerelease = $8, published = $9 WHERE itag = $1",
+			itag, entry.Project, entry.Version, entry.Added, entry.Updated, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		return writeNoContent(), nil
+	case q.Action.DeleteEntry != nil:
+		if !userPerms.Has(perms.StaffManageChangelog) {
+			return writeText(http.StatusForbidden, "You do not have permission to delete changelog entries [manage_changelog]"), nil
+		}
+
+		itag, err := uuid.Parse(q.Action.DeleteEntry.Itag)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		exists, err := changelogExists(ctx, itag)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if !exists {
+			return writeText(http.StatusBadRequest, "Entry does not exist"), nil
+		}
+
+		if _, err := state.Pool.Exec(ctx, "DELETE FROM changelogs WHERE itag = $1", itag); err != nil {
+			return response{}, newError(err)
+		}
+
+		return writeNoContent(), nil
+	default:
+		return response{}, errStatus(http.StatusBadRequest, "No changelog action was specified")
+	}
+}
+
+func changelogExists(ctx context.Context, itag uuid.UUID) (bool, error) {
+	var count int64
+
+	if err := state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM changelogs WHERE itag = $1", itag).Scan(&count); err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }
 
 type blogRow struct {

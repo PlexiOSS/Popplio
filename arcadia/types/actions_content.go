@@ -96,9 +96,8 @@ type Partners struct {
 	PartnerTypes []PartnerType `json:"partner_types"`
 }
 
-// ChangelogAction is parsed but never acted on: UpdateChangelog is a hard stub
-// that always returns 403. The DTOs are kept so the panel keeps compiling
-// against them.
+// ChangelogAction is the union of changelog operations: curated, staff-
+// authored release entries for both Popplio and Omniplex.
 type ChangelogAction struct {
 	ListEntries *Unit
 	CreateEntry *ChangelogCreateEntry
@@ -106,28 +105,33 @@ type ChangelogAction struct {
 	DeleteEntry *ChangelogDeleteEntry
 }
 
+// Project is either "popplio" or "omniplex" on every DTO below — validated
+// against changelogs' own CHECK constraint at the SQL layer.
 type ChangelogCreateEntry struct {
+	Project          string   `json:"project"`
 	Version          string   `json:"version"`
 	ExtraDescription string   `json:"extra_description"`
 	Prerelease       bool     `json:"prerelease"`
+	Published        bool     `json:"published"`
 	Added            []string `json:"added"`
 	Updated          []string `json:"updated"`
 	Removed          []string `json:"removed"`
 }
 
 type ChangelogUpdateEntry struct {
+	Itag             string   `json:"itag"`
+	Project          string   `json:"project"`
 	Version          string   `json:"version"`
 	ExtraDescription string   `json:"extra_description"`
-	GithubHTML       *string  `json:"github_html"`
 	Prerelease       bool     `json:"prerelease"`
+	Published        bool     `json:"published"`
 	Added            []string `json:"added"`
 	Updated          []string `json:"updated"`
 	Removed          []string `json:"removed"`
-	Published        bool     `json:"published"`
 }
 
 type ChangelogDeleteEntry struct {
-	Version string `json:"version"`
+	Itag string `json:"itag"`
 }
 
 func (a *ChangelogAction) UnmarshalJSON(data []byte) error {
@@ -174,11 +178,13 @@ func (a ChangelogAction) MarshalJSON() ([]byte, error) {
 }
 
 type ChangelogEntry struct {
+	Itag             string    `json:"itag"`
+	Project          string    `json:"project"`
 	Version          string    `json:"version"`
 	Added            []string  `json:"added"`
 	Updated          []string  `json:"updated"`
 	Removed          []string  `json:"removed"`
-	GithubHTML       *string   `json:"github_html"`
+	CreatedBy        string    `json:"created_by"`
 	CreatedAt        Timestamp `json:"created_at"`
 	ExtraDescription string    `json:"extra_description"`
 	Prerelease       bool      `json:"prerelease"`

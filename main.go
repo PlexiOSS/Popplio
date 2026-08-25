@@ -23,6 +23,7 @@ import (
 	"popplio/routes/badges"
 	"popplio/routes/blogs"
 	"popplio/routes/bots"
+	"popplio/routes/changelogs"
 	"popplio/routes/diagnostics"
 	"popplio/routes/health"
 	"popplio/routes/list"
@@ -160,6 +161,7 @@ func main() {
 		badges.Router{},
 		blogs.Router{},
 		bots.Router{},
+		changelogs.Router{},
 		diagnostics.Router{},
 		health.Router{},
 		list.Router{},

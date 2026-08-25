@@ -136,9 +136,6 @@ attacker-chosen login URL — never a completed session. `authBegin` now runs
 the same allow-list check up front and URL-encodes the value when building
 the login URL.
 
-**14. `UpdateChangelog` is a hard stub (§5.15)** — `arcadia/panel/ops_content.go`
-Always 403, regardless of input or authentication. The DTOs still parse.
-
 **16. ~~Vote credit tier dedup loop is broken for two or more occupants~~ — FIXED** — `arcadia/panel/ops_shop_tiers.go`
 `vote_credit_tiers.position` carries a `UNIQUE ... DEFERRABLE INITIALLY
 DEFERRED` constraint, which is what let the loop insert onto an occupied

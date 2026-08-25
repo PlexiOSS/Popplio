@@ -33,8 +33,9 @@ const (
 	StaffManageShop         Perm = "manage_shop"
 	StaffManageBotWhitelist Perm = "manage_bot_whitelist"
 
-	StaffManagePartners Perm = "manage_partners"
-	StaffManageBlog     Perm = "manage_blog"
+	StaffManagePartners  Perm = "manage_partners"
+	StaffManageBlog      Perm = "manage_blog"
+	StaffManageChangelog Perm = "manage_changelog"
 
 	StaffReviewReports Perm = "review_reports"
 
@@ -281,6 +282,12 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Description: "Create, edit and delete blog entries.",
 		Category:    "Content Management",
 		Legacy:      []string{"blog.create_entry", "blog.update_entry", "blog.delete_entry", "blog.*"},
+	},
+	{
+		ID:          StaffManageChangelog,
+		Name:        "Manage Changelog",
+		Description: "Create, edit and delete changelog entries for Popplio and Omniplex.",
+		Category:    "Content Management",
 	},
 
 	{

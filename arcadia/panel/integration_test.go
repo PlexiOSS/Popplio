@@ -505,16 +505,60 @@ func TestBaseAnalytics(t *testing.T) {
 	}
 }
 
-func TestChangelogStubIgnoresAuth(t *testing.T) {
+func TestChangelogRequiresAuth(t *testing.T) {
 	dbOrSkip(t)
 
 	rec := post(t, `{"UpdateChangelog":{"login_token":"not-a-real-token","action":"ListEntries"}}`)
+
+	if got := rec.Body.String(); got != "identityExpired" {
+		t.Errorf("body = %q, want identityExpired (no longer the hard-coded stub message)", got)
+	}
+}
+
+func TestChangelogCreateRequiresPerm(t *testing.T) {
+	f := seedStaff(t, []string{}, "active")
+
+	rec := post(t, fmt.Sprintf(`{"UpdateChangelog":{"login_token":%q,"action":{"CreateEntry":{"project":"popplio","version":"9.9.9","extra_description":"","prerelease":false,"published":false,"added":[],"updated":[],"removed":[]}}}}`, f.Token))
 
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", rec.Code)
 	}
 
-	if got := rec.Body.String(); got != "You do not have permission to create changelog entries [not implemented]" {
+	if got := rec.Body.String(); got != "You do not have permission to create changelog entries [manage_changelog]" {
 		t.Errorf("body = %q", got)
+	}
+}
+
+func TestChangelogCreateListDelete(t *testing.T) {
+	f := seedStaff(t, []string{"manage_changelog"}, "active")
+
+	create := post(t, fmt.Sprintf(`{"UpdateChangelog":{"login_token":%q,"action":{"CreateEntry":{"project":"omniplex","version":"test-%s","extra_description":"integration test entry","prerelease":true,"published":true,"added":["a thing"],"updated":[],"removed":[]}}}}`, f.Token, impls.GenRandom(8)))
+
+	if create.Code != http.StatusNoContent {
+		t.Fatalf("create status = %d, want 204: %s", create.Code, create.Body.String())
+	}
+
+	list := post(t, fmt.Sprintf(`{"UpdateChangelog":{"login_token":%q,"action":"ListEntries"}}`, f.Token))
+
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200: %s", list.Code, list.Body.String())
+	}
+
+	var entries []types.ChangelogEntry
+
+	if err := json.Unmarshal(list.Body.Bytes(), &entries); err != nil {
+		t.Fatalf("failed to decode list response: %v", err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal("expected at least the entry just created")
+	}
+
+	itag := entries[0].Itag
+
+	del := post(t, fmt.Sprintf(`{"UpdateChangelog":{"login_token":%q,"action":{"DeleteEntry":{"itag":%q}}}}`, f.Token, itag))
+
+	if del.Code != http.StatusNoContent {
+		t.Errorf("delete status = %d, want 204: %s", del.Code, del.Body.String())
 	}
 }

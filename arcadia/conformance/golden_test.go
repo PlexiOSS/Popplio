@@ -38,8 +38,10 @@ func TestGoldenPanelStrings(t *testing.T) {
 		"You do not have permission to update partners [manage_partners]",
 		"You do not have permission to delete partners [manage_partners]",
 
-		// Changelog is a hard stub.
-		"You do not have permission to create changelog entries [not implemented]",
+		// Changelog.
+		"You do not have permission to create changelog entries [manage_changelog]",
+		"You do not have permission to update changelog entries [manage_changelog]",
+		"You do not have permission to delete changelog entries [manage_changelog]",
 
 		// Blog.
 		"Entry does not exist",
