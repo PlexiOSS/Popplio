@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `Keel/ratelimit`'s exceeded check ran against the pre-increment request
+  count, so a `MaxRequests: N` bucket actually let `N+1` requests through
+  before blocking — the check now runs after incrementing, against the
+  count that includes the current request. Affects every rate-limited
+  route across the API; limits are now exactly as configured rather than
+  one request looser.
+
 ### Changed
 
 - Popplio's dependency on the shared library formerly known as `eureka`
