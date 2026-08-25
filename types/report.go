@@ -32,17 +32,17 @@ const (
 // exposed outside the staff panel — see routes/reports and
 // arcadia/panel/ops_reports.go.
 type Report struct {
-	ID              pgtype.UUID      `db:"id" json:"id" description:"The report's ID"`
-	TargetType      string           `db:"target_type" json:"target_type" description:"The type of entity being reported"`
-	TargetID        string           `db:"target_id" json:"target_id" description:"The ID of the entity being reported"`
-	ReporterID      string           `db:"reporter_id" json:"-" description:"The user ID of the reporter, staff-only, never sent to non-staff clients"`
-	Reason          string           `db:"reason" json:"reason" description:"Why the entity was reported"`
-	Description     string           `db:"description" json:"description" description:"Free-text detail from the reporter"`
-	Status          string           `db:"status" json:"status" description:"The report's current review status"`
-	ResolvedBy      pgtype.Text      `db:"resolved_by" json:"resolved_by" description:"The staff member who resolved/dismissed the report, if any"`
-	ResolutionNote  pgtype.Text      `db:"resolution_note" json:"resolution_note" description:"A staff note left when resolving/dismissing the report"`
-	CreatedAt       time.Time        `db:"created_at" json:"created_at" description:"When the report was filed"`
-	ResolvedAt      pgtype.Timestamp `db:"resolved_at" json:"resolved_at" description:"When the report was resolved/dismissed, if it has been"`
+	ID             pgtype.UUID      `db:"id" json:"id" description:"The report's ID"`
+	TargetType     string           `db:"target_type" json:"target_type" description:"The type of entity being reported"`
+	TargetID       string           `db:"target_id" json:"target_id" description:"The ID of the entity being reported"`
+	ReporterID     string           `db:"reporter_id" json:"-" description:"The user ID of the reporter, staff-only, never sent to non-staff clients"`
+	Reason         string           `db:"reason" json:"reason" description:"Why the entity was reported"`
+	Description    string           `db:"description" json:"description" description:"Free-text detail from the reporter"`
+	Status         string           `db:"status" json:"status" description:"The report's current review status"`
+	ResolvedBy     pgtype.Text      `db:"resolved_by" json:"resolved_by" description:"The staff member who resolved/dismissed the report, if any"`
+	ResolutionNote pgtype.Text      `db:"resolution_note" json:"resolution_note" description:"A staff note left when resolving/dismissing the report"`
+	CreatedAt      time.Time        `db:"created_at" json:"created_at" description:"When the report was filed"`
+	ResolvedAt     pgtype.Timestamp `db:"resolved_at" json:"resolved_at" description:"When the report was resolved/dismissed, if it has been"`
 }
 
 // CreateReport is the request body for PUT /{target_type}/{target_id}/reports.

@@ -6,18 +6,20 @@ package create_ticket
 
 import (
 	"net/http"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/state"
 	"popplio/tickets"
 	"popplio/types"
-	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/go-playground/validator/v10"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/crypto"
-	"github.com/infinitybotlist/eureka/ratelimit"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/crypto"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/ratelimit"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 type CreatedTicket struct {

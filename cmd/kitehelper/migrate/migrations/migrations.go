@@ -23,8 +23,9 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
-	"github.com/infinitybotlist/eureka/crypto"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/crypto"
 )
 
 const cdnPath = "/silverpelt/cdn/ibl"

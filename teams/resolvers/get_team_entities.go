@@ -8,25 +8,27 @@ package resolvers
 import (
 	"context"
 	"fmt"
-	"popplio/db"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	botAssets "popplio/routes/bots/assets"
 	serverAssets "popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
-	"github.com/infinitybotlist/eureka/dovewing"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 var (
-	tmColsArr = db.GetCols(types.TeamMember{})
+	tmColsArr = dbutil.GetCols(types.TeamMember{})
 	tmCols    = strings.Join(tmColsArr, ",")
 
-	indexBotColsArr = db.GetCols(types.IndexBot{})
+	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
 	indexBotCols    = strings.Join(indexBotColsArr, ",")
 
-	indexServerColsArr = db.GetCols(types.IndexServer{})
+	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
 	indexServerCols    = strings.Join(indexServerColsArr, ",")
 )
 

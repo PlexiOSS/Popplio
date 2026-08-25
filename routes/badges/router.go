@@ -8,7 +8,8 @@ import (
 	"popplio/routes/badges/endpoints/get_entity_badges"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Badges"

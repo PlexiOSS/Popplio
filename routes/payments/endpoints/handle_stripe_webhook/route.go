@@ -8,16 +8,18 @@ package handle_stripe_webhook
 import (
 	"io"
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/notifications"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/jsonimpl"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/jsonimpl"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/stripe/stripe-go/v75"
 	"github.com/stripe/stripe-go/v75/webhook"

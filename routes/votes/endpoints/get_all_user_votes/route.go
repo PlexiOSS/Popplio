@@ -8,26 +8,28 @@ package get_all_user_votes
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 5
 
 var (
-	entityVoteColsArr = db.GetCols(types.EntityVote{})
+	entityVoteColsArr = dbutil.GetCols(types.EntityVote{})
 	entityVoteCols    = strings.Join(entityVoteColsArr, ",")
 )
 

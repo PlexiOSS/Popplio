@@ -29,7 +29,7 @@ func transferOwnershipUser(ctx context.Context, m *types.RPCBotTransferOwnership
 	}
 
 	if teamOwner != nil {
-		return Success{}, errors.New(" is in a team. Please use BotTransferOwnershipTeam")
+		return Success{}, fmt.Errorf("%q is in a team. Please use BotTransferOwnershipTeam", m.TargetID)
 	}
 
 	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET owner = $2 WHERE bot_id = $1", m.TargetID, m.NewOwner); err != nil {
@@ -37,7 +37,7 @@ func transferOwnershipUser(ctx context.Context, m *types.RPCBotTransferOwnership
 	}
 
 	err := modLogReason(
-		" Ownership Force Update!",
+		"Ownership Force Update!",
 		fmt.Sprintf("<@%s> has force-updated the ownership of <@%s> to <@%s>", h.UserID, m.TargetID, m.NewOwner),
 		"Contact support if you think this is a mistake", impls.ColourRed, m.Reason)
 
@@ -66,7 +66,7 @@ func transferOwnershipTeam(ctx context.Context, m *types.RPCBotTransferOwnership
 	}
 
 	if teamOwner == nil {
-		return Success{}, errors.New(" is not in a team. Please use TransferOwnership")
+		return Success{}, fmt.Errorf("%q is not in a team. Please use TransferOwnership", m.TargetID)
 	}
 
 	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET team_owner = $2 WHERE bot_id = $1", m.TargetID, teamID); err != nil {
@@ -74,7 +74,7 @@ func transferOwnershipTeam(ctx context.Context, m *types.RPCBotTransferOwnership
 	}
 
 	err = modLogReason(
-		" Ownership Force Update!",
+		"Ownership Force Update!",
 		fmt.Sprintf("<@%s> has force-updated the ownership of <@%s> to team %s", h.UserID, m.TargetID, teamID),
 		"Contact support if you think this is a mistake", impls.ColourRed, m.Reason)
 

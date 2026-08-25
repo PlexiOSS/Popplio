@@ -11,7 +11,8 @@ import (
 	"popplio/routes/apps/endpoints/get_apps_meta"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Apps"

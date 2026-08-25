@@ -3,7 +3,7 @@ package types
 import (
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type BlogPost struct {

@@ -23,7 +23,7 @@ func certifyAdd(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 	}
 
 	err := modLogReason(
-		" Force Certified!",
+		"Force Certified!",
 		fmt.Sprintf("<@%s> has force-certified <@%s>", h.UserID, m.TargetID),
 		"Neat", impls.ColourRedLower, m.Reason)
 
@@ -69,7 +69,7 @@ func certifyRemove(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 	}
 
 	err := modLogReason(
-		" Uncertified!",
+		"Uncertified!",
 		fmt.Sprintf("<@%s> has uncertified <@%s>", h.UserID, m.TargetID),
 		"Uh oh, looks like you've been naughty...", impls.ColourRedLower, m.Reason)
 

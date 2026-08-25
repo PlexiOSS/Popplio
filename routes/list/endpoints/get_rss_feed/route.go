@@ -5,19 +5,21 @@ package get_rss_feed
 
 import (
 	"net/http"
+	"strconv"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/pagination"
 	"popplio/seo"
 	"popplio/seo/fetchers"
 	"popplio/state"
-	"strconv"
-	"time"
 
 	"encoding/xml"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

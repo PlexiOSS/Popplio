@@ -7,22 +7,24 @@ package get_staff_templates
 
 import (
 	"net/http"
-	"popplio/api/resp"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
 	"strings"
 
-	"github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/api/resp"
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/jackc/pgx/v5"
+
+	"github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	templateTypesColsArr = db.GetCols(types.StaffTemplateType{})
+	templateTypesColsArr = dbutil.GetCols(types.StaffTemplateType{})
 	templateTypesCols    = strings.Join(templateTypesColsArr, ",")
 
-	templateColsArr = db.GetCols(types.StaffTemplate{})
+	templateColsArr = dbutil.GetCols(types.StaffTemplate{})
 	templateCols    = strings.Join(templateColsArr, ",")
 )
 

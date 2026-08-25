@@ -6,10 +6,11 @@ package test_webhook
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"reflect"
 	"slices"
 	"time"
+
+	"popplio/api/resp"
 
 	"popplio/state"
 	"popplio/types"
@@ -17,11 +18,12 @@ import (
 	"popplio/webhooks/core/drivers"
 	"popplio/webhooks/core/events"
 
-	"github.com/infinitybotlist/eureka/ratelimit"
 	"go.uber.org/zap"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/ratelimit"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

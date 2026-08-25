@@ -5,24 +5,26 @@ package get_all_bots
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/pagination"
 	"popplio/routes/bots/assets"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 12
 
 var (
-	indexBotColsArr = db.GetCols(types.IndexBot{})
+	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
 	indexBotCols    = strings.Join(indexBotColsArr, ",")
 )
 

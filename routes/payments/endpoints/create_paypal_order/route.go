@@ -8,18 +8,20 @@ package create_paypal_order
 import (
 	"fmt"
 	"net/http"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/routes/payments/assets"
 	"popplio/state"
-	"time"
 
-	"github.com/infinitybotlist/eureka/jsonimpl"
-	"github.com/infinitybotlist/eureka/ratelimit"
 	"go.uber.org/zap"
 
-	"github.com/infinitybotlist/eureka/crypto"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/jsonimpl"
+	"github.com/PlexiOSS/Keel/ratelimit"
+
+	"github.com/PlexiOSS/Keel/crypto"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/plutov/paypal/v4"

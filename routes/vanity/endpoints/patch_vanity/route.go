@@ -6,19 +6,21 @@ package patch_vanity
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"slices"
 	"strings"
 	"unicode"
+
+	"popplio/api/resp"
 
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/go-playground/validator/v10"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

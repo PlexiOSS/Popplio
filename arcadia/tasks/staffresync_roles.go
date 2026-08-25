@@ -9,18 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Mirroring a position's "corresponding roles" into the other guilds.
-//
-// A position can carry Discord roles in the main and staff servers that follow
-// it: gaining the position adds them, losing it takes them away. This is the
-// only part of the resync that writes to Discord rather than to the database.
-
-// modifyCorrespondingRoles mirrors position changes into the other guilds.
-//
-// INCONSISTENCY (reproduced): only "main" and "staff" are handled here, while
-// the panel's position validator (§5.17) also accepts "testing". A position with
-// a "testing" corresponding role validates but is silently ignored by this sync.
-// See CONFORMANCE.md.
 func modifyCorrespondingRoles(posByID map[string]cachedPosition, user snowflake.ID, removeIDs, addIDs []string) error {
 	remove := collectCorrespondingRoles(posByID, removeIDs)
 	add := collectCorrespondingRoles(posByID, addIDs)
@@ -70,6 +58,8 @@ func collectCorrespondingRoles(posByID map[string]cachedPosition, positionIDs []
 				guildID = state.Config.Servers.Main
 			case "staff":
 				guildID = state.Config.Servers.Staff
+			case "testing":
+				guildID = state.Config.Servers.Testing
 			default:
 				state.Logger.Warn("Unknown corresponding server", zap.String("name", link.Name))
 				continue

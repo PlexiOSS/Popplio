@@ -4,9 +4,7 @@
 package list
 
 import (
-	"popplio/routes/list/endpoints/current_status"
 	"popplio/routes/list/endpoints/get_list_stats"
-	"popplio/routes/list/endpoints/get_list_team"
 	"popplio/routes/list/endpoints/get_partners"
 	"popplio/routes/list/endpoints/get_rss_feed"
 	"popplio/routes/list/endpoints/get_sitemap"
@@ -14,7 +12,8 @@ import (
 	"popplio/routes/list/endpoints/search_list"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "List"
@@ -69,25 +68,9 @@ func (b Router) Routes(r *chi.Mux) {
 
 	uapi.Route{
 		Pattern: "/list/staff-templates",
-		OpId:    "get_partners",
+		OpId:    "get_staff_templates",
 		Method:  uapi.GET,
 		Docs:    get_staff_templates.Docs,
 		Handler: get_staff_templates.Route,
-	}.Route(r)
-
-	uapi.Route{
-		Pattern: "/list/team",
-		OpId:    "get_list_team",
-		Method:  uapi.GET,
-		Docs:    get_list_team.Docs,
-		Handler: get_list_team.Route,
-	}.Route(r)
-
-	uapi.Route{
-		Pattern: "/list/current-status",
-		OpId:    "current_status",
-		Method:  uapi.GET,
-		Docs:    current_status.Docs,
-		Handler: current_status.Route,
 	}.Route(r)
 }

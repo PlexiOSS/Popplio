@@ -3,13 +3,15 @@ package add_server
 import (
 	"fmt"
 	"net/http"
-	"popplio/api/resp"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/moderation"
 	"popplio/perms"
 	"popplio/routes/servers/assets"
@@ -20,12 +22,13 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/google/uuid"
-	"github.com/infinitybotlist/eureka/crypto"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/ratelimit"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/crypto"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/ratelimit"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -51,7 +54,7 @@ func createServerArgs(server types.CreateServer) []any {
 var (
 	compiledMessages = uapi.CompileValidationErrors(types.CreateServer{})
 
-	createServerColsArr = db.GetCols(types.CreateServer{})
+	createServerColsArr = dbutil.GetCols(types.CreateServer{})
 	createServerCols    = strings.Join(createServerColsArr, ", ")
 
 	createServerParams string
@@ -258,17 +261,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 					{
 						Name:   "Name",
 						Value:  payload.Name,
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 					{
 						Name:   "Server ID",
 						Value:  payload.ServerID,
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 					{
 						Name:   "Added by",
 						Value:  fmt.Sprintf("<@%s>", d.Auth.ID),
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 				},
 			},

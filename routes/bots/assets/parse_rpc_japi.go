@@ -5,14 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"popplio/state"
-	"popplio/types"
 	"strconv"
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/jsonimpl"
+	"popplio/state"
+	"popplio/types"
+
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
 type japidata struct {

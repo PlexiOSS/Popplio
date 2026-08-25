@@ -23,19 +23,21 @@ import (
 	"io"
 	rand2 "math/rand"
 	"net/http"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
-	"popplio/webhooks/core/events"
-	"popplio/webhooks/core/utils"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/state"
+	"popplio/types"
+	"popplio/webhooks/core/events"
+	"popplio/webhooks/core/utils"
+
 	"github.com/disgoorg/disgo/discord"
-	"github.com/infinitybotlist/eureka/jsonimpl"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
 // Represents a internal webhook to fanout
@@ -51,7 +53,7 @@ type webhookData struct {
 }
 
 var (
-	wdColsArr = db.GetCols(webhookData{})
+	wdColsArr = dbutil.GetCols(webhookData{})
 	wdCols    = strings.Join(wdColsArr, ",")
 
 	ErrNoWebhooks                = errors.New("no webhooks found")

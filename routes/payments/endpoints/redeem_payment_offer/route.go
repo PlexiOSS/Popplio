@@ -6,17 +6,19 @@ package redeem_payment_offer
 
 import (
 	"net/http"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/routes/payments/assets"
 	"popplio/state"
-	"time"
 
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/infinitybotlist/eureka/ratelimit"
 	"go.uber.org/zap"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/ratelimit"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 )

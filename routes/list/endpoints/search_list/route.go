@@ -6,27 +6,29 @@ package search_list
 import (
 	_ "embed"
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 	"text/template"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	botAssets "popplio/routes/bots/assets"
 	serverAssets "popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 )
 
 var (
-	indexBotColsArr           = db.GetCols(types.IndexBot{})
+	indexBotColsArr           = dbutil.GetCols(types.IndexBot{})
 	indexBotColsWithPrefixArr = func() []string {
 		// Prefix all columns with bots.
 		var cols []string
@@ -40,7 +42,7 @@ var (
 
 	indexBotColsWithPrefix = strings.Join(indexBotColsWithPrefixArr, ",")
 
-	indexServerColsArr = db.GetCols(types.IndexServer{})
+	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
 	indexServerCols    = strings.Join(indexServerColsArr, ",")
 
 	compiledMessages = uapi.CompileValidationErrors(types.SearchQuery{})

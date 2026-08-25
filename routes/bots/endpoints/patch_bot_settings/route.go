@@ -8,19 +8,22 @@ package patch_bot_settings
 import (
 	"fmt"
 	"net/http"
-	"popplio/api/resp"
-	"popplio/state"
-	"popplio/types"
-	"popplio/validators"
 	"reflect"
 	"strconv"
 	"strings"
 
+	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/api/resp"
+	"popplio/state"
+	"popplio/types"
+	"popplio/validators"
+
 	"github.com/disgoorg/disgo/discord"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -133,17 +136,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			{
 				Name:   "Name",
 				Value:  botUser.Username,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "Bot ID",
 				Value:  "<@" + id + ">",
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "User",
 				Value:  fmt.Sprintf("<@%s>", d.Auth.ID),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 		},
 	}

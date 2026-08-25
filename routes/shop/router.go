@@ -5,6 +5,7 @@ package shop
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/shop/endpoints/get_public_coupons"
@@ -15,7 +16,8 @@ import (
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Shop"

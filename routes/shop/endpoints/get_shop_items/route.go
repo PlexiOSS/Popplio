@@ -5,20 +5,22 @@ package get_shop_items
 
 import (
 	"net/http"
-	"popplio/api/resp"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
 	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/api/resp"
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
 	// Shop items
-	shopItemsColsArr = db.GetCols(types.ShopItem{})
+	shopItemsColsArr = dbutil.GetCols(types.ShopItem{})
 	shopItemsCols    = strings.Join(shopItemsColsArr, ",")
 )
 

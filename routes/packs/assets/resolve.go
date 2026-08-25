@@ -5,27 +5,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"popplio/db"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	botassets "popplio/routes/bots/assets"
 	serverassets "popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
-	"strings"
 
-	"github.com/infinitybotlist/eureka/dovewing"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 var (
-	indexBotColArr = db.GetCols(types.IndexBot{})
+	indexBotColArr = dbutil.GetCols(types.IndexBot{})
 	indexBotCols   = strings.Join(indexBotColArr, ",")
 
-	indexServerColArr = db.GetCols(types.IndexServer{})
+	indexServerColArr = dbutil.GetCols(types.IndexServer{})
 	indexServerCols   = strings.Join(indexServerColArr, ",")
 
-	packEmojiColArr = db.GetCols(types.PackEmoji{})
+	packEmojiColArr = dbutil.GetCols(types.PackEmoji{})
 	packEmojiCols   = strings.Join(packEmojiColArr, ",")
 )
 

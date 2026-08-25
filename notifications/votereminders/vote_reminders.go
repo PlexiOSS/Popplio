@@ -3,11 +3,12 @@ package votereminders
 
 import (
 	"fmt"
+	"time"
+
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"

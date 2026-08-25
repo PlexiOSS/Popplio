@@ -2,8 +2,9 @@ package validators
 
 import (
 	"errors"
-	"popplio/types"
 	"strings"
+
+	"popplio/types"
 )
 
 func ValidateExtraLinks(links []types.Link) error {

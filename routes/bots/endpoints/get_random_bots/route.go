@@ -5,20 +5,22 @@ package get_random_bots
 
 import (
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/routes/bots/assets"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	indexBotColsArr = db.GetCols(types.IndexBot{})
+	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
 	indexBotCols    = strings.Join(indexBotColsArr, ",")
 )
 

@@ -6,20 +6,22 @@ package get_random_servers
 
 import (
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	indexServerColsArr = db.GetCols(types.IndexServer{})
+	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
 	indexServerCols    = strings.Join(indexServerColsArr, ",")
 )
 

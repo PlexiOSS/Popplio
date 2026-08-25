@@ -3,8 +3,9 @@ package assets
 import (
 	"popplio/state"
 
-	"github.com/infinitybotlist/eureka/dovewing"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 type deleteCall struct {

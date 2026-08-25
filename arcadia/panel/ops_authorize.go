@@ -18,13 +18,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// authVersion is the protocol version the panel must send on Authorize.
 const authVersion = 5
 
-// oauthUserAgent is sent on both Discord calls.
 const oauthUserAgent = "DiscordBot (arcadia v1.0)"
 
-// authorize handles the login flow. It takes no prior authentication.
 func (s *Server) authorize(ctx context.Context, q *types.QAuthorize) (response, error) {
 	if q.Version != authVersion {
 		return writeText(http.StatusBadRequest, "Invalid version"), nil
@@ -53,11 +50,13 @@ func (s *Server) authBegin(action *types.AuthBegin) (response, error) {
 		return writeText(http.StatusBadRequest, "Invalid scope"), nil
 	}
 
-	// NOTE: redirect_url is neither validated nor URL-encoded here. Preserved
-	// byte-for-byte; see CONFORMANCE.md.
+	if !containsString(state.Config.Arcadia.Panel.RedirectURL, action.RedirectURL) {
+		return writeText(http.StatusBadRequest, "Invalid redirect url"), nil
+	}
+
 	loginURL := fmt.Sprintf(
 		"https://discord.com/api/oauth2/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=identify",
-		state.Config.Arcadia.Panel.ClientID, action.RedirectURL,
+		state.Config.Arcadia.Panel.ClientID, url.QueryEscape(action.RedirectURL),
 	)
 
 	return writeJSON(http.StatusOK, types.StartAuth{
@@ -164,7 +163,6 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 		return writeText(http.StatusForbidden, "You are not a staff member [no positions]"), nil
 	}
 
-	// A bot holds no staff permissions, so it has nothing to log in to.
 	if isBot {
 		return writeText(http.StatusForbidden, "You are not a staff member [bot account]"), nil
 	}
@@ -181,7 +179,6 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 		return response{}, newError(err)
 	}
 
-	// Token length is a random value in [4196, 6000).
 	token := impls.GenRandom(impls.RandRange(4196, 6000))
 
 	_, err = tx.Exec(ctx,
@@ -196,12 +193,11 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 		return response{}, newError(err)
 	}
 
-	// The raw token is the whole body.
 	return writeText(http.StatusOK, token), nil
 }
 
 func (s *Server) authCheckMfaState(ctx context.Context, action *types.AuthCheckMfaState) (response, error) {
-	// This is the only endpoint that works on both pending and active sessions.
+
 	authData, err := checkAuthInsecure(ctx, action.LoginToken)
 
 	if err != nil {
@@ -236,7 +232,7 @@ func (s *Server) authCheckMfaState(ctx context.Context, action *types.AuthCheckM
 	}
 
 	if mfaSecret != nil && mfaVerified {
-		// Already enrolled: nothing to hand back.
+
 		return writeJSON(http.StatusOK, types.MfaLogin{Info: nil}), nil
 	}
 
@@ -297,8 +293,7 @@ func (s *Server) authResetMfaTotp(ctx context.Context, action *types.AuthResetMf
 	valid, err := verifyTOTP(action.OTP, *mfaSecret)
 
 	if err != nil || !valid {
-		// Capital "Entered" here; ActivateSession uses lowercase. Both reproduced.
-		return response{}, errStatus(http.StatusBadRequest, "Invalid OTP Entered")
+		return response{}, errStatus(http.StatusBadRequest, "Invalid OTP entered")
 	}
 
 	if _, err := tx.Exec(ctx, "UPDATE staff_members SET mfa_secret = NULL, mfa_verified = FALSE WHERE user_id = $1", authData.UserID); err != nil {
@@ -353,7 +348,6 @@ func (s *Server) authActivateSession(ctx context.Context, action *types.AuthActi
 	valid, err := verifyTOTP(action.OTP, *mfaSecret)
 
 	if err != nil || !valid {
-		// Lowercase "entered" here; ResetMfaTotp uses uppercase. Both reproduced.
 		return response{}, errStatus(http.StatusBadRequest, "Invalid OTP entered")
 	}
 
@@ -373,14 +367,12 @@ func (s *Server) authActivateSession(ctx context.Context, action *types.AuthActi
 }
 
 func (s *Server) authLogout(ctx context.Context, action *types.AuthLogout) (response, error) {
-	// No auth check at all: deleting a token that does not exist is not an error.
 	tag, err := state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE token = $1", action.LoginToken)
 
 	if err != nil {
 		return response{}, newError(err)
 	}
 
-	// The affected row count is the whole body.
 	return writeText(http.StatusOK, strconv.FormatInt(tag.RowsAffected(), 10)), nil
 }
 

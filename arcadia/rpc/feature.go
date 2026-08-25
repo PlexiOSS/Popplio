@@ -9,7 +9,6 @@ import (
 	"popplio/state"
 )
 
-
 func featureAdd(ctx context.Context, m *types.RPCFeatureAdd, h Handle) (Success, error) {
 	table, idCol, err := entityTable(h.TargetType)
 

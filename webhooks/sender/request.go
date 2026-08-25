@@ -20,8 +20,9 @@ import (
 
 	"popplio/state"
 
-	"github.com/infinitybotlist/eureka/crypto"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/crypto"
 )
 
 // userAgent identifies Popplio to webhook endpoints.

@@ -5,20 +5,22 @@ package create_team
 
 import (
 	"net/http"
+	"strings"
+
 	"popplio/api/resp"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
-	"strings"
 
 	"github.com/google/uuid"
-	"github.com/infinitybotlist/eureka/crypto"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/PlexiOSS/Keel/crypto"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5/pgtype"

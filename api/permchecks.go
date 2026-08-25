@@ -9,7 +9,7 @@ import (
 	"popplio/perms"
 	"popplio/teams"
 
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (

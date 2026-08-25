@@ -3,16 +3,17 @@ package assets
 import (
 	"context"
 	"fmt"
-	"popplio/db"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
 var (
-	reviewColsArr = db.GetCols(types.Review{})
+	reviewColsArr = dbutil.GetCols(types.Review{})
 	reviewCols    = strings.Join(reviewColsArr, ",")
 )
 

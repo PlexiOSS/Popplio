@@ -10,11 +10,12 @@ import (
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/infinitybotlist/eureka/ratelimit"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/PlexiOSS/Keel/ratelimit"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 // setup wires up the two globals the helpers reach into — state.Logger, which

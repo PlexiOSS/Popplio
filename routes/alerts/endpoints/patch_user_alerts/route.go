@@ -7,14 +7,16 @@ package patch_user_alerts
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-playground/validator/v10"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var compiledMessages = uapi.CompileValidationErrors(types.AlertPatch{})

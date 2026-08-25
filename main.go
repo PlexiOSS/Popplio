@@ -48,12 +48,13 @@ import (
 	poplhooks "popplio/webhooks"
 
 	"github.com/cloudflare/tableflip"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/jsonimpl"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
 
-	"github.com/infinitybotlist/eureka/zapchi"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/jsonimpl"
+	"github.com/PlexiOSS/Keel/uapi"
+
+	"github.com/PlexiOSS/Keel/zapchi"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -111,13 +112,14 @@ func main() {
 	var err error
 
 	docs.DocsSetupData = &docs.SetupData{
-		URL:         state.Config.Sites.API,
-		ErrorStruct: types.ApiError{},
+		URL:               state.Config.Sites.API,
+		ServerDescription: "Popplio (v6)",
+		ErrorStruct:       types.ApiError{},
 		Info: docs.Info{
 			Title:          "Omniplex API",
 			TermsOfService: "https://omniplex.gg/legal/terms",
-			Version:        "1.3.2",
-			Description:    "",
+			Version:        "1.4.0",
+			Description:    "RESTful API and Backend Services for Omniplex",
 			Contact: docs.Contact{
 				Name: "Omniplex Support",
 				URL:  "https://discord.gg/AxrR4RNSFT",

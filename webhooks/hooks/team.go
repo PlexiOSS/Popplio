@@ -3,20 +3,21 @@ package hooks
 import (
 	"errors"
 	"fmt"
-	"popplio/db"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/state"
 	"popplio/types"
 	"popplio/webhooks/core/drivers"
 	"popplio/webhooks/core/events"
 	"popplio/webhooks/sender"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 )
 
 var (
-	teamColsArr = db.GetCols(types.Team{})
+	teamColsArr = dbutil.GetCols(types.Team{})
 	teamCols    = strings.Join(teamColsArr, ", ")
 )
 

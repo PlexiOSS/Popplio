@@ -7,9 +7,10 @@ package assets
 
 import (
 	"fmt"
+
+	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/perms"
 	"popplio/state"
-	"popplio/validators"
 
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -157,7 +158,7 @@ var tableTransformer = map[string]TableTransformers{
 					if len(uuidKeys) == 0 {
 						for key := range data[i] {
 							if k, ok := data[i][key].([16]byte); ok {
-								data[i][key] = validators.EncodeUUID(k)
+								data[i][key] = uuidutil.Encode(k)
 								uuidKeys = append(uuidKeys, key)
 							}
 						}
@@ -165,7 +166,7 @@ var tableTransformer = map[string]TableTransformers{
 						// Fast path
 						for _, key := range uuidKeys {
 							if k, ok := data[i][key].([16]byte); ok {
-								data[i][key] = validators.EncodeUUID(k)
+								data[i][key] = uuidutil.Encode(k)
 							}
 						}
 					}

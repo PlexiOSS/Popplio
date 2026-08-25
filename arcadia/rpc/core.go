@@ -166,9 +166,7 @@ func checkReason(reason string) error {
 	return nil
 }
 
-// entityExists is the "SELECT COUNT(*)" existence guard several methods run. The
-// error string genuinely starts with a space upstream: the entity name was
-// dropped in an earlier refactor and the panel shows the message raw.
+// entityExists is the "SELECT COUNT(*)" existence guard several methods run.
 func entityExists(ctx context.Context, query string, targetID string) error {
 	var count int64
 
@@ -177,7 +175,7 @@ func entityExists(ctx context.Context, query string, targetID string) error {
 	}
 
 	if count == 0 {
-		return errors.New(" does not exist")
+		return fmt.Errorf("%q does not exist", targetID)
 	}
 
 	return nil

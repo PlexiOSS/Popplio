@@ -15,13 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// The verdicts on a claimed bot or server, gated by review_entities:
-// approved, denied, or pulled back into the queue for another look.
-//
-// Approve is the heaviest handler in the package and the only one that does
-// anything after the database write — roles for the owners, a kick from the
-// testing server, and the invite URL it hands back.
-
 func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
 	if h.TargetType == types.TargetTypeServer {
 		return approveServer(ctx, m, h)
@@ -69,12 +62,10 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		return Success{}, err
 	}
 
-	// The mod-log post stays INSIDE the transaction, as upstream had it: a failed
-	// post still rolls the approval back.
 	err = impls.SendModLog(discord.MessageCreate{
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
-			Title:       " Approved!",
+			Title:       "Approved!",
 			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID),
 			Description: fmt.Sprintf("<@!%s> has approved <@!%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
@@ -138,10 +129,6 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 	)), nil
 }
 
-// approveServer is approve's server counterpart. There's no server
-// equivalent of the BotDeveloper Discord role auto-grant or the
-// testing-guild kick approve does for bots — no such role is configured for
-// servers — so this stops at the state transition and mod-log post.
 func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
 	if err := checkReason(m.Reason); err != nil {
 		return Success{}, err
@@ -232,9 +219,8 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		return Success{}, err
 	}
 
-	// Leading space is upstream's: the entity name was dropped in a refactor.
 	if botType != "pending" {
-		return Success{}, errors.New(" is not pending review?")
+		return Success{}, fmt.Errorf("<@%s> is not pending review?", m.TargetID)
 	}
 
 	if claimedBy == nil || *claimedBy == "" || lastClaimed == nil {
@@ -254,7 +240,7 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 	err = impls.SendModLog(discord.MessageCreate{
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
-			Title:       " Denied!",
+			Title:       "Denied!",
 			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID),
 			Description: fmt.Sprintf("<@%s> has denied <@%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
@@ -273,7 +259,6 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 	return NoContent(), nil
 }
 
-// denyServer is deny's server counterpart.
 func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
 	if err := checkReason(m.Reason); err != nil {
 		return Success{}, err
@@ -353,16 +338,13 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 		return Success{}, err
 	}
 
-	// QUIRK (reproduced): the third field has an EMPTY name, which the Discord API
-	// rejects, so this embed post fails and the whole call errors. See
-	// CONFORMANCE.md.
 	err := impls.SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title: "__ Unverified For Futher Review!__",
 			Fields: []discord.EmbedField{
 				reasonField(m.Reason),
 				{Name: "Moderator", Value: "<@" + h.UserID + ">", Inline: impls.InlineTrue()},
-				{Name: "", Value: "<@!" + m.TargetID + ">", Inline: impls.InlineTrue()},
+				{Name: "Bot", Value: "<@!" + m.TargetID + ">", Inline: impls.InlineTrue()},
 			},
 			Footer: impls.Footer("Gonna be pending further review..."),
 			Color:  impls.ColourRed,
@@ -376,9 +358,6 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 	return NoContent(), nil
 }
 
-// unverifyServer is unverify's server counterpart. New code, not upstream
-// reproduction, so it doesn't carry over the bot path's empty-embed-field-name
-// quirk (see CONFORMANCE.md) that makes that call always fail.
 func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
 	if err := guardServer(ctx, m.TargetID, m.Reason); err != nil {
 		return Success{}, err

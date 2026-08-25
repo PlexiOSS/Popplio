@@ -3,10 +3,11 @@ package assets
 import (
 	"context"
 	"errors"
+	"strconv"
+
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
-	"strconv"
 
 	"github.com/disgoorg/disgo/discord"
 	"go.uber.org/zap"

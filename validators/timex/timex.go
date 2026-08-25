@@ -10,8 +10,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/infinitybotlist/eureka/jsonimpl"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
 // Duration is a wrapper around time.Duration that allows for JSON marshalling and unmarshalling

@@ -5,15 +5,17 @@ package get_flat_stickers
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 60

@@ -12,11 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The bot whitelist: bots allowed past a restriction they would otherwise hit.
-//
-// It lives with the shop operations because it is administered from the same
-// panel section, not because it has anything to do with buying things.
-
 type botWhitelistRow struct {
 	BotID     string    `db:"bot_id"`
 	UserID    string    `db:"user_id"`
@@ -33,7 +28,6 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 
 	switch {
 	case q.Action.List != nil:
-		// No permission check.
 		rows, err := state.Pool.Query(ctx, "SELECT bot_id, user_id, reason, created_at FROM bot_whitelist ORDER BY created_at DESC")
 
 		if err != nil {
@@ -61,10 +55,8 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 	case q.Action.Add != nil:
 		action := q.Action.Add
 
-		// Note the PARENTHESES here rather than the square brackets the other
-		// messages use.
 		if !userPerms.Has(perms.StaffManageBotWhitelist) {
-			return writeText(http.StatusForbidden, "You do not have permission to add to the bot whitelist (bot_whitelist.create)"), nil
+			return writeText(http.StatusForbidden, "You do not have permission to add to the bot whitelist [bot_whitelist.create]"), nil
 		}
 
 		_, err := state.Pool.Exec(ctx,
@@ -80,7 +72,7 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 		action := q.Action.Edit
 
 		if !userPerms.Has(perms.StaffManageBotWhitelist) {
-			return writeText(http.StatusForbidden, "You do not have permission to update bot whitelist (bot_whitelist.update)"), nil
+			return writeText(http.StatusForbidden, "You do not have permission to update bot whitelist [bot_whitelist.update]"), nil
 		}
 
 		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM bot_whitelist WHERE bot_id = $1", action.BotID); err != nil {
@@ -96,7 +88,7 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 		return writeNoContent(), nil
 	case q.Action.Delete != nil:
 		if !userPerms.Has(perms.StaffManageBotWhitelist) {
-			return writeText(http.StatusForbidden, "You do not have permission to delete bot whitelist entries (bot_whitelist.delete)"), nil
+			return writeText(http.StatusForbidden, "You do not have permission to delete bot whitelist entries [bot_whitelist.delete]"), nil
 		}
 
 		botID := q.Action.Delete.BotID

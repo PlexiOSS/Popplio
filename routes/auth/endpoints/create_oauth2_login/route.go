@@ -13,10 +13,10 @@ import (
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/infinitybotlist/eureka/ratelimit"
+	"github.com/PlexiOSS/Keel/ratelimit"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 	ua "github.com/mileusna/useragent"

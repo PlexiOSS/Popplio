@@ -11,7 +11,8 @@ import (
 	"popplio/routes/notifications/endpoints/get_user_notifications"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Notifications"

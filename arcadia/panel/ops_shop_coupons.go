@@ -13,9 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Shop coupons: discounts, optionally restricted to particular items and
-// redeemable a limited number of times.
-
 type shopCouponRow struct {
 	ID                string    `db:"id"`
 	Code              string    `db:"code"`
@@ -35,45 +32,28 @@ type shopCouponRow struct {
 	TargetTypes       []string  `db:"target_types"`
 }
 
-// validateCoupon applies the shared coupon checks.
-//
-// BUG (reproduced): these use unwrap_or(0), so a NULL max_uses / expiry /
-// reuse_wait_duration becomes 0 and FAILS its check. The "unlimited uses" and
-// "never expires" cases the DTO comments describe are therefore unreachable
-// through this endpoint. See CONFORMANCE.md, which also carries the one-line
-// fix as an opt-in patch.
 func validateCoupon(action *types.ShopCouponUpsert) *response {
-	if derefOr(action.MaxUses, 0) <= 0 {
+	if action.MaxUses != nil && *action.MaxUses <= 0 {
 		resp := writeText(http.StatusBadRequest, "Max uses must be greater than 0")
 		return &resp
 	}
 
-	if derefOr(action.ReuseWaitDuration, 0) <= 0 {
+	if action.ReuseWaitDuration != nil && *action.ReuseWaitDuration <= 0 {
 		resp := writeText(http.StatusBadRequest, "Reuse wait duration must be greater than 0")
 		return &resp
 	}
 
-	if derefOr(action.Expiry, 0) <= 0 {
+	if action.Expiry != nil && *action.Expiry <= 0 {
 		resp := writeText(http.StatusBadRequest, "Expiry must be greater than 0")
 		return &resp
 	}
 
-	if derefOr(action.Cents, 0.0) < 0 {
+	if action.Cents != nil && *action.Cents < 0 {
 		resp := writeText(http.StatusBadRequest, "Cents cannot be lower than 0")
 		return &resp
 	}
 
 	return nil
-}
-
-// derefOr reads through a nullable field, falling back when it is null. The
-// coupon validations rely on the fallback being applied - see CONFORMANCE.md a/2.
-func derefOr[T any](v *T, fallback T) T {
-	if v == nil {
-		return fallback
-	}
-
-	return *v
 }
 
 func validateCouponItems(ctx context.Context, items []string) (*response, error) {
@@ -85,7 +65,6 @@ func validateCouponItems(ctx context.Context, items []string) (*response, error)
 		}
 
 		if !exists {
-			// Rust's `{:#?}` of a String renders with surrounding quotes.
 			resp := writeText(http.StatusBadRequest, fmt.Sprintf("Item %q does not exist", item))
 			return &resp, nil
 		}
@@ -103,7 +82,6 @@ func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoup
 
 	switch {
 	case q.Action.List != nil:
-		// Unlike the other List actions, this one REQUIRES a permission.
 		if !userPerms.Has(perms.StaffViewShop) {
 			return writeText(http.StatusForbidden, "You do not have permission to list shop coupons [view_shop]"), nil
 		}

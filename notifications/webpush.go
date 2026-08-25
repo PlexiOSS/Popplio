@@ -2,12 +2,14 @@ package notifications
 
 import (
 	"fmt"
+
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/SherClockHolmes/webpush-go"
-	"github.com/infinitybotlist/eureka/jsonimpl"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
 func PushNotification(userId string, notif types.Alert) error {

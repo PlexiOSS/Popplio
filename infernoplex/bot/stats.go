@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"runtime/debug"
 
-	"popplio/validators"
+	"github.com/PlexiOSS/Keel/ptr"
 
 	"github.com/disgoorg/disgo/discord"
 )
@@ -38,11 +38,11 @@ func cmdStats() *Command {
 				Embeds: []discord.Embed{{
 					Title: "Infernoplex Statistics",
 					Fields: []discord.EmbedField{
-						{Name: "Bot Version:", Value: version, Inline: validators.TruePtr},
-						{Name: "Go Version:", Value: runtime.Version(), Inline: validators.TruePtr},
-						{Name: "Git Commit:", Value: revision, Inline: validators.TruePtr},
-						{Name: "Modified:", Value: modified, Inline: validators.TruePtr},
-						{Name: "Built On:", Value: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH), Inline: validators.TruePtr},
+						{Name: "Bot Version:", Value: version, Inline: ptr.TruePtr},
+						{Name: "Go Version:", Value: runtime.Version(), Inline: ptr.TruePtr},
+						{Name: "Git Commit:", Value: revision, Inline: ptr.TruePtr},
+						{Name: "Modified:", Value: modified, Inline: ptr.TruePtr},
+						{Name: "Built On:", Value: fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH), Inline: ptr.TruePtr},
 					},
 				}},
 			})

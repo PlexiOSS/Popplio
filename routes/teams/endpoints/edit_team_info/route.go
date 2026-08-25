@@ -5,6 +5,7 @@ package edit_team_info
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/state"
 	"popplio/types"
@@ -13,12 +14,13 @@ import (
 	cevents "popplio/webhooks/core/events"
 	"popplio/webhooks/events"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"

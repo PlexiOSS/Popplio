@@ -3,7 +3,7 @@ package types
 import (
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 // PackType enumerates what a pack bundles. Immutable once a pack is
@@ -33,7 +33,7 @@ type BotPack struct {
 	Bots            []string                `db:"bots" json:"bot_ids" description:"The pack's bot IDs (pack_type=bot only)"`
 	ResolvedBots    []IndexBot              `db:"-" json:"bots" ci:"internal" description:"The resolved bots in the pack"` // Bots must be resolved internally from their IDs
 	Servers         []string                `db:"servers" json:"server_ids" description:"The pack's server IDs (pack_type=server only)"`
-	ResolvedServers []IndexServer           `db:"-" json:"servers" ci:"internal" description:"The resolved servers in the pack"` // Servers must be resolved internally from their IDs
+	ResolvedServers []IndexServer           `db:"-" json:"servers" ci:"internal" description:"The resolved servers in the pack"`                                   // Servers must be resolved internally from their IDs
 	Emojis          []PackEmoji             `db:"-" json:"emojis" ci:"internal" description:"The pack's emojis (pack_type=emoji only), resolved from pack_emojis"` // Emojis must be resolved internally from pack_emojis
 	VoteBanned      bool                    `db:"vote_banned" json:"vote_banned" description:"Whether the pack is banned from voting"`
 }

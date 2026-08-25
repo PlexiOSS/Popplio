@@ -2,14 +2,16 @@ package events
 
 import (
 	"fmt"
-	"popplio/types"
-	"popplio/validators"
 	"time"
 
+	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/types"
+
 	"github.com/disgoorg/disgo/discord"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
-	"github.com/infinitybotlist/eureka/jsonimpl"
 	"github.com/mitchellh/mapstructure"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
+	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
 // Target is a struct to store the target of a webhook event.
@@ -128,7 +130,7 @@ func ConvertChangesetToEmbedFields[T any](name string, c Changeset[T]) []discord
 
 				return fmt.Sprint(c.Old)
 			}(),
-			Inline: validators.TruePtr,
+			Inline: ptr.TruePtr,
 		},
 		{
 			Name: "New " + name,
@@ -139,7 +141,7 @@ func ConvertChangesetToEmbedFields[T any](name string, c Changeset[T]) []discord
 
 				return fmt.Sprint(c.New)
 			}(),
-			Inline: validators.TruePtr,
+			Inline: ptr.TruePtr,
 		},
 	}
 }

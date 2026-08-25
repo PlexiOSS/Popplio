@@ -6,12 +6,14 @@
 package events
 
 import (
-	"popplio/validators"
-	"popplio/webhooks/core/events"
 	"strconv"
 
+	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/webhooks/core/events"
+
 	"github.com/disgoorg/disgo/discord"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type WebhookNewVoteData struct {
@@ -53,7 +55,7 @@ func (v WebhookNewVoteData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, 
 			{
 				Name:   "Vote Count:",
 				Value:  strconv.Itoa(int(v.Votes)),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name: "Downvote:",
@@ -67,12 +69,12 @@ func (v WebhookNewVoteData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, 
 			{
 				Name:   "User ID:",
 				Value:  creator.ID,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "View Page",
 				Value:  targets.GetViewLink(),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 		},
 	}

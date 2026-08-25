@@ -2,25 +2,27 @@ package get_all_servers
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/pagination"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 12
 
 var (
-	indexServerColsArr = db.GetCols(types.IndexServer{})
+	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
 	indexServerCols    = strings.Join(indexServerColsArr, ",")
 )
 

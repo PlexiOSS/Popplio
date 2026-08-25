@@ -6,14 +6,16 @@ package add_bot
 import (
 	"fmt"
 	"net/http"
-	"popplio/api/resp"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api"
-	"popplio/db"
 	"popplio/moderation"
 	"popplio/perms"
 	"popplio/routes/bots/assets"
@@ -24,14 +26,15 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/google/uuid"
-	"github.com/infinitybotlist/eureka/ratelimit"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
-	"github.com/infinitybotlist/eureka/crypto"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/ratelimit"
+
+	"github.com/PlexiOSS/Keel/crypto"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -58,7 +61,7 @@ func createBotsArgs(bot types.CreateBot) []any {
 var (
 	compiledMessages = uapi.CompileValidationErrors(types.CreateBot{})
 
-	createBotsColsArr = db.GetCols(types.CreateBot{})
+	createBotsColsArr = dbutil.GetCols(types.CreateBot{})
 	createBotsCols    = strings.Join(createBotsColsArr, ", ")
 
 	// $1, $2, $3, etc, using the length of the array
@@ -306,12 +309,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			{
 				Name:   "Name",
 				Value:  metadata.Name,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "Bot ID",
 				Value:  payload.BotID,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name: "Owner",
@@ -321,7 +324,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 					}
 					return fmt.Sprintf("<@%s>", d.Auth.ID)
 				}(),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 		},
 	}

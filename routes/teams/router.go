@@ -5,6 +5,7 @@ package teams
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/teams/endpoints/add_team_member"
@@ -19,7 +20,8 @@ import (
 	"popplio/routes/teams/endpoints/get_team_seo"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Teams"

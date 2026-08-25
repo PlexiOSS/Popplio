@@ -8,8 +8,9 @@ import (
 
 	"popplio/state"
 
-	"github.com/infinitybotlist/eureka/dovewing"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 // staffQuery loads a staff member's extra permissions and every role they hold

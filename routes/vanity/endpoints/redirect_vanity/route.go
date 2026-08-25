@@ -6,15 +6,17 @@ package redirect_vanity
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/routes/vanity/assets"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

@@ -8,15 +8,17 @@ package assets
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
-	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 const statsPostFreshness = 24 * time.Hour

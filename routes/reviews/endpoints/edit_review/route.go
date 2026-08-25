@@ -8,6 +8,7 @@ package edit_review
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/api/resp"
 	"popplio/perms"
@@ -19,9 +20,10 @@ import (
 	cevents "popplio/webhooks/core/events"
 	"popplio/webhooks/events"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"

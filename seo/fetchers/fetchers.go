@@ -8,12 +8,14 @@ package fetchers
 import (
 	"context"
 	"fmt"
-	"popplio/seo"
-	"popplio/state"
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing"
+	"popplio/seo"
+	"popplio/state"
+
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 // Fetcher for a team

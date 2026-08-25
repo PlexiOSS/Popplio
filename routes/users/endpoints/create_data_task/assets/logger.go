@@ -3,12 +3,14 @@ package assets
 import (
 	"fmt"
 	"os"
-	"popplio/state"
 	"sync"
 
-	"github.com/infinitybotlist/eureka/jsonimpl"
+	"popplio/state"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
 type mutLogger struct {

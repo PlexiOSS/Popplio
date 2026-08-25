@@ -7,14 +7,16 @@ package check_booster_status
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/routes/payments/assets"
 	"popplio/types"
 
 	"github.com/disgoorg/snowflake/v2"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

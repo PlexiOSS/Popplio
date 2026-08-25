@@ -13,7 +13,7 @@ import (
 	_ "popplio/webhooks/events"
 	_ "popplio/webhooks/hooks"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
+	docs "github.com/PlexiOSS/Keel/doclib"
 )
 
 // Setup code

@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"popplio/db"
-	"popplio/types"
 	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/types"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
-	voteCreditTiersColsArr = db.GetCols(types.VoteCreditTier{})
+	voteCreditTiersColsArr = dbutil.GetCols(types.VoteCreditTier{})
 	voteCreditTiersCols    = strings.Join(voteCreditTiersColsArr, ",")
 
-	entityVoteRedeemLogsColsArr = db.GetCols(types.EntityVoteRedeemLog{})
+	entityVoteRedeemLogsColsArr = dbutil.GetCols(types.EntityVoteRedeemLog{})
 	entityVoteRedeemLogsCols    = strings.Join(entityVoteRedeemLogsColsArr, ",")
 )
 

@@ -12,7 +12,8 @@ import (
 	"popplio/routes/alerts/endpoints/patch_user_alerts"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Alerts"

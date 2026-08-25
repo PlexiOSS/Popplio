@@ -5,8 +5,9 @@ import (
 
 	"popplio/perms"
 
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 // PermissionData describes one permission that can be granted. It is the public

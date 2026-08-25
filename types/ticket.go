@@ -4,8 +4,9 @@ import (
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type Ticket struct {
