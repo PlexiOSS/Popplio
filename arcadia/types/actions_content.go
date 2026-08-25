@@ -103,6 +103,26 @@ type ChangelogAction struct {
 	CreateEntry *ChangelogCreateEntry
 	UpdateEntry *ChangelogUpdateEntry
 	DeleteEntry *ChangelogDeleteEntry
+	Generate    *ChangelogGenerateRequest
+}
+
+// ChangelogGenerateRequest asks for a not-yet-saved draft entry built from
+// the merged PRs between two git refs on the project's GitHub repo.
+type ChangelogGenerateRequest struct {
+	Project string `json:"project"`
+	Base    string `json:"base"`
+	Head    string `json:"head"`
+}
+
+// ChangelogDraft is the generated result — everything a ChangelogCreateEntry
+// needs except project/version/prerelease/published, which the admin sets
+// by hand before saving.
+type ChangelogDraft struct {
+	Added            []string `json:"added"`
+	Updated          []string `json:"updated"`
+	Fixed            []string `json:"fixed"`
+	Removed          []string `json:"removed"`
+	ExtraDescription string   `json:"extra_description"`
 }
 
 // Project is either "popplio" or "omniplex" on every DTO below — validated
@@ -157,6 +177,9 @@ func (a *ChangelogAction) UnmarshalJSON(data []byte) error {
 	case "DeleteEntry":
 		a.DeleteEntry = &ChangelogDeleteEntry{}
 		return decodeVariant("ChangelogAction", name, payload, a.DeleteEntry)
+	case "Generate":
+		a.Generate = &ChangelogGenerateRequest{}
+		return decodeVariant("ChangelogAction", name, payload, a.Generate)
 	default:
 		return errUnknownVariant("ChangelogAction", name)
 	}
@@ -174,6 +197,8 @@ func (a ChangelogAction) MarshalJSON() ([]byte, error) {
 		return encodeVariant("UpdateEntry", a.UpdateEntry)
 	case a.DeleteEntry != nil:
 		return encodeVariant("DeleteEntry", a.DeleteEntry)
+	case a.Generate != nil:
+		return encodeVariant("Generate", a.Generate)
 	default:
 		return nil, fmt.Errorf("ChangelogAction: no variant set")
 	}

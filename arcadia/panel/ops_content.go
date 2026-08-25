@@ -10,6 +10,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/changeloggen"
 	"popplio/perms"
 	"popplio/state"
 
@@ -421,6 +422,42 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		}
 
 		return writeNoContent(), nil
+	case q.Action.Generate != nil:
+		if !userPerms.Has(perms.StaffManageChangelog) {
+			return writeText(http.StatusForbidden, "You do not have permission to create changelog entries [manage_changelog]"), nil
+		}
+
+		gen := q.Action.Generate
+
+		if !validChangelogProject(gen.Project) {
+			return writeText(http.StatusBadRequest, "project must be 'popplio' or 'omniplex'"), nil
+		}
+
+		owner, repoName, ok := changeloggen.RepoFor(gen.Project)
+
+		if !ok {
+			return writeText(http.StatusBadRequest, "no GitHub repo is configured for this project"), nil
+		}
+
+		prs, stats, err := changeloggen.ComparePRs(ctx, owner, repoName, gen.Base, gen.Head)
+
+		if err != nil {
+			return writeText(http.StatusBadRequest, "Failed to compare refs on GitHub: "+err.Error()), nil
+		}
+
+		draft, err := changeloggen.Summarize(ctx, prs, stats)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		return writeJSON(http.StatusOK, types.ChangelogDraft{
+			Added:            draft.Added,
+			Updated:          draft.Updated,
+			Fixed:            draft.Fixed,
+			Removed:          draft.Removed,
+			ExtraDescription: draft.ExtraDescription,
+		}), nil
 	default:
 		return response{}, errStatus(http.StatusBadRequest, "No changelog action was specified")
 	}

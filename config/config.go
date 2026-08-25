@@ -84,6 +84,7 @@ type Meta struct {
 	StripeSecretKey string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
 	PopplioProxy    string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
 	OpenAIAPIKey    string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset" required:"false"`
+	GithubToken     string   `yaml:"github_token" default:"" comment:"GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+" required:"false"`
 }
 
 type Arcadia struct {
