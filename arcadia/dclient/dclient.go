@@ -58,7 +58,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 
 	client = c
 
-	if err := c.SetPresence(ctx, gateway.WithWatchingActivity("the review queue")); err != nil {
+	if err := c.SetPresence(ctx, gateway.WithCustomActivity("Watching the review queue")); err != nil {
 		state.Logger.Error("Failed to set staff bot presence", zap.Error(err))
 	}
 
