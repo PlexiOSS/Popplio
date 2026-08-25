@@ -111,6 +111,17 @@ func testingServer(c *Ctx) error {
 	return nil
 }
 
+// mainOrTestingServer restricts a command to the two community guilds,
+// excluding the staff server. Kept as one check rather than teaching Checks
+// to OR, since every command that needs it needs exactly this pair.
+func mainOrTestingServer(c *Ctx) error {
+	if c.GuildID != state.Config.Servers.Main && c.GuildID != state.Config.Servers.Testing {
+		return errors.New("this command can only be used in the main or testing server")
+	}
+
+	return nil
+}
+
 func isStaff(c *Ctx) error {
 	if perms.IsConfigOwner(c.Author.ID.String()) {
 		return nil

@@ -43,6 +43,9 @@ const (
 
 	StaffModerateGuild Perm = "moderate_guild"
 	StaffWarnUsers     Perm = "warn_users"
+	StaffPurgeMessages Perm = "purge_messages"
+	StaffLockChannels  Perm = "lock_channels"
+	StaffViewModCases  Perm = "view_mod_cases"
 
 	StaffManageBadges    Perm = "manage_badges"
 	StaffAssignBadges    Perm = "assign_badges"
@@ -312,6 +315,26 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		ID:          StaffWarnUsers,
 		Name:        "Warn Users",
 		Description: "Send a formal warning to a member and log it, without kicking, banning, or timing them out.",
+		Category:    "Guild Moderation",
+	},
+	{
+		ID:          StaffPurgeMessages,
+		Name:        "Purge Messages",
+		Description: "Bulk-delete recent messages in a channel, optionally filtered to one user.",
+		Category:    "Guild Moderation",
+		Dangerous:   true,
+	},
+	{
+		ID:          StaffLockChannels,
+		Name:        "Lock/Unlock Channels",
+		Description: "Deny or restore @everyone's Send Messages permission in a channel during an incident.",
+		Category:    "Guild Moderation",
+		Dangerous:   true,
+	},
+	{
+		ID:          StaffViewModCases,
+		Name:        "View Mod Case History",
+		Description: "Look up a member's past kicks, bans, timeouts, and warns.",
 		Category:    "Guild Moderation",
 	},
 

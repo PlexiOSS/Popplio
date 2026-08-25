@@ -96,6 +96,66 @@ func TimeoutMember(guildID, userID snowflake.ID, until time.Time, reason string)
 	return err
 }
 
+// PurgeMessages bulk-deletes messages in a channel, recording an audit-log
+// reason. Discord's bulk-delete endpoint only accepts messages younger than
+// 14 days and refuses fewer than 2 ids; callers are expected to have already
+// filtered for both.
+func PurgeMessages(channelID snowflake.ID, messageIDs []snowflake.ID, reason string) error {
+	return dclient.Get().Rest().BulkDeleteMessages(channelID, messageIDs, rest.WithReason(reason))
+}
+
+// GetRecentMessages fetches up to limit of the most recent messages in a
+// channel.
+func GetRecentMessages(channelID snowflake.ID, limit int) ([]discord.Message, error) {
+	return dclient.Get().Rest().GetMessages(channelID, 0, 0, 0, limit)
+}
+
+// DeleteMessage removes a single message, recording an audit-log reason.
+func DeleteMessage(channelID, messageID snowflake.ID, reason string) error {
+	return dclient.Get().Rest().DeleteMessage(channelID, messageID, rest.WithReason(reason))
+}
+
+// LockChannel denies @everyone's Send Messages permission in a channel,
+// preserving every other bit already on the overwrite.
+func LockChannel(guildID, channelID snowflake.ID, reason string) error {
+	return setEveryoneSendMessages(guildID, channelID, false, reason)
+}
+
+// UnlockChannel restores @everyone's ability to send messages in a channel by
+// clearing the Send Messages deny bit only -- it does not touch any other
+// overwrite the channel already had.
+func UnlockChannel(guildID, channelID snowflake.ID, reason string) error {
+	return setEveryoneSendMessages(guildID, channelID, true, reason)
+}
+
+// setEveryoneSendMessages flips the Send Messages bit on the @everyone
+// permission overwrite for a channel. The @everyone role's id is always the
+// guild's own id, which is what makes this a lookup by guildID rather than a
+// separate role-resolution step.
+func setEveryoneSendMessages(guildID, channelID snowflake.ID, allow bool, reason string) error {
+	existing, err := dclient.Get().Rest().GetPermissionOverwrite(channelID, guildID)
+
+	var curAllow, curDeny discord.Permissions
+
+	// A missing overwrite (err != nil, or a nil/unexpected-typed result)
+	// starts from a zero-value one and lets the update below create it.
+	if err == nil && existing != nil {
+		if role, ok := (*existing).(discord.RolePermissionOverwrite); ok {
+			curAllow, curDeny = role.Allow, role.Deny
+		}
+	}
+
+	if allow {
+		curDeny &^= discord.PermissionSendMessages
+	} else {
+		curDeny |= discord.PermissionSendMessages
+		curAllow &^= discord.PermissionSendMessages
+	}
+
+	return dclient.Get().Rest().UpdatePermissionOverwrite(channelID, guildID,
+		discord.RolePermissionOverwriteUpdate{Allow: &curAllow, Deny: &curDeny}, rest.WithReason(reason))
+}
+
 // SendDM opens (or reuses) a DM channel with a user and sends a message.
 // Best-effort by nature — a user with DMs closed to the bot makes this fail,
 // which callers that also log the action elsewhere should treat as

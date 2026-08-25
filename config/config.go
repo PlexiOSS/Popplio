@@ -90,6 +90,7 @@ type Arcadia struct {
 	Token          string         `yaml:"token" comment:"Staff bot Discord token. This is a SEPARATE Discord application from Popplio's" validate:"required"`
 	ServerPort     int            `yaml:"server_port" default:"3010" comment:"Port the staff panel API listens on" validate:"required"`
 	PrefixCommands bool           `yaml:"prefix_commands" default:"false" comment:"Enable legacy prefix commands. Requires the privileged Message Content intent to be granted"`
+	AutoMod        bool           `yaml:"auto_mod" default:"false" comment:"Enable passive auto-moderation (spam/invite-link/mass-mention scanning) in the main and testing servers. Requires the privileged Message Content intent, same as prefix_commands"`
 	Prefix         string         `yaml:"prefix" default:"ibs!" comment:"Staff bot prefix, only used when prefix_commands is on" validate:"required"`
 	Owners         []snowflake.ID `yaml:"owners" default:"510065483693817867" comment:"Bot owners, these users always hold the 'owner' staff position" validate:"required"`
 	ProtectedBots  []snowflake.ID `yaml:"protected_bots" default:"1019662370278228028" comment:"Bots that cannot be force-removed with kick enabled" validate:"required"`
