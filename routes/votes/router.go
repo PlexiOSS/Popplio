@@ -5,6 +5,7 @@ package votes
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/votes/endpoints/create_user_entity_vote"
@@ -19,7 +20,8 @@ import (
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Votes"

@@ -7,7 +7,8 @@ import (
 	"popplio/validators/timex"
 
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var Apps = []types.Position{

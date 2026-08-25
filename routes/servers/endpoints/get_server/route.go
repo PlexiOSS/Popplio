@@ -8,29 +8,31 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
+	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
-	"popplio/validators"
 	"popplio/votes"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )
 
 var (
-	serverColsArr = db.GetCols(types.Server{})
+	serverColsArr = dbutil.GetCols(types.Server{})
 	serverCols    = strings.Join(serverColsArr, ",")
 
-	teamColsArr = db.GetCols(types.Team{})
+	teamColsArr = dbutil.GetCols(types.Team{})
 	teamCols    = strings.Join(teamColsArr, ",")
 )
 
@@ -183,7 +185,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		eto.Entities, err = resolvers.GetTeamEntities(d.Context, eto.ID, includesSplit)
 
 		if err != nil {
-			return resp.ErrDetail("Error while getting team entities", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", validators.EncodeUUID(server.TeamOwnerID.Bytes)))
+			return resp.ErrDetail("Error while getting team entities", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", uuidutil.Encode(server.TeamOwnerID.Bytes)))
 		}
 	} else {
 		eto.Entities = &types.TeamEntities{

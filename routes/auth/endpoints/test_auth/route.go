@@ -6,14 +6,15 @@ package test_auth
 import (
 	"context"
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/api"
 	"popplio/perms"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

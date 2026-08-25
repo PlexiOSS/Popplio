@@ -20,15 +20,13 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/sharding"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
-	hredis "github.com/infinitybotlist/eureka/hotcache/redis"
-	"github.com/infinitybotlist/eureka/ratelimit"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
+	hredis "github.com/PlexiOSS/Keel/hotcache/redis"
+	"github.com/PlexiOSS/Keel/ratelimit"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/go-playground/validator/v10/non-standard/validators"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/genconfig"
-	"github.com/infinitybotlist/eureka/snippets"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/plutov/paypal/v4"
 	"github.com/redis/go-redis/v9"
@@ -36,6 +34,10 @@ import (
 	"github.com/stripe/stripe-go/v75/webhookendpoint"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/genconfig"
+	"github.com/PlexiOSS/Keel/snippets"
 )
 
 var (

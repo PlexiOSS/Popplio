@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/PlexiOSS/Keel/urlutil"
 	"popplio/api/resp"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
-	"popplio/validators"
 
-	"github.com/infinitybotlist/eureka/crypto"
-	"github.com/infinitybotlist/eureka/jsonimpl"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/crypto"
+	"github.com/PlexiOSS/Keel/jsonimpl"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 // oauthUser is the subset of Discord's /users/@me payload this endpoint needs.
@@ -309,7 +309,7 @@ func checkBanScope(ctx context.Context, userID, scope string) error {
 // granted the role until the next sync tick (it runs every 50s), same as
 // everywhere else that column is read.
 func checkBugHunterOnly(ctx context.Context, userID, redirectURI string) error {
-	if !validators.IsNonProdFrontend(redirectURI, state.Config.Sites.Frontend) {
+	if !urlutil.DifferentHost(redirectURI, state.Config.Sites.Frontend) {
 		return nil
 	}
 

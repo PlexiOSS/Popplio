@@ -6,11 +6,12 @@ package get_premium_plans
 
 import (
 	"net/http"
+
 	"popplio/routes/payments/assets"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

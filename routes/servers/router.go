@@ -5,6 +5,7 @@ package servers
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/servers/endpoints/add_server"
@@ -21,7 +22,8 @@ import (
 	"popplio/routes/servers/endpoints/post_server_stats"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Servers"

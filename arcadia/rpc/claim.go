@@ -33,10 +33,6 @@ func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
 		return Success{}, errors.New("This bot is not pending review")
 	}
 
-	if botType == "testbot" {
-		return Success{}, errors.New("This bot is a test bot")
-	}
-
 	if !m.Force && claimedBy != nil {
 		return Success{}, fmt.Errorf("This bot is already claimed by <@%s>", *claimedBy)
 	}
@@ -58,7 +54,7 @@ func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
 	err = impls.SendModLog(discord.MessageCreate{
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
-			Title:       " Claimed!",
+			Title:       "Claimed!",
 			Description: fmt.Sprintf("<@%s> has claimed <@%s>", h.UserID, m.TargetID),
 			Color:       impls.ColourBlurple,
 			Fields: []discord.EmbedField{
@@ -193,7 +189,7 @@ func unclaim(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 	err = impls.SendModLog(discord.MessageCreate{
 		Content: owners.MentionUsers(),
 		Embeds: []discord.Embed{{
-			Title:       " Unclaimed!",
+			Title:       "Unclaimed!",
 			Description: fmt.Sprintf("<@%s> has unclaimed <@%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				{Name: "Reason", Value: m.Reason, Inline: impls.InlineFalse()},

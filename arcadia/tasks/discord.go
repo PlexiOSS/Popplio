@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// BansSync reconciles the main guild's ban list with users.banned.
 func BansSync(ctx context.Context) error {
 	bans, err := fetchAllBans(state.Config.Servers.Main)
 
@@ -53,8 +52,6 @@ func BansSync(ctx context.Context) error {
 		dbBans[userID] = struct{}{}
 	}
 
-	// Symmetric difference: in the guild but not the DB means "ban them", in the
-	// DB but not the guild means "unban them".
 	toModify := make([]string, 0)
 
 	for userID := range serverBans {
@@ -117,7 +114,6 @@ func BansSync(ctx context.Context) error {
 	return nil
 }
 
-// fetchAllBans pages through the guild ban list.
 func fetchAllBans(guildID snowflake.ID) ([]discord.Ban, error) {
 	var (
 		all   []discord.Ban
@@ -141,7 +137,6 @@ func fetchAllBans(guildID snowflake.ID) ([]discord.Ban, error) {
 	}
 }
 
-// SpecRoleSync mirrors the bug hunter role into users.bug_hunters.
 func SpecRoleSync(ctx context.Context) error {
 	if _, ok := dclient.Get().Caches().Guild(state.Config.Servers.Main); !ok {
 		return fmt.Errorf("Failed to get guild")
@@ -179,7 +174,6 @@ func SpecRoleSync(ctx context.Context) error {
 	return tx.Commit(ctx)
 }
 
-// VoteResetter voids every non-immutable vote once a month.
 func VoteResetter(ctx context.Context) error {
 	tx, err := state.Pool.Begin(ctx)
 
@@ -194,7 +188,6 @@ func VoteResetter(ctx context.Context) error {
 	err = tx.QueryRow(ctx, "SELECT id FROM automated_vote_resets WHERE created_at > NOW() - INTERVAL '1 month' FOR UPDATE").Scan(&id)
 
 	if err == nil {
-		// A reset already happened this month.
 		return nil
 	}
 
@@ -234,10 +227,8 @@ func isNoRows(err error) bool {
 	return err != nil && err.Error() == pgx.ErrNoRows.Error()
 }
 
-// topReviewerQuery ranks reviewers by their Approve+Deny count.
 const topReviewerQuery = "SELECT user_id, approved_count, denied_count, total_count FROM (SELECT rpc.user_id, SUM(CASE WHEN rpc.method = 'Approve' THEN 1 ELSE 0 END) AS approved_count, SUM(CASE WHEN rpc.method = 'Deny' THEN 1 ELSE 0 END) AS denied_count, SUM(CASE WHEN rpc.method IN ('Approve', 'Deny') THEN 1 ELSE 0 END) AS total_count FROM rpc_logs rpc LEFT JOIN staff_members sm ON rpc.user_id = sm.user_id WHERE rpc.method IN ('Approve', 'Deny') AND sm.user_id IS NOT NULL GROUP BY rpc.user_id) AS subquery WHERE total_count > 0 ORDER BY total_count DESC LIMIT $1"
 
-// TopReviewer is one row of the leaderboard query.
 type TopReviewer struct {
 	UserID        string `db:"user_id"`
 	ApprovedCount int64  `db:"approved_count"`
@@ -245,8 +236,6 @@ type TopReviewer struct {
 	TotalCount    int64  `db:"total_count"`
 }
 
-// QueryTopReviewers runs the leaderboard query. The Discord `leaderboard` and
-// `refresh` commands share it.
 func QueryTopReviewers(ctx context.Context, limit int) ([]TopReviewer, error) {
 	rows, err := state.Pool.Query(ctx, topReviewerQuery, limit)
 
@@ -257,14 +246,8 @@ func QueryTopReviewers(ctx context.Context, limit int) ([]TopReviewer, error) {
 	return pgx.CollectRows(rows, pgx.RowToStructByName[TopReviewer])
 }
 
-// TopReviewerSync strips the top-reviewer role from everyone in the main guild
-// and re-grants it to the top reviewers.
-//
-// BUG (reproduced): the limit is hardcoded to 0, so the query selects NOBODY and
-// this weekly job only ever strips the role. The Discord `refresh` command uses
-// a limit of 3. Left as-is by explicit decision; see CONFORMANCE.md.
 func TopReviewerSync(ctx context.Context) error {
-	const limit = 0
+	const limit = 3
 
 	stats, err := QueryTopReviewers(ctx, limit)
 
@@ -286,9 +269,6 @@ func TopReviewerSync(ctx context.Context) error {
 	})
 }
 
-// SyncTopReviewerRoles removes the top-reviewer role from every cached main
-// guild member and then grants it to the given reviewers. Shared with the
-// Discord `refresh` command.
 func SyncTopReviewerRoles(ctx context.Context, stats []TopReviewer) error {
 	const reason = "Syncing top reviewers, weekly job."
 

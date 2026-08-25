@@ -332,6 +332,10 @@ func TestPermissionGates(t *testing.T) {
 	}
 }
 
+// A third tier landing on an already-doubly-occupied position used to 500
+// with a raw Postgres constraint violation (CONFORMANCE.md #16). All three
+// creates must now succeed, each existing tier pushed down by exactly one
+// per insert, ending with every id at a distinct position.
 func TestVoteCreditTierDedupLoop(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
 
@@ -365,12 +369,14 @@ func TestVoteCreditTierDedupLoop(t *testing.T) {
 
 	rec := create(ids[2])
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("third create: status = %d, want 500 (reproduced upstream bug); body = %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("third create: status = %d, want 204; body = %s", rec.Code, rec.Body.String())
 	}
 
-	if !strings.Contains(rec.Body.String(), "duplicate key value violates unique constraint") {
-		t.Errorf("third create body = %q, want the deferred unique violation", rec.Body.String())
+	positions = tierPositions(t, ids)
+
+	if positions[ids[0]] != 3 || positions[ids[1]] != 2 || positions[ids[2]] != 1 {
+		t.Errorf("after three creates positions = %v, want the first two pushed down again and the third at 1", positions)
 	}
 }
 
@@ -404,10 +410,25 @@ func tierPositions(t *testing.T, ids []string) map[string]int32 {
 	return out
 }
 
-func TestShopCouponNullValidationIsReproduced(t *testing.T) {
+// A nil max_uses/reuse_wait_duration/expiry means "unlimited"/"never
+// expires" per the DTO's own doc comments, and must be accepted — see
+// CONFORMANCE.md #2. A present-but-non-positive value is still rejected.
+func TestShopCouponNullMeansUnconstrained(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
 
-	body := fmt.Sprintf(`{"UpdateShopCoupons":{"login_token":%q,"action":{"Create":{"id":"x","code":"c","public":true,"max_uses":null,"reuse_wait_duration":1,"expiry":1,"applicable_items":[],"cents":null,"requirements":[],"allowed_users":[],"usable":true,"target_types":[]}}}}`, f.Token)
+	body := fmt.Sprintf(`{"UpdateShopCoupons":{"login_token":%q,"action":{"Create":{"id":"x","code":"c","public":true,"max_uses":null,"reuse_wait_duration":null,"expiry":null,"applicable_items":[],"cents":null,"requirements":[],"allowed_users":[],"usable":true,"target_types":[]}}}}`, f.Token)
+
+	rec := post(t, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestShopCouponNonPositiveMaxUsesIsRejected(t *testing.T) {
+	f := seedStaff(t, []string{"manage_shop"}, "active")
+
+	body := fmt.Sprintf(`{"UpdateShopCoupons":{"login_token":%q,"action":{"Create":{"id":"x","code":"c","public":true,"max_uses":0,"reuse_wait_duration":1,"expiry":1,"applicable_items":[],"cents":null,"requirements":[],"allowed_users":[],"usable":true,"target_types":[]}}}}`, f.Token)
 
 	rec := post(t, body)
 

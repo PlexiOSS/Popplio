@@ -6,8 +6,9 @@
 package assets
 
 import (
-	"popplio/types"
 	"time"
+
+	"popplio/types"
 )
 
 var Plans = []types.PaymentPlan{

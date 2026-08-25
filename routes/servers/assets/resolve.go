@@ -8,12 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"popplio/state"
-	"popplio/types"
-	"popplio/votes"
 	"regexp"
 	"strings"
 	"time"
+
+	"popplio/state"
+	"popplio/types"
+	"popplio/votes"
 
 	"github.com/disgoorg/disgo/discord"
 	"go.uber.org/zap"

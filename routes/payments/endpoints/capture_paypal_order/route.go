@@ -7,17 +7,19 @@ package capture_paypal_order
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/jsonimpl"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/plutov/paypal/v4"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/jsonimpl"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

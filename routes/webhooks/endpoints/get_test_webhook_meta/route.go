@@ -7,16 +7,18 @@ package get_test_webhook_meta
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"slices"
+
+	"popplio/api/resp"
 
 	"popplio/types"
 	"popplio/validators"
 	"popplio/webhooks/core/events"
 
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

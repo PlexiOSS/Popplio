@@ -6,21 +6,23 @@ package get_user_alerts
 
 import (
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	alertCols    = db.GetCols(types.Alert{})
+	alertCols    = dbutil.GetCols(types.Alert{})
 	alertColsStr = strings.Join(alertCols, ",")
 )
 

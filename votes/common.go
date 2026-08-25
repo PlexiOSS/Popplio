@@ -4,20 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
 	"strings"
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing"
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 var (
-	entityVoteColsArr = db.GetCols(types.EntityVote{})
+	entityVoteColsArr = dbutil.GetCols(types.EntityVote{})
 	entityVoteCols    = strings.Join(entityVoteColsArr, ",")
 )
 

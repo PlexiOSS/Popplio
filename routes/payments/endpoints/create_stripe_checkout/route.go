@@ -7,18 +7,20 @@ package create_stripe_checkout
 
 import (
 	"net/http"
-	"popplio/api/resp"
-	"popplio/routes/payments/assets"
-	"popplio/state"
 	"strconv"
 	"time"
 
-	"github.com/infinitybotlist/eureka/jsonimpl"
-	"github.com/infinitybotlist/eureka/ratelimit"
+	"popplio/api/resp"
+	"popplio/routes/payments/assets"
+	"popplio/state"
+
 	"go.uber.org/zap"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/jsonimpl"
+	"github.com/PlexiOSS/Keel/ratelimit"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/stripe/stripe-go/v75"

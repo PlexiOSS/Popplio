@@ -30,7 +30,6 @@ type Sites struct {
 	API         string `yaml:"api" default:"https://spider.infinitybots.gg" comment:"API URL" validate:"required"`
 	Panel       string `yaml:"panel" default:"https://panel.infinitybots.gg" comment:"Panel URL" validate:"required"`
 	Infernoplex string `yaml:"infernoplex" default:"https://infernoplex.infinitybots.gg" comment:"Infernoplex URL" validate:"required"`
-	Instatus    string `yaml:"instatus" default:"https://infinity-bots.instatus.com" comment:"Instatus Status Page URL" validate:"required"`
 }
 
 type Roles struct {
@@ -74,18 +73,17 @@ type Servers struct {
 }
 
 type Meta struct {
-	PostgresURL         string   `yaml:"postgres_url" default:"postgresql:///infinity" comment:"Postgres URL" validate:"required"`
-	RedisURL            string   `yaml:"redis_url" default:"redis://localhost:6379" comment:"Redis URL" validate:"required"`
-	Port                string   `yaml:"port" default:":8081" comment:"Port to run the server on" validate:"required"`
-	VulgarList          []string `yaml:"vulgar_list" default:"fuck,suck,shit,kill" validate:"required"`
-	UrgentMentions      string   `yaml:"urgent_mentions" default:"<@&1061643797315993701>" comment:"Urgent mentions" validate:"required"`
-	PaypalClientID      string   `yaml:"paypal_client_id" default:"" comment:"Paypal Client ID" validate:"required"`
-	PaypalSecret        string   `yaml:"paypal_secret" default:"" comment:"Paypal Secret" validate:"required"`
-	StripePublicKey     string   `yaml:"stripe_public_key" default:"" comment:"Stripe Public Key" validate:"required"`
-	StripeSecretKey     string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
-	UptimeRobotROAPIKey string   `yaml:"uptime_robot_ro_api_key" default:"" comment:"Uptime Robot Read-Only API Key" validate:"required"`
-	PopplioProxy        string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
-	OpenAIAPIKey        string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset" required:"false"`
+	PostgresURL     string   `yaml:"postgres_url" default:"postgresql:///infinity" comment:"Postgres URL" validate:"required"`
+	RedisURL        string   `yaml:"redis_url" default:"redis://localhost:6379" comment:"Redis URL" validate:"required"`
+	Port            string   `yaml:"port" default:":8081" comment:"Port to run the server on" validate:"required"`
+	VulgarList      []string `yaml:"vulgar_list" default:"fuck,suck,shit,kill" validate:"required"`
+	UrgentMentions  string   `yaml:"urgent_mentions" default:"<@&1061643797315993701>" comment:"Urgent mentions" validate:"required"`
+	PaypalClientID  string   `yaml:"paypal_client_id" default:"" comment:"Paypal Client ID" validate:"required"`
+	PaypalSecret    string   `yaml:"paypal_secret" default:"" comment:"Paypal Secret" validate:"required"`
+	StripePublicKey string   `yaml:"stripe_public_key" default:"" comment:"Stripe Public Key" validate:"required"`
+	StripeSecretKey string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
+	PopplioProxy    string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
+	OpenAIAPIKey    string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset" required:"false"`
 }
 
 type Arcadia struct {

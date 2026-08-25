@@ -12,8 +12,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/notifications"
 	"popplio/routes/shop/assets"
 	"popplio/state"
@@ -23,11 +23,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 type PurchaseShopItem struct {
@@ -37,7 +38,7 @@ type PurchaseShopItem struct {
 var (
 	compiledMessages = uapi.CompileValidationErrors(PurchaseShopItem{})
 
-	shopItemColsArr = db.GetCols(types.ShopItem{})
+	shopItemColsArr = dbutil.GetCols(types.ShopItem{})
 	shopItemCols    = strings.Join(shopItemColsArr, ",")
 )
 

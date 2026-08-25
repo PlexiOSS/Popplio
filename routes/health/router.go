@@ -10,8 +10,8 @@ import (
 	infernoplexdclient "popplio/infernoplex/dclient"
 	"popplio/state"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

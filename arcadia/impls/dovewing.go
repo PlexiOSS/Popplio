@@ -6,8 +6,8 @@ import (
 	"popplio/arcadia/types"
 	"popplio/state"
 
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 // GetPlatformUser resolves a Discord user into the panel's PlatformUser shape.

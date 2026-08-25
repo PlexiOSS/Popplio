@@ -5,6 +5,7 @@ package vanity
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/vanity/endpoints/patch_vanity"
@@ -13,7 +14,8 @@ import (
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Vanity"

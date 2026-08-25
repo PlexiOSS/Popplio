@@ -6,18 +6,20 @@ package get_sitemap
 import (
 	"encoding/xml"
 	"net/http"
+	"strconv"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/pagination"
 	"popplio/seo"
 	"popplio/seo/fetchers"
 	"popplio/state"
-	"strconv"
-	"time"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
+	docs "github.com/PlexiOSS/Keel/doclib"
 
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

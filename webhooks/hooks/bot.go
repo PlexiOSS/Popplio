@@ -7,12 +7,13 @@ package hooks
 
 import (
 	"fmt"
+
 	"popplio/state"
 	"popplio/webhooks/core/drivers"
 	"popplio/webhooks/core/events"
 	"popplio/webhooks/sender"
 
-	"github.com/infinitybotlist/eureka/dovewing"
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 type BotDriver struct{}

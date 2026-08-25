@@ -8,31 +8,33 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
+	"github.com/PlexiOSS/Keel/uuidutil"
 	botassets "popplio/routes/bots/assets"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
-	"popplio/validators"
 	"popplio/votes"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )
 
 var (
-	botColsArr = db.GetCols(types.Bot{})
+	botColsArr = dbutil.GetCols(types.Bot{})
 	botCols    = strings.Join(botColsArr, ",")
 
-	teamColsArr = db.GetCols(types.Team{})
+	teamColsArr = dbutil.GetCols(types.Team{})
 	teamCols    = strings.Join(teamColsArr, ",")
 )
 
@@ -177,13 +179,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		row, err := state.Pool.Query(d.Context, "SELECT "+teamCols+" FROM teams WHERE id = $1", bot.TeamOwnerID)
 
 		if err != nil {
-			return resp.ErrDetail("Error while getting bot team owner [db fetch]", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", validators.EncodeUUID(bot.TeamOwnerID.Bytes)))
+			return resp.ErrDetail("Error while getting bot team owner [db fetch]", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", uuidutil.Encode(bot.TeamOwnerID.Bytes)))
 		}
 
 		eto, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Team])
 
 		if err != nil {
-			return resp.ErrDetail("Error while getting bot team owner [db collect]", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", validators.EncodeUUID(bot.TeamOwnerID.Bytes)))
+			return resp.ErrDetail("Error while getting bot team owner [db collect]", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", uuidutil.Encode(bot.TeamOwnerID.Bytes)))
 		}
 
 		if r.URL.Query().Get("team_includes") != "" {
@@ -196,7 +198,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			eto.Entities, err = resolvers.GetTeamEntities(d.Context, eto.ID, includesSplit)
 
 			if err != nil {
-				return resp.ErrDetail("Error while getting team entities", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", validators.EncodeUUID(bot.TeamOwnerID.Bytes)))
+				return resp.ErrDetail("Error while getting team entities", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", uuidutil.Encode(bot.TeamOwnerID.Bytes)))
 			}
 		} else {
 			eto.Entities = &types.TeamEntities{

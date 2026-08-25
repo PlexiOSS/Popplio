@@ -7,10 +7,11 @@ package get_sessions
 import (
 	"errors"
 	"net/http"
-	"popplio/api/resp"
-	"popplio/db"
-	"popplio/validators"
 	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/api/resp"
+	"popplio/validators"
 
 	"popplio/state"
 	"popplio/types"
@@ -18,12 +19,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	sessionCols = strings.Join(db.GetCols(types.Session{}), ", ")
+	sessionCols = strings.Join(dbutil.GetCols(types.Session{}), ", ")
 )
 
 func Docs() *docs.Doc {

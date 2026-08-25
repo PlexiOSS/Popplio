@@ -10,7 +10,7 @@ import (
 	"popplio/perms"
 	"popplio/types"
 
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 // The response is what a permission picker is built from, so it has to carry

@@ -3,8 +3,9 @@ package types
 import (
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 // An announcement

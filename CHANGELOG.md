@@ -5,6 +5,122 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Popplio's dependency on the shared library formerly known as `eureka`
+  moved from `github.com/infinitybotlist/eureka` to `github.com/PlexiOSS/Keel`
+  (all ~210 files' imports rewritten, `go.mod` updated).
+- `popplio/db.GetCols` — a byte-for-byte duplicate of the `Keel/dbutil.GetCols`
+  the package was already extracted into — deleted. All 56 call sites now
+  use `Keel/dbutil` directly, finishing a migration that only relocated the
+  code the first time around.
+- `validators.Pointer`/`TruePtr`/`FalsePtr`, `validators.EncodeUUID`, and
+  `validators.IsNonProdFrontend` had no Omniplex-specific knowledge in them
+  at all — moved to new `Keel/ptr`, `Keel/uuidutil`, and `Keel/urlutil`
+  packages respectively (the last renamed to `urlutil.DifferentHost`, since
+  a shared library shouldn't have "frontend" in a function name). Also
+  found and collapsed a second, independent duplicate of the UUID-formatting
+  logic in `arcadia/impls.UUIDString`, which now calls `uuidutil.Encode`
+  instead of re-implementing the same hex-dashing by hand.
+- `validators.NormalizeTargetType` and the `captcha` package were
+  considered for the same move and deliberately left in Popplio: the
+  former's case list (`bots`→`bot`, etc.) *is* Omniplex's domain
+  vocabulary, and the latter is genuinely coupled to `popplio/state` in
+  three places (config, Redis, a direct Postgres query) — moving it would
+  mean decoupling it first, not just relocating a file.
+
+### Fixed
+
+- `TestGoldenPanelStrings` only ever scanned `arcadia/panel`'s source for its
+  frozen strings, but `identityExpired`/`sessionNotActive` are values
+  defined in `arcadia/impls` (`ErrIdentityExpired`/`ErrSessionNotActive`)
+  and only surfaced *through* panel responses — so the test was failing on
+  every run, permanently, checking the wrong directory for two of its own
+  entries. `assertContains` now takes multiple dirs.
+- Shop coupon validation (`validateCoupon` in `arcadia/panel/ops_shop_coupons.go`)
+  rejected a `null` `max_uses`/`reuse_wait_duration`/`expiry` as if it were
+  `0`, making the "unlimited uses" and "never expires" cases the DTOs'
+  own doc comments describe impossible to actually create. `null` is now
+  treated as "no constraint"; a present-but-non-positive value is still
+  rejected. See `arcadia/CONFORMANCE.md` #2.
+- The bot-path `Unverify` RPC action's mod-log embed had a field with an
+  empty name, which Discord's API rejects — the embed post failed and the
+  whole call errored out *after* the bot had already been flipped back to
+  `pending`, with no rollback. The field now has a real name (`"Bot"`,
+  matching the server path's existing `"Server"` field). See
+  `arcadia/CONFORMANCE.md` #9.
+- Creating a vote credit tier that landed on an already-doubly-occupied
+  position 500'd with a raw Postgres constraint violation (this was live —
+  production's existing tiers at positions 1-3 made creating a new tier at
+  position 1 fail outright). `dedupTierPositions` is now a single set-based
+  `UPDATE ... SET position = position + 1 WHERE position >= $1`, replacing
+  an iterative loop whose cursor skipped past positions it had just written
+  to. See `arcadia/CONFORMANCE.md` #16.
+- A staff position's "testing" corresponding-role (main-guild-adjacent role
+  auto-grant/revoke) validated but silently never synced — only `main` and
+  `staff` were handled. Added the missing case. See `arcadia/CONFORMANCE.md`
+  #8.
+- `/list/staff-templates` was registered with `OpId: "get_partners"` — a
+  copy-paste collision with the actual `/list/partners` route above it.
+  Now `get_staff_templates`.
+- `PopplioStaff` (the staff panel's signed reverse proxy into Popplio's own
+  `/staff/*` API) sent the request path as `X-Forwarded-For` instead of the
+  caller's actual IP. Confirmed this wasn't cosmetic: `create_data_task`
+  reads that header as the requester's IP for a GDPR audit record, and the
+  proxy isn't restricted to `/staff/*` paths, so a staff member's real IP
+  could end up silently replaced with a URL path in that record. The
+  panel's request context now carries the real caller IP through to the
+  proxy. See `arcadia/CONFORMANCE.md` #5.
+- `Authorize/Begin` built the Discord OAuth login URL by interpolating
+  `redirect_url` raw — neither validated nor URL-encoded. The actual
+  token-exchange step already checked it against an allow-list, so this
+  couldn't complete a session with a bad value, but it could still hand
+  back a malformed or attacker-chosen login URL. Now validates against the
+  same allow-list up front and URL-encodes the value. See
+  `arcadia/CONFORMANCE.md` #13.
+- `topreviewer_sync` stripped the top-reviewer Discord role from everyone
+  weekly and never regranted it (hardcoded `LIMIT 0` instead of the `3` the
+  `/refresh` command already used for the same query) — the role has been
+  permanently empty since this job started running. Now regrants to the
+  actual top 3. See `arcadia/CONFORMANCE.md` #3.
+- Disciplinary type `created_at` was populated from the most recent
+  disciplinary action against a staff member, not from when the type
+  itself was created — confirmed unused in Omniplex's admin UI, so this
+  was silently wrong with no observable effect until now. Now selects the
+  type's own `created_at`. See `arcadia/CONFORMANCE.md` #7.
+- A dead `testbot` branch in `Claim` (unreachable — the check above it
+  already rejects anything that isn't `pending`) removed. `Unclaim`'s live
+  `testbot` check, which runs before its `pending` check, is untouched.
+  See `arcadia/CONFORMANCE.md` #6.
+- A batch of frozen error/embed strings, now that Omniplex's own admin
+  panel is the only consumer of this wire format: `"[neeed to delete
+  position]"` → `"[need to delete position]"`; the `Invalid OTP
+  Entered`/`entered` casing mismatch between `ResetMfaTotp` and
+  `ActivateSession` unified to lowercase; `bot_whitelist` permission
+  messages switched from `(parentheses)` to `[brackets]` to match every
+  other permission message; a batch of bare-leading-space error strings
+  restored to interpolate the target id again (e.g. `" does not exist"` →
+  `"%q does not exist"`); and every leading-space mod-log embed title
+  (`" Claimed!"`, `" Approved!"`, `" Force Deleted!"`, and five others)
+  had the stray space dropped. `"__ Unverified For Futher Review!__"` was
+  deliberately left alone — same class of typo, but out of scope for this
+  pass. See `arcadia/CONFORMANCE.md` #11, #12.
+
+### Removed
+
+- `GET /list/current-status` and its Instatus/UptimeRobot proxying
+  (`state.Config.Sites.Instatus`, `state.Config.Meta.UptimeRobotROAPIKey`,
+  `types.StatusDocs`). Confirmed unused anywhere in Omniplex's frontend —
+  status reporting now lives entirely on the dedicated
+  `status.omniplex.gg` instance, so this endpoint (and the two external
+  status-provider integrations behind it) was dead weight.
+- `GET /list/team` (`get_list_team`) and the now-unused `types.StaffTeam`.
+  Its own doc comment admitted it was "currently broken and does not
+  handle permissions yet" — fully superseded by this session's `GET
+  /staff/team`, which Omniplex's team page actually uses.
+
 ## [1.4.0] - 2026-08-24
 
 ### Added

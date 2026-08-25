@@ -4,21 +4,23 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	indexServersColsArr = db.GetCols(types.IndexServer{})
+	indexServersColsArr = dbutil.GetCols(types.IndexServer{})
 	indexServersCols    = strings.Join(indexServersColsArr, ",")
 )
 

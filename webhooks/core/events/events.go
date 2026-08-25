@@ -7,14 +7,16 @@
 package events
 
 import (
-	"popplio/state"
-	"popplio/types"
 	"reflect"
 
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/disgoorg/disgo/discord"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type EventRegistry struct {

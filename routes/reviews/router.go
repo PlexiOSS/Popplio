@@ -11,7 +11,8 @@ import (
 	"popplio/routes/reviews/endpoints/remove_review"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const (

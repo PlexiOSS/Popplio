@@ -12,7 +12,8 @@ import (
 	"popplio/routes/staff/endpoints/manage_app"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const (

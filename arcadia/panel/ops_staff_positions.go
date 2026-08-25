@@ -19,14 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// Staff positions: the roles themselves, their rank order and the Discord roles
-// they are bound to.
-//
-// Rank is a dense index where lower is more senior, so moving one position
-// necessarily moves others — hence swapIndex and setIndex rather than a plain
-// update. Every write here refuses to touch a position at or above the caller's
-// own rank.
-
 func correspondingServerNamesDebug() string {
 	out := "[\n"
 
@@ -50,15 +42,11 @@ func correspondingGuild(server types.CorrespondingServer) snowflake.ID {
 	}
 }
 
-// roleExists checks the Discord cache. An uncached guild reads as "role does not
-// exist", as upstream does.
 func roleExists(guildID, roleID snowflake.ID) bool {
 	_, ok := dclient.Get().Caches().Role(guildID, roleID)
 	return ok
 }
 
-// validateRoles checks the staff-server role and every corresponding role. It
-// returns a response when validation fails.
 func validateRoles(roleID string, correspondingRoles []types.Link) (*response, error) {
 	roleSnow, err := snowflake.Parse(roleID)
 
@@ -110,8 +98,6 @@ func (s *Server) updateStaffPositions(ctx context.Context, q *types.QUpdateStaff
 		return response{}, err
 	}
 
-	// ListPositions needs no permissions, so the (heavy) staff member lookup is
-	// deferred until an action that actually needs it.
 	if q.Action.ListPositions != nil {
 		rows, err := state.Pool.Query(ctx,
 			"SELECT id, name, role_id, perms, corresponding_roles, icon, index, created_at FROM staff_positions ORDER BY index ASC")
@@ -150,8 +136,6 @@ func (s *Server) updateStaffPositions(ctx context.Context, q *types.QUpdateStaff
 		return writeJSON(http.StatusOK, positions), nil
 	}
 
-	// These use the FULL resolution (including disciplinaries), not the light
-	// path, so disciplinary permission limits apply here.
 	sm, err := impls.GetStaffMember(ctx, authData.UserID)
 
 	if err != nil {
@@ -159,8 +143,6 @@ func (s *Server) updateStaffPositions(ctx context.Context, q *types.QUpdateStaff
 	}
 
 	smPerms := perms.Staff.SetFromStrings(sm.ResolvedPerms)
-	// Rank comes from the member's grants rather than their positions, because
-	// an instance owner outranks every position without holding one.
 	smLowest := sm.Grants.Rank()
 
 	switch {
@@ -201,7 +183,6 @@ func (s *Server) swapIndex(ctx context.Context, action *types.StaffSwapIndex, sm
 		return response{}, newError(err)
 	}
 
-	// Several handlers return early mid-transaction and rely on drop-rollback.
 	defer tx.Rollback(ctx)
 
 	var indexA int32
@@ -314,10 +295,6 @@ func (s *Server) createPosition(ctx context.Context, action *types.StaffCreatePo
 		return response{}, newError(err)
 	}
 
-	// The index shift below happens BEFORE role validation, so a validation
-	// failure returns with the shift already executed. The deferred rollback is
-	// what keeps that from being committed - upstream relies on the same
-	// drop-rollback behaviour.
 	defer tx.Rollback(ctx)
 
 	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = index + 1 WHERE index >= $1", action.Index); err != nil {
@@ -456,9 +433,8 @@ func (s *Server) deletePosition(ctx context.Context, action *types.StaffDeletePo
 		return writeText(http.StatusForbidden, "Index is lower than the lowest index of the member"), nil
 	}
 
-	// "neeed" is misspelled upstream and the panel shows the message raw.
 	if err := perms.CheckPatch(smPerms, perms.Staff.SetFromStrings(oldPerms), perms.Staff.NewSet()); err != nil {
-		return writeText(http.StatusForbidden, fmt.Sprintf("You do not have permission to edit the following perms [neeed to delete position]: %s", err)), nil
+		return writeText(http.StatusForbidden, fmt.Sprintf("You do not have permission to edit the following perms [need to delete position]: %s", err)), nil
 	}
 
 	if _, err := tx.Exec(ctx, "DELETE FROM staff_positions WHERE id = $1", id); err != nil {

@@ -6,26 +6,28 @@ package get_webhook_logs
 
 import (
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 10
 
 var (
-	webhookLogColsArr = db.GetCols(types.WebhookLogEntry{})
+	webhookLogColsArr = dbutil.GetCols(types.WebhookLogEntry{})
 	webhookLogCols    = strings.Join(webhookLogColsArr, ",")
 )
 

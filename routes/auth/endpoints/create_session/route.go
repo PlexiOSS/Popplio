@@ -7,9 +7,10 @@ package create_session
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 	"time"
+
+	"popplio/api/resp"
 
 	"popplio/api"
 	"popplio/perms"
@@ -21,9 +22,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 
-	"github.com/infinitybotlist/eureka/crypto"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/crypto"
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (

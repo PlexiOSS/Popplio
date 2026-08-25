@@ -1,12 +1,14 @@
 package types
 
 import (
-	"popplio/validators/timex"
 	"time"
 
+	"popplio/validators/timex"
+
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 type Question struct {

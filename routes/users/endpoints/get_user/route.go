@@ -6,10 +6,11 @@ package get_user
 import (
 	"errors"
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	botAssets "popplio/routes/bots/assets"
 	"popplio/routes/packs/assets"
 	serverAssets "popplio/routes/servers/assets"
@@ -18,29 +19,30 @@ import (
 	"popplio/types"
 	"popplio/votes"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )
 
 var (
-	userColsArr = db.GetCols(types.User{})
+	userColsArr = dbutil.GetCols(types.User{})
 	userCols    = strings.Join(userColsArr, ",")
 
-	indexBotColsArr = db.GetCols(types.IndexBot{})
+	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
 	indexBotCols    = strings.Join(indexBotColsArr, ",")
 
-	indexServerColsArr = db.GetCols(types.IndexServer{})
+	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
 	indexServerCols    = strings.Join(indexServerColsArr, ",")
 
-	packColsArr = db.GetCols(types.BotPack{})
+	packColsArr = dbutil.GetCols(types.BotPack{})
 	packCols    = strings.Join(packColsArr, ",")
 
-	teamColsArr = db.GetCols(types.Team{})
+	teamColsArr = dbutil.GetCols(types.Team{})
 	teamCols    = strings.Join(teamColsArr, ",")
 )
 

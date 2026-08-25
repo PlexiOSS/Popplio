@@ -2,11 +2,13 @@ package events
 
 import (
 	"fmt"
-	"popplio/validators"
+
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/webhooks/core/events"
 
 	"github.com/disgoorg/disgo/discord"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type WebhookDeleteReviewData struct {
@@ -48,17 +50,17 @@ func (n WebhookDeleteReviewData) CreateDiscordEmbed(creator *dovetypes.PlatformU
 			{
 				Name:   "Review ID",
 				Value:  n.ReviewID,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "User ID",
 				Value:  creator.ID,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "Stars",
 				Value:  fmt.Sprintf("%d/5", n.Stars),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name: "Content",
@@ -69,17 +71,17 @@ func (n WebhookDeleteReviewData) CreateDiscordEmbed(creator *dovetypes.PlatformU
 
 					return n.Content
 				}(),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "Review Page",
 				Value:  targets.GetViewLink(),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			{
 				Name:   "Owner Review",
 				Value:  fmt.Sprintf("%t", n.OwnerReview),
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 		},
 	}

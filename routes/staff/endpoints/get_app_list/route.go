@@ -7,24 +7,26 @@ package get_app_list
 import (
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/jackc/pgx/v5"
 )
 
 var (
-	appColsArr = db.GetCols(types.AppResponse{})
+	appColsArr = dbutil.GetCols(types.AppResponse{})
 	appCols    = strings.Join(appColsArr, ",")
 )
 

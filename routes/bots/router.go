@@ -5,6 +5,7 @@ package bots
 
 import (
 	"net/http"
+
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/bots/endpoints/add_bot"
@@ -25,7 +26,8 @@ import (
 	"popplio/routes/bots/endpoints/put_bot_commands"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const (

@@ -5,17 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/urlutil"
 	"popplio/constants"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
-	"popplio/validators"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 type PermissionCheck struct {
@@ -198,7 +200,7 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 			// users.bug_hunters is kept in sync with the Bug Hunter Discord
 			// role by SpecRoleSync, same source of truth everywhere it's
 			// used.
-			if validators.IsNonProdFrontend(req.Header.Get("Origin"), state.Config.Sites.Frontend) &&
+			if urlutil.DifferentHost(req.Header.Get("Origin"), state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
 				return uapi.AuthData{}, uapi.HttpResponse{
 					Status: http.StatusForbidden,

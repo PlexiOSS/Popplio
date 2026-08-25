@@ -7,21 +7,23 @@ package get_user_tickets
 import (
 	"errors"
 	"net/http"
-	"popplio/api/resp"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
 	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/api/resp"
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
-	ticketColsArr = db.GetCols(types.Ticket{})
+	ticketColsArr = dbutil.GetCols(types.Ticket{})
 	ticketCols    = strings.Join(ticketColsArr, ", ")
 )
 

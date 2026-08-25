@@ -5,10 +5,10 @@ go 1.23
 toolchain go1.23.0
 
 require (
+	github.com/PlexiOSS/Keel v1.0.0
 	github.com/getkin/kin-openapi v0.127.0 // indirect
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/google/uuid v1.6.0
-	github.com/infinitybotlist/eureka v1.12.0
 	github.com/mileusna/useragent v1.3.4
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	gopkg.in/yaml.v3 v3.0.1
@@ -32,7 +32,7 @@ require (
 	github.com/bytedance/sonic v1.15.2 // indirect
 	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/disgoorg/json v1.2.0 // indirect
+	github.com/disgoorg/json v1.2.0
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -81,3 +81,5 @@ require (
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	golang.org/x/sys v0.24.0 // indirect
 )
+
+replace github.com/PlexiOSS/Keel => ../Keel

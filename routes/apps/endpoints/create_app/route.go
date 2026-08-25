@@ -7,22 +7,25 @@ package create_app
 import (
 	"errors"
 	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
 	"popplio/apps"
 	"popplio/state"
 	"popplio/types"
-	"popplio/validators"
-	"strconv"
-	"time"
 
 	"github.com/disgoorg/disgo/discord"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
+
 	"github.com/go-playground/validator/v10"
-	"github.com/infinitybotlist/eureka/crypto"
+
+	"github.com/PlexiOSS/Keel/crypto"
 )
 
 type CreateApp struct {
@@ -235,17 +238,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 					{
 						Name:   "App ID",
 						Value:  appId,
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 					{
 						Name:   "User ID",
 						Value:  d.Auth.ID,
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 					{
 						Name:   "Position",
 						Value:  payload.Position,
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 				},
 			},

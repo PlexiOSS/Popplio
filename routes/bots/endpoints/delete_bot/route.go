@@ -7,15 +7,17 @@ package delete_bot
 import (
 	"fmt"
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

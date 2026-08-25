@@ -7,18 +7,21 @@ package patch_bot_team
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/PlexiOSS/Keel/ptr"
+	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/api"
 	"popplio/api/resp"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
-	"popplio/validators"
 
 	"github.com/disgoorg/disgo/discord"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -127,16 +130,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 					{
 						Name:   "Bot ID",
 						Value:  id,
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 					{
 						Name:   "Performed By",
 						Value:  fmt.Sprintf("<@%s>", d.Auth.ID),
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 					{
 						Name:  "Old Team",
-						Value: fmt.Sprintf("[View Team](%s/teams/%s)", state.Config.Sites.Frontend, validators.EncodeUUID(currentBotTeam.Bytes)),
+						Value: fmt.Sprintf("[View Team](%s/teams/%s)", state.Config.Sites.Frontend, uuidutil.Encode(currentBotTeam.Bytes)),
 					},
 					{
 						Name:  "New Team",

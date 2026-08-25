@@ -15,8 +15,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/infinitybotlist/eureka/crypto"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/PlexiOSS/Keel/crypto"
 )
 
 var (

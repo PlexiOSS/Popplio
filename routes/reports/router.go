@@ -13,7 +13,8 @@ import (
 	"popplio/routes/reports/endpoints/get_report_stats"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Reports"

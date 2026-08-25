@@ -3,6 +3,7 @@ package panel
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -10,13 +11,23 @@ import (
 	"popplio/state"
 )
 
-// The signed reverse proxy into Popplio's own staff API.
-//
-// The panel cannot call Popplio directly — it has no credential of its own — so
-// requests are relayed from here with the instance's signature, and the upstream
-// status and body come back verbatim.
+type clientIPKey struct{}
 
-// popplioStaff is a signed reverse proxy into Popplio's staff API.
+func withClientIP(ctx context.Context, r *http.Request) context.Context {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+
+	if err != nil {
+		host = r.RemoteAddr
+	}
+
+	return context.WithValue(ctx, clientIPKey{}, host)
+}
+
+func clientIPFromContext(ctx context.Context) string {
+	ip, _ := ctx.Value(clientIPKey{}).(string)
+	return ip
+}
+
 func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (response, error) {
 	authData, err := checkAuth(ctx, q.LoginToken)
 
@@ -32,11 +43,6 @@ func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (resp
 		return writeText(http.StatusBadRequest, "Path must start with /"), nil
 	}
 
-	// HARDENING (§14b): upstream only checks the leading '/', so a path of
-	// "//evil.example" or one containing ".." could retarget the request at a
-	// different host or escape the API base. We resolve the path against the base
-	// URL and reject anything that leaves it. Legitimate paths (a plain absolute
-	// path, optionally with a query string) are unaffected.
 	target, err := safeJoinPopplio(q.Path)
 
 	if err != nil {
@@ -58,9 +64,10 @@ func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (resp
 	}
 
 	req.Header.Set("User-Agent", "arcadia")
-	// QUIRK (reproduced): the request PATH is sent as X-Forwarded-For. This looks
-	// like a copy/paste bug but downstream may rely on it. See CONFORMANCE.md.
-	req.Header.Set("X-Forwarded-For", q.Path)
+
+	if ip := clientIPFromContext(ctx); ip != "" {
+		req.Header.Set("X-Forwarded-For", ip)
+	}
 	req.Header.Set("X-Staff-Auth-Token", popplioToken)
 	req.Header.Set("X-User-ID", authData.UserID)
 
@@ -78,7 +85,6 @@ func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (resp
 		return response{}, newError(err)
 	}
 
-	// Relay the upstream status and body verbatim.
 	return writeText(resp.StatusCode, string(body)), nil
 }
 

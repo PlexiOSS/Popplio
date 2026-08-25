@@ -1,8 +1,3 @@
-// Package conformance holds the frozen-string tests.
-//
-// They assert on the source text of the other arcadia packages rather than on
-// their behaviour, which keeps them in a package that pulls in no dependencies -
-// and therefore runs even when a heavier package's test binary cannot be built.
 package conformance
 
 import (
@@ -13,12 +8,6 @@ import (
 	"testing"
 )
 
-// TestGoldenPanelStrings pins the panel's user-visible strings. They are FROZEN,
-// typos included: "neeed", the differing capitalisation of "Entered"/"entered",
-// the leading spaces and the parentheses on the bot_whitelist messages are all
-// upstream.
-//
-// A deliberate change here belongs in arcadia/CONFORMANCE.md first.
 func TestGoldenPanelStrings(t *testing.T) {
 	golden := []string{
 		// Auth. The frontend matches on these exact strings.
@@ -26,7 +15,6 @@ func TestGoldenPanelStrings(t *testing.T) {
 		"sessionNotActive",
 		"sessionAlreadyActive",
 		"mfaNotSetup",
-		"Invalid OTP Entered",
 		"Invalid OTP entered",
 		"This endpoint can only be used by pending and active sessions",
 		"You are not a staff member",
@@ -70,7 +58,7 @@ func TestGoldenPanelStrings(t *testing.T) {
 		"Index is lower than the lowest index of the member",
 		"Role does not exist on the staff server",
 		"Target has a lower index than the member",
-		"You do not have permission to edit the following perms [neeed to delete position]: %s",
+		"You do not have permission to edit the following perms [need to delete position]: %s",
 		"You do not have permission to edit the following perms: %s",
 		"You do not have permission to swap indexes of staff positions [manage_staff_roles]",
 		"You do not have permission to set the indexes of staff positions [manage_staff_roles]",
@@ -107,10 +95,9 @@ func TestGoldenPanelStrings(t *testing.T) {
 		"You do not have permission to update shop coupons [manage_shop]",
 		"You do not have permission to delete shop coupons [manage_shop]",
 
-		// Bot whitelist uses PARENTHESES, unlike every other message.
-		"You do not have permission to add to the bot whitelist (bot_whitelist.create)",
-		"You do not have permission to update bot whitelist (bot_whitelist.update)",
-		"You do not have permission to delete bot whitelist entries (bot_whitelist.delete)",
+		"You do not have permission to add to the bot whitelist [bot_whitelist.create]",
+		"You do not have permission to update bot whitelist [bot_whitelist.update]",
+		"You do not have permission to delete bot whitelist entries [bot_whitelist.delete]",
 
 		// Misc.
 		"Searching this target type is not implemented",
@@ -118,17 +105,12 @@ func TestGoldenPanelStrings(t *testing.T) {
 		"Invalid method",
 		"Path must start with /",
 
-		// Hello instance config. Only one deployed instance exists now
-		// (staging/beta/dev were deprecated), so this is permanently
-		// "Production".
 		"Arcadia Production Panel Instance",
 	}
 
-	assertContains(t, "../panel", golden)
+	assertContains(t, golden, "../panel", "../impls")
 }
 
-// TestGoldenRPCStrings pins the RPC layer's messages and mod-log embed text,
-// including the titles whose leading spaces are intentional by accident.
 func TestGoldenRPCStrings(t *testing.T) {
 	golden := []string{
 		// Pipeline.
@@ -139,26 +121,26 @@ func TestGoldenRPCStrings(t *testing.T) {
 		"Failed to reset user token",
 		"Reason must be lower than/equal to %d characters",
 
-		// Handler errors. The leading spaces are upstream's.
-		" does not exist",
+		// Handler errors.
+		"%q does not exist",
 		"This bot is not pending review",
 		"This bot is a test bot",
 		"This bot is already claimed by <@%s>",
 		"<@%s> is not claimed",
 		"Entity is not pending review?",
-		" is not pending review?",
+		"<@%s> is not pending review?",
 		"<@%s> is not claimed? Do ``/claim`` to claim this bot first!",
 		"Certified bots cannot be unverified",
 		"You can't force delete this bot with 'kick' enabled!",
 		"Invalid team ID",
-		" is in a team. Please use BotTransferOwnershipTeam",
-		" is not in a team. Please use TransferOwnership",
+		"%q is in a team. Please use BotTransferOwnershipTeam",
+		"%q is not in a team. Please use TransferOwnership",
 
-		// Embed titles, with their leading spaces.
-		" Claimed!",
-		" Unclaimed!",
-		" Approved!",
-		" Denied!",
+		// Embed titles.
+		"Claimed!",
+		"Unclaimed!",
+		"Approved!",
+		"Denied!",
 		"__ Unverified For Futher Review!__",
 		"Premium Added!",
 		"Premium Removed!",
@@ -166,10 +148,10 @@ func TestGoldenRPCStrings(t *testing.T) {
 		"Vote Ban Removed!",
 		"__Entity Vote Reset!__",
 		"__All Entity Votes Reset!__",
-		" Force Deleted!",
-		" Force Certified!",
-		" Uncertified!",
-		" Ownership Force Update!",
+		"Force Deleted!",
+		"Force Certified!",
+		"Uncertified!",
+		"Ownership Force Update!",
 		"[Apps] Banned User",
 		"[Apps] Unbanned User",
 
@@ -188,10 +170,9 @@ func TestGoldenRPCStrings(t *testing.T) {
 		"Welcome, back!",
 	}
 
-	assertContains(t, "../rpc", golden)
+	assertContains(t, golden, "../rpc")
 }
 
-// TestGoldenTaskStrings pins the background tasks' announcements.
 func TestGoldenTaskStrings(t *testing.T) {
 	golden := []string{
 		"Auto-Unclaimed Bot",
@@ -217,10 +198,9 @@ func TestGoldenTaskStrings(t *testing.T) {
 		"has been removed from the premium list as their subscription has expired.",
 	}
 
-	assertContains(t, "../tasks", golden)
+	assertContains(t, golden, "../tasks")
 }
 
-// TestGoldenBotStrings pins the Discord bot's replies.
 func TestGoldenBotStrings(t *testing.T) {
 	golden := []string{
 		"You are not staff",
@@ -268,19 +248,21 @@ func TestGoldenBotStrings(t *testing.T) {
 		"Welcome to IBL, ``explainme`` is a easy way to get an explanation on commands.",
 	}
 
-	assertContains(t, "../bot", golden)
+	assertContains(t, golden, "../bot")
 }
 
-// assertContains checks that every golden string appears as a literal somewhere
-// in the package's non-test sources.
-func assertContains(t *testing.T, dir string, golden []string) {
+func assertContains(t *testing.T, golden []string, dirs ...string) {
 	t.Helper()
 
-	source := readSources(t, dir)
+	var source strings.Builder
+
+	for _, dir := range dirs {
+		source.WriteString(readSources(t, dir))
+	}
 
 	for _, want := range golden {
-		if !strings.Contains(source, quoteFor(want)) {
-			t.Errorf("frozen string missing from %s: %q", dir, want)
+		if !strings.Contains(source.String(), quoteFor(want)) {
+			t.Errorf("frozen string missing from %s: %q", strings.Join(dirs, ", "), want)
 		}
 	}
 }
@@ -316,8 +298,6 @@ func readSources(t *testing.T, dir string) string {
 	return sb.String()
 }
 
-// quoteFor renders a string the way it appears inside a Go literal, so golden
-// strings containing quotes, newlines or backslashes still match.
 func quoteFor(s string) string {
 	return strings.Trim(strconv.Quote(s), `"`)
 }

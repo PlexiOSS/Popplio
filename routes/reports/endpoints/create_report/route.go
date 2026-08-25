@@ -8,6 +8,7 @@ package create_report
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/reports"
 	"popplio/state"
@@ -15,9 +16,10 @@ import (
 	"popplio/validators"
 
 	"github.com/disgoorg/disgo/discord"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"

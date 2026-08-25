@@ -7,15 +7,17 @@ package get_user
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/state"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

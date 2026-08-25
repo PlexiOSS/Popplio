@@ -9,7 +9,8 @@ import (
 	"popplio/routes/blogs/endpoints/get_blog_seo"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const tagName = "Blog"

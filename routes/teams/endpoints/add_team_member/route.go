@@ -6,15 +6,17 @@ package add_team_member
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

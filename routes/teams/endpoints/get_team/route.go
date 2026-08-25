@@ -6,25 +6,27 @@ package get_team
 import (
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
 	"popplio/votes"
-	"strings"
 
 	"github.com/google/uuid"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )
 
 var (
-	teamColsArr = db.GetCols(types.Team{})
+	teamColsArr = dbutil.GetCols(types.Team{})
 	teamCols    = strings.Join(teamColsArr, ",")
 )
 

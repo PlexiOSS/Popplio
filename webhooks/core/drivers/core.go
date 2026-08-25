@@ -9,15 +9,17 @@ package drivers
 import (
 	"errors"
 	"fmt"
+	"slices"
+
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
 	"popplio/webhooks/core/events"
 	"popplio/webhooks/sender"
-	"slices"
 
-	"github.com/infinitybotlist/eureka/dovewing"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 // Driver represents the base driver interface for constructing webhooks

@@ -12,11 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Vote credit tiers: how many votes convert into how much credit.
-//
-// Tiers are ordered by an integer position that has to stay dense and unique,
-// which is what dedupTierPositions exists for — every write here goes through it.
-
 type voteCreditTierRow struct {
 	ID         string    `db:"id"`
 	TargetType string    `db:"target_type"`
@@ -26,7 +21,6 @@ type voteCreditTierRow struct {
 	CreatedAt  time.Time `db:"created_at"`
 }
 
-// validateTier applies the shared range and target-type checks.
 func validateTier(action *types.VoteCreditTierUpsert) *response {
 	if action.Cents < 0 {
 		resp := writeText(http.StatusBadRequest, "Cents cannot be lower than 0")
@@ -46,45 +40,12 @@ func validateTier(action *types.VoteCreditTierUpsert) *response {
 	return nil
 }
 
-// dedupTierPositions pushes conflicting tiers down until the given position is
-// unique. This loop is load-bearing for ordering and is reproduced exactly.
 func dedupTierPositions(ctx context.Context, tx pgx.Tx, position int32, id string) error {
-	indexA := position
+	_, err := tx.Exec(ctx,
+		"UPDATE vote_credit_tiers SET position = position + 1 WHERE position >= $1 AND id != $2",
+		position, id)
 
-	for {
-		rows, err := tx.Query(ctx, "SELECT id, position FROM vote_credit_tiers WHERE position = $1 AND id != $2", indexA, id)
-
-		if err != nil {
-			return err
-		}
-
-		type conflict struct {
-			ID       string `db:"id"`
-			Position int32  `db:"position"`
-		}
-
-		conflicts, err := pgx.CollectRows(rows, pgx.RowToStructByName[conflict])
-
-		if err != nil {
-			return err
-		}
-
-		if len(conflicts) == 0 {
-			return nil
-		}
-
-		indexB := indexA + 1
-
-		for _, c := range conflicts {
-			if _, err := tx.Exec(ctx, "UPDATE vote_credit_tiers SET position = $1 WHERE id = $2", indexB, c.ID); err != nil {
-				return err
-			}
-
-			indexB++
-		}
-
-		indexA = indexB
-	}
+	return err
 }
 
 func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVoteCreditTiers) (response, error) {
@@ -96,7 +57,6 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 
 	switch {
 	case q.Action.ListTiers != nil:
-		// No permission check.
 		rows, err := state.Pool.Query(ctx, "SELECT id, target_type, position, cents, votes, created_at FROM vote_credit_tiers ORDER BY position ASC")
 
 		if err != nil {
@@ -166,7 +126,6 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 			return writeText(http.StatusForbidden, "You do not have permission to update vote credit tiers [manage_shop]"), nil
 		}
 
-		// Existence is checked BEFORE the range validations here.
 		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM vote_credit_tiers WHERE id = $1", action.ID); err != nil {
 			return response{}, err
 		} else if resp != nil {

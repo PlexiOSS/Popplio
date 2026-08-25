@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"popplio/api/resp"
-	"popplio/captcha"
 	"strconv"
 
+	"popplio/api/resp"
+	"popplio/captcha"
+
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -22,10 +24,11 @@ import (
 	"popplio/webhooks/events"
 
 	"github.com/disgoorg/disgo/discord"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -252,22 +255,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 						{
 							Name:   "Vote Count:",
 							Value:  strconv.Itoa(nvc),
-							Inline: validators.TruePtr,
+							Inline: ptr.TruePtr,
 						},
 						{
 							Name:   "Votes Added:",
 							Value:  strconv.Itoa(vi.VoteInfo.PerUser),
-							Inline: validators.TruePtr,
+							Inline: ptr.TruePtr,
 						},
 						{
 							Name:   "User ID:",
 							Value:  userObj.ID,
-							Inline: validators.TruePtr,
+							Inline: ptr.TruePtr,
 						},
 						{
 							Name:   "View " + targetType + "'s page",
 							Value:  "[View " + entityInfo.Name + "](" + entityInfo.URL + ")",
-							Inline: validators.TruePtr,
+							Inline: ptr.TruePtr,
 						},
 					},
 				},

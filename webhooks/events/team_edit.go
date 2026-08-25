@@ -1,12 +1,13 @@
 package events
 
 import (
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/types"
-	"popplio/validators"
 	"popplio/webhooks/core/events"
 
 	"github.com/disgoorg/disgo/discord"
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type WebhookTeamEditData struct {
@@ -51,7 +52,7 @@ func (n WebhookTeamEditData) CreateDiscordEmbed(creator *dovetypes.PlatformUser,
 			{
 				Name:   "User ID:",
 				Value:  creator.ID,
-				Inline: validators.TruePtr,
+				Inline: ptr.TruePtr,
 			},
 			name[0],
 			name[1],

@@ -6,20 +6,22 @@ package get_shop_item_benefits
 
 import (
 	"net/http"
-	"popplio/api/resp"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
 	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/api/resp"
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
 	// Shop item benefits
-	shopItemBenefitsColsArr = db.GetCols(types.ShopItemBenefit{})
+	shopItemBenefitsColsArr = dbutil.GetCols(types.ShopItemBenefit{})
 	shopItemBenefitsCols    = strings.Join(shopItemBenefitsColsArr, ",")
 )
 

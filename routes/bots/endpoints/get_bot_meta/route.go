@@ -7,17 +7,20 @@ package get_bot_meta
 
 import (
 	"net/http"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/routes/bots/assets"
 	"popplio/types"
-	"time"
 
-	"github.com/infinitybotlist/eureka/ratelimit"
 	"go.uber.org/zap"
 
+	"github.com/PlexiOSS/Keel/ratelimit"
+
 	"github.com/go-chi/chi/v5"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

@@ -5,26 +5,28 @@ package get_partners
 
 import (
 	"net/http"
-	"popplio/api/resp"
-	"popplio/db"
-	"popplio/state"
-	"popplio/types"
 	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
+	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/api/resp"
+	"popplio/state"
+	"popplio/types"
+
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var (
 	// Partners
-	partnersColsArr = db.GetCols(types.Partner{})
+	partnersColsArr = dbutil.GetCols(types.Partner{})
 	partnersCols    = strings.Join(partnersColsArr, ",")
 
 	// Partner types
-	partnerTypesColsArr = db.GetCols(types.PartnerTypes{})
+	partnerTypesColsArr = dbutil.GetCols(types.PartnerTypes{})
 	partnerTypesCols    = strings.Join(partnerTypesColsArr, ",")
 )
 

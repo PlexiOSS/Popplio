@@ -4,21 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
 	"popplio/types"
-	"popplio/validators"
-	"strings"
-	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/infinitybotlist/eureka/dovewing"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/dovewing"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 // certBotOwnerIDs returns whoever should be treated as a bot's owner for
@@ -217,7 +219,7 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 					{
 						Name:   "Reason",
 						Value:  answers["reason"],
-						Inline: validators.TruePtr,
+						Inline: ptr.TruePtr,
 					},
 				},
 			},

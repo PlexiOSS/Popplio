@@ -1,10 +1,3 @@
-// Package impls provides Arcadia's concrete implementations of the
-// interfaces the panel depends on.
-//
-// Keeping authentication, permissions, entity lookup and cryptography behind
-// interfaces is what lets the panel be exercised in tests without a live
-// database or Discord connection; this package holds the production side of
-// those seams.
 package impls
 
 import (
@@ -21,18 +14,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// ErrIdentityExpired and ErrSessionNotActive are matched verbatim by the panel
-// frontend, so the strings are frozen.
 var (
 	ErrIdentityExpired  = errors.New("identityExpired")
 	ErrSessionNotActive = errors.New("sessionNotActive")
 )
 
-// CheckAuthInsecure validates a login token without requiring the session to be
-// active.
-//
-// Steps 1 and 2 are the session garbage collector and they run on EVERY
-// authenticated request, exactly as upstream does.
 func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error) {
 	_, err := state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE created_at < NOW() - INTERVAL '1 hour'")
 
@@ -75,8 +61,6 @@ func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error
 		isBot     bool
 	)
 
-	// The bot flag rides along on this query rather than costing a round trip of
-	// its own, since it is read on every authenticated request.
 	err = state.Pool.QueryRow(ctx, `
 		SELECT sm.positions, COALESCE(iuc.bot, false)
 		FROM staff_members sm
@@ -95,8 +79,6 @@ func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error
 		return types.AuthData{}, ErrIdentityExpired
 	}
 
-	// A bot holds no staff permissions, so a session on one is not a session at
-	// all — however it came to exist.
 	if isBot {
 		return types.AuthData{}, ErrIdentityExpired
 	}
@@ -108,7 +90,6 @@ func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error
 	}, nil
 }
 
-// CheckAuth is CheckAuthInsecure plus a requirement that the session is active.
 func CheckAuth(ctx context.Context, token string) (types.AuthData, error) {
 	data, err := CheckAuthInsecure(ctx, token)
 
@@ -123,9 +104,6 @@ func CheckAuth(ctx context.Context, token string) (types.AuthData, error) {
 	return data, nil
 }
 
-// disciplinaryRow is a disciplinary joined to its type. The type columns are
-// nullable only because the join is a LEFT JOIN; a missing type is an error, as
-// it is upstream.
 type disciplinaryRow struct {
 	ID          pgtype.UUID `db:"id"`
 	CreatedAt   time.Time   `db:"created_at"`
@@ -134,24 +112,22 @@ type disciplinaryRow struct {
 	Description string      `db:"description"`
 	Type        string      `db:"type"`
 
-	TypeName           *string  `db:"type_name"`
-	TypeDescription    *string  `db:"type_description"`
-	TypeSelfAssignable *bool    `db:"self_assignable"`
-	TypePermLimits     []string `db:"perm_limits"`
-	TypeAdditory       *bool    `db:"additory"`
-	TypeNeedsApproval  *bool    `db:"needs_approval"`
-	TypeMaxExpiry      *float64 `db:"max_expiry"`
+	TypeName           *string    `db:"type_name"`
+	TypeDescription    *string    `db:"type_description"`
+	TypeSelfAssignable *bool      `db:"self_assignable"`
+	TypePermLimits     []string   `db:"perm_limits"`
+	TypeAdditory       *bool      `db:"additory"`
+	TypeNeedsApproval  *bool      `db:"needs_approval"`
+	TypeMaxExpiry      *float64   `db:"max_expiry"`
+	TypeCreatedAt      *time.Time `db:"type_created_at"`
 }
 
-// disciplinaryQuery joins each disciplinary to its type in one round trip.
-// Upstream issued a separate query per distinct type, memoized per call.
 const disciplinaryQuery = `SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
         t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
-        EXTRACT(epoch FROM t.max_expiry) AS max_expiry
+        EXTRACT(epoch FROM t.max_expiry) AS max_expiry, t.created_at AS type_created_at
         FROM staff_disciplinary d LEFT JOIN staff_disciplinary_types t ON t.id = d.type
         WHERE d.user_id = $1`
 
-// GetStaffDisciplinaries loads a member's disciplinary actions with their types.
 func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]types.StaffDisciplinary, error) {
 	query := disciplinaryQuery
 
@@ -175,7 +151,6 @@ func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]
 
 	for _, rec := range records {
 		if rec.TypeName == nil {
-			// Upstream fetch_one's the type and propagates RowNotFound.
 			return nil, pgx.ErrNoRows
 		}
 
@@ -202,9 +177,7 @@ func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]
 				Additory:       derefOr(rec.TypeAdditory, false),
 				NeedsApproval:  derefOr(rec.TypeNeedsApproval, false),
 				MaxExpiry:      rec.TypeMaxExpiry,
-				// QUIRK (reproduced): created_at is taken from the DISCIPLINARY, not
-				// from the type row. See CONFORMANCE.md.
-				CreatedAt: types.NewTimestamp(rec.CreatedAt),
+				CreatedAt:      types.NewTimestamp(derefOr(rec.TypeCreatedAt, rec.CreatedAt)),
 			},
 		})
 	}
@@ -212,7 +185,6 @@ func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]
 	return disciplinaries, nil
 }
 
-// derefOr reads through a nullable column, falling back when it is NULL.
 func derefOr[T any](v *T, fallback T) T {
 	if v == nil {
 		return fallback
@@ -232,8 +204,6 @@ type staffPositionRow struct {
 	CreatedAt          time.Time    `db:"created_at"`
 }
 
-// GetStaffMember is the HEAVY permission path: positions, overrides AND active
-// disciplinaries, plus the dovewing user.
 func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, error) {
 	var (
 		positionIDs   []pgtype.UUID
@@ -268,9 +238,6 @@ func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, erro
 		return types.StaffMember{}, fmt.Errorf("Error while getting positions of user %s: %s", userID, err)
 	}
 
-	// The dovewing user is fetched before the permissions are resolved rather
-	// than alongside the response, because whether this is a bot decides what
-	// resolving can produce at all.
 	user, err := GetPlatformUser(ctx, userID)
 
 	if err != nil {
@@ -332,32 +299,18 @@ func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, erro
 	}, nil
 }
 
-// resolveWithDisciplinaries applies disciplinary permission limits on top of a
-// member's own permissions.
-//
-// An additory disciplinary adds its permissions to what the member already has,
-// which is how a disciplinary can hand someone a restricted extra ability. A
-// non-additory one replaces their permissions instead: their roles and extras
-// are set aside, leaving only what this disciplinary and any earlier one allow.
-// That is what makes it a punishment — a suspended reviewer keeps nothing but
-// the limits their disciplinary spells out.
 func resolveWithDisciplinaries(grants perms.StaffGrants, disciplinaries []types.StaffDisciplinary) perms.Set {
-	// A bot holds nothing, and an additory disciplinary adds permissions on top
-	// of what is resolved — so a bot is answered before one can be applied.
 	if grants.BotAccount {
 		return perms.Staff.NewSet()
 	}
 
-	// An instance owner cannot be disciplined out of their own instance.
 	if len(disciplinaries) == 0 || grants.ConfigOwner {
 		return grants.Resolve()
 	}
 
 	var (
 		resolved = grants.Resolve()
-		// applied holds the disciplinary limits on their own, so that a
-		// non-additory disciplinary can fall back to them.
-		applied = perms.Staff.NewSet()
+		applied  = perms.Staff.NewSet()
 	)
 
 	for _, disc := range disciplinaries {

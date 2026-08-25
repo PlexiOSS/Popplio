@@ -2,6 +2,7 @@ package assets
 
 import (
 	"fmt"
+
 	"popplio/state"
 
 	"github.com/jackc/pgx/v5"

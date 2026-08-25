@@ -4,16 +4,17 @@ package assets
 import (
 	"context"
 	"errors"
-	"popplio/db"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/state"
 	"popplio/types"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
 
 var (
-	vanityColsArr = db.GetCols(types.Vanity{})
+	vanityColsArr = dbutil.GetCols(types.Vanity{})
 	vanityCols    = strings.Join(vanityColsArr, ",")
 )
 

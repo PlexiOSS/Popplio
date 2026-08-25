@@ -6,15 +6,17 @@ package delete_webhook
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

@@ -42,7 +42,7 @@ func forceRemove(ctx context.Context, m *types.RPCForceRemove, h Handle) (Succes
 		}
 
 		if err := modLogReason(
-			" Force Deleted!",
+			"Force Deleted!",
 			fmt.Sprintf("<@%s> has force-removed <@%s> for violating our rules or Discord ToS", h.UserID, m.TargetID),
 			"Remember: don't abuse our services!", impls.ColourRed, m.Reason); err != nil {
 			return Success{}, err
@@ -68,7 +68,7 @@ func forceRemove(ctx context.Context, m *types.RPCForceRemove, h Handle) (Succes
 	}
 
 	if err := modLogReason(
-		" Force Deleted!",
+		"Force Deleted!",
 		fmt.Sprintf("<@%s> has force-removed %s `%s` for violating our rules or ToS", h.UserID, h.TargetType.String(), m.TargetID),
 		"Remember: don't abuse our services!", impls.ColourRed, m.Reason); err != nil {
 		return Success{}, err

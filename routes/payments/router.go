@@ -15,7 +15,8 @@ import (
 	"popplio/routes/payments/endpoints/redeem_payment_offer"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/infinitybotlist/eureka/uapi"
+
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const (

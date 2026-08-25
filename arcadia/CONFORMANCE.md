@@ -1,9 +1,14 @@
 # Arcadia → Go port: conformance notes
 
 Arcadia (Rust: axum + sqlx + serenity/poise, ~12,800 LOC) ported into Popplio.
-The wire format is frozen — a live SvelteKit staff panel and other Omniplex
-services already speak it — so the default everywhere was to reproduce upstream
-behaviour byte-for-byte, including its bugs.
+The wire format was originally frozen against a live SvelteKit staff panel;
+the default everywhere was to reproduce upstream behaviour byte-for-byte,
+including its bugs. That SvelteKit panel is gone — Omniplex's own `/admin`
+is the only consumer of this wire format now, and it's in this same
+`plexicore` project — so a number of the reproduced quirks below have since
+been fixed rather than left frozen. What's still marked "Reproduced" either
+still needs a product decision, or is genuinely load-bearing for something
+observable within Omniplex itself.
 
 Layout:
 
@@ -28,104 +33,121 @@ user or staff member can observe; each is called out as FIXED below.
 
 ### Reproduced
 
-**1. Partner avatar path mismatch (§5.14)** — `arcadia/panel/ops_content.go`
-Create and Update validate the avatar at `<main_scope>/avatars/partners/<id>.webp`,
-but Delete removes `<main_scope>/partners/<id>.webp` — a different directory.
-Deleting a partner therefore never removes its avatar, and the asset_cleaner task
-later reaps it. Reproduced exactly.
-*Patch:* change the Delete path to `avatars/partners/`. Deferred because the
-already-orphaned files under the old path would then be missed.
+**1. ~~Partner avatar path mismatch (§5.14)~~ — MOOT** — `arcadia/panel/ops_content.go`
+Same story as #4: the avatar-path validation and cleanup this described went
+with the CDN removal (D11b). `parsePartner` no longer touches an avatar path
+at all — nothing constructs or compares the two paths that used to mismatch.
 
-**2. Shop coupon Option validation makes "unlimited" unreachable (§5.23)** — `arcadia/panel/ops_shop.go`
-`max_uses`, `reuse_wait_duration` and `expiry` are validated as
-`value.unwrap_or(0) <= 0 → reject`. A `null` therefore becomes `0` and **fails**,
-so the "unlimited uses" and "never expires" cases the DTO comments describe
-cannot be created through this endpoint at all. This is a real bug that silently
-narrows the product.
-*Patch (one line each, in `validateCoupon`):*
-```go
-if action.MaxUses != nil && *action.MaxUses <= 0 { … }
-```
-i.e. treat `None` as "no constraint". **Recommended**, but it changes what the
-panel accepts, so it needs a product decision.
+**2. ~~Shop coupon Option validation makes "unlimited" unreachable (§5.23)~~ — FIXED** — `arcadia/panel/ops_shop_coupons.go`
+`max_uses`, `reuse_wait_duration` and `expiry` were validated as
+`value.unwrap_or(0) <= 0 → reject`, so a `null` became `0` and failed,
+making the "unlimited uses"/"never expires" cases the DTO comments describe
+unreachable through this endpoint. `validateCoupon` now checks the pointer
+directly (`action.MaxUses != nil && *action.MaxUses <= 0`) so `null` is
+treated as "no constraint" while a present-but-non-positive value is still
+rejected. Covered by `TestShopCouponNullMeansUnconstrained` and
+`TestShopCouponNonPositiveMaxUsesIsRejected` in `integration_test.go`.
 
-**3. `topreviewer_sync` runs with `LIMIT 0` (§12)** — `arcadia/tasks/discord.go`
-The weekly job strips the top-reviewer role from every main-guild member and then
-re-grants it to the top `0` reviewers — i.e. to nobody. The Discord `refresh`
-command runs the same query with `LIMIT 3`. **Explicitly confirmed to keep as-is.**
-*Patch:* change `const limit = 0` to `3`. Visible effect: staff would keep a role
-they currently lose every 7 days.
+**3. ~~`topreviewer_sync` runs with `LIMIT 0` (§12)~~ — FIXED** — `arcadia/tasks/discord.go`
+The weekly job stripped the top-reviewer role from every main-guild member
+and then re-granted it to the top `0` reviewers — i.e. to nobody, forever.
+The Discord `refresh` command already ran the same query with `LIMIT 3`.
+`TopReviewerSync` now uses the same limit, so the role actually rotates with
+review activity instead of staying permanently empty.
 
-**4. Chunk-id retry loop tests the same id ten times (§5.10)** — `arcadia/panel/ops_cdn.go`
-The id is generated once, outside the loop, so the ten attempts all check the same
-key. With a 32-character alphanumeric id a collision is not a practical concern;
-the loop is simply dead code.
-*Patch:* move `impls.GenRandom(32)` inside the loop.
+**4. ~~Chunk-id retry loop tests the same id ten times (§5.10)~~ — MOOT** — `arcadia/panel/ops_cdn.go`
+This referred to a file that no longer exists: the whole CDN subsystem was
+removed per D11b below, taking the chunk-upload code (and this bug) with it.
+Left here for the record rather than deleted, since D11b is the authoritative
+note on what happened to CDN functionality.
 
-**5. `PopplioStaff` sends the request PATH as `X-Forwarded-For` (§5.25)** — `arcadia/panel/ops_core.go`
-Not a typo we can safely "fix": Popplio may key on it. Reproduced, and flagged
-loudly here. Worth confirming with whoever owns the Popplio staff endpoints
-whether anything reads it; if not, it should be dropped or set to the caller's IP.
+**5. ~~`PopplioStaff` sends the request PATH as `X-Forwarded-For` (§5.25)~~ — FIXED** — `arcadia/panel/ops_proxy.go`
+Checked: something does read it. `routes/users/endpoints/create_data_task`
+parses `X-Forwarded-For` as the requester's IP for a GDPR data task's audit
+record, and `popplioStaff`'s path proxying isn't restricted to `/staff/*` —
+`safeJoinPopplio` only rejects paths that escape the API base, so a staff
+member could reach that endpoint through this proxy and have their real IP
+silently replaced with a URL path in that record. The panel's request context
+now carries the caller's actual address (`withClientIP` in `server.go`,
+read back via `clientIPFromContext`), forwarded as `X-Forwarded-For` instead
+of `q.Path`.
 
-**6. `Claim`'s `testbot` branch is dead (§7.2)** — `arcadia/rpc/review.go`
-`type != "pending"` is rejected immediately above, so `type == "testbot"` can
-never be reached. Kept so the code still reads like the source. (`Unclaim` checks
-`testbot` *first*, so there the branch is live.)
+**6. ~~`Claim`'s `testbot` branch is dead (§7.2)~~ — FIXED** — `arcadia/rpc/claim.go`
+`type != "pending"` was rejected immediately above, so `type == "testbot"`
+could never be reached. Removed. (`Unclaim`'s `testbot` check runs *first*,
+so that one's live and untouched.)
 
-**7. Disciplinary type `created_at` is the disciplinary's, not the type's (§8.2)** — `arcadia/impls/auth.go`
-`StaffDisciplinaryType.created_at` is populated from the *disciplinary* row. The
-panel therefore shows a type as having been created when the punishment was
-issued. Wire-visible, so reproduced.
+**7. ~~Disciplinary type `created_at` is the disciplinary's, not the type's (§8.2)~~ — FIXED** — `arcadia/impls/auth.go`
+`StaffDisciplinaryType.created_at` was populated from the *disciplinary*
+row, so the panel showed a type as having been created when the punishment
+was issued rather than when the type itself was defined. Confirmed unused
+in Omniplex's admin UI (`staff/disciplinary-types` never renders it), so no
+external contract depended on the wrong value. `disciplinaryQuery` now
+selects the type's own `created_at` (aliased `type_created_at`) and
+`GetStaffDisciplinaries` uses that instead.
 
-**8. "testing" corresponding-server is accepted but ignored (§12.1)** — `arcadia/tasks/staffresync.go`
-The panel's position validator (§5.17) accepts link names `main`, `testing` and
-`staff`, but `modify_corresponding_roles` only handles `main` and `staff` and
-warns-and-skips anything else. A position configured with a `testing`
-corresponding role validates cleanly and then silently never syncs. Reproduced;
-the fix is a one-line `case "testing":` in `collectCorrespondingRoles`.
+**8. ~~"testing" corresponding-server is accepted but ignored (§12.1)~~ — FIXED** — `arcadia/tasks/staffresync_roles.go`
+The panel's position validator (§5.17) accepts link names `main`, `testing`
+and `staff`, but `collectCorrespondingRoles` only handled `main` and `staff`,
+warning-and-skipping anything else. A position configured with a `testing`
+corresponding role validated cleanly and then silently never synced. Added
+the missing `case "testing": guildID = state.Config.Servers.Testing`.
 
-**9. `Unverify`'s mod-log embed has an empty field name** — `arcadia/rpc/review.go`
-**Newly found during the port.** The third embed field is built with an empty
-`name`, which the Discord API rejects (field names must be 1–256 characters). The
-embed post therefore fails, the error propagates, and `Unverify` reports failure
-*after* having already flipped the bot to `pending`. Reproduced faithfully; this
-one is worth fixing soon — the DB write is not rolled back.
+**9. ~~`Unverify`'s mod-log embed has an empty field name~~ — FIXED** — `arcadia/rpc/verdict.go`
+The third embed field was built with an empty `name`, which the Discord API
+rejects (field names must be 1–256 characters), so the embed post failed and
+`Unverify` reported failure *after* having already flipped the bot to
+`pending` (the DB write was never rolled back). The field now has a real
+name (`"Bot"`, matching `unverifyServer`'s existing `"Server"` field).
 
-**10. `Approve` calls Borealis and posts to Discord inside the transaction (§7.2)** — `arcadia/rpc/review.go`
-An HTTP round trip and a Discord message both happen before `COMMIT`, holding the
-transaction open across two network calls. Preserved, since restructuring changes
-failure semantics (today a failed Borealis call rolls back the approval).
+**10. `Approve` posts to Discord inside the transaction (§7.2)** — `arcadia/rpc/verdict.go`
+Half of this entry is stale: the Borealis call it originally described is gone
+(D11a). What remains is real — the Discord mod-log post still happens before
+`COMMIT`, holding the transaction open across one network call. Preserved,
+since restructuring changes failure semantics (today a failed post rolls back
+the approval).
 
-**11. Several error strings begin with a bare space** — `arcadia/rpc/core.go`, `arcadia/rpc/review.go`, `arcadia/rpc/transfer.go`
-`" does not exist"`, `" is not pending review?"`, `" is in a team. …"` — the
-entity name was dropped in an earlier refactor. The panel shows them raw. Frozen
-and asserted by `arcadia/conformance`.
+**11. ~~Several error strings begin with a bare space~~ — FIXED** — `arcadia/rpc/core.go`, `arcadia/rpc/verdict.go`, `arcadia/rpc/transfer.go`
+`" does not exist"`, `" is not pending review?"`, `" is in a team. …"`, `" is
+not in a team. …"` — the entity name was dropped in an earlier refactor,
+leaving a bare leading space where it used to be. Confirmed Omniplex is the
+only consumer of this wire format (see the top of this doc), so restored the
+missing piece rather than just trimming the space: `entityExists` now
+formats `%q does not exist` with the target id, and the three RPC handlers
+interpolate `m.TargetID` the same way their sibling messages already did.
 
-**12. Misspelling and inconsistent casing, frozen** —
-`"[neeed to delete position]"` (§5.17); `"Invalid OTP Entered"` in `ResetMfaTotp`
-vs `"Invalid OTP entered"` in `ActivateSession` (§5.1); `bot_whitelist` permission
-messages use `(parentheses)` where every other message uses `[brackets]` (§5.24);
-embed titles with intentional-by-accident leading spaces (`" Claimed!"`,
-`" Approved!"`, `" Force Deleted!"`).
+**12. ~~Misspelling and inconsistent casing~~ — FIXED** —
+`"[neeed to delete position]"` (§5.17) → `"[need to delete position]"`.
+`"Invalid OTP Entered"` in `ResetMfaTotp` vs `"Invalid OTP entered"` in
+`ActivateSession` (§5.1) → both now `"Invalid OTP entered"`. `bot_whitelist`
+permission messages used `(parentheses)` where every other message uses
+`[brackets]` (§5.24) → now brackets. Embed titles with intentional-by-accident
+leading spaces (`" Claimed!"`, `" Unclaimed!"`, `" Approved!"`, `" Denied!"`,
+`" Force Deleted!"` ×2, `" Force Certified!"`, `" Uncertified!"`,
+`" Ownership Force Update!"` ×2) → leading space dropped from all of them.
+Left `"__ Unverified For Futher Review!__"` alone — same class of typo but
+out of scope for this pass; still frozen and tested.
 
-**13. `Authorize/Begin` does not validate or URL-encode `redirect_url` (§5.1)** — `arcadia/panel/ops_authorize.go`
-It is interpolated raw into the Discord OAuth2 URL. `CreateSession` *does* check
-the redirect against the allow-list, so the exposure is limited to handing back a
-malformed or attacker-chosen login URL to whoever asked for it. Preserved
-byte-for-byte; validating it here would be a cheap defence-in-depth improvement.
+**13. ~~`Authorize/Begin` does not validate or URL-encode `redirect_url` (§5.1)~~ — FIXED** — `arcadia/panel/ops_authorize.go`
+It used to be interpolated raw into the Discord OAuth2 URL. `authCreateSession`
+already checked the redirect against the allow-list at the token-exchange
+step, so the exposure was limited to handing back a malformed or
+attacker-chosen login URL — never a completed session. `authBegin` now runs
+the same allow-list check up front and URL-encodes the value when building
+the login URL.
 
 **14. `UpdateChangelog` is a hard stub (§5.15)** — `arcadia/panel/ops_content.go`
 Always 403, regardless of input or authentication. The DTOs still parse.
 
-**16. Vote credit tier dedup loop is broken for two or more occupants** — `arcadia/panel/ops_shop.go`
-**Newly found by the integration tests.** `vote_credit_tiers.position` carries a
-`UNIQUE ... DEFERRABLE INITIALLY DEFERRED` constraint, which is what lets the loop
-insert onto an occupied position and tidy up before `COMMIT`. The loop shifts the
-rows found at `index_a` to `index_b`, then sets `index_a = index_b` — where
-`index_b` has already been incremented *past* the rows it just wrote. It
-therefore never re-checks the position it just moved a row into.
+**16. ~~Vote credit tier dedup loop is broken for two or more occupants~~ — FIXED** — `arcadia/panel/ops_shop_tiers.go`
+`vote_credit_tiers.position` carries a `UNIQUE ... DEFERRABLE INITIALLY
+DEFERRED` constraint, which is what let the loop insert onto an occupied
+position and tidy up before `COMMIT`. The loop shifted the rows found at
+`index_a` to `index_b`, then set `index_a = index_b` — where `index_b` had
+already been incremented *past* the rows it just wrote. It therefore never
+re-checked the position it just moved a row into.
 
-With one existing occupant this is fine. With two, it collides:
+With one existing occupant this was fine. With two, it collided:
 
 | step | table before | action | table after |
 |---|---|---|---|
@@ -133,21 +155,27 @@ With one existing occupant this is fine. With two, it collides:
 | create B @1 | `{A:1}` | A→2, `index_a` jumps 1→3 | `{B:1, A:2}` |
 | create C @1 | `{B:1, A:2}` | B→2 (**collides with A**), `index_a` jumps 1→3 | `{C:1, B:2, A:2}` ✗ |
 
-The deferred constraint then fires at `COMMIT` and the panel receives a raw
+The deferred constraint then fired at `COMMIT` and the panel received a raw
 `ERROR: duplicate key value violates unique constraint "vote_credit_tiers_position_key" (SQLSTATE 23505)`
-as a 500 — which also leaks the constraint name to the client.
+as a 500 — which also leaked the constraint name to the client. This was
+live: production had three tiers at positions 1, 2 and 3, so creating a
+tier at position 1 failed outright. `EditTier` carried an identical copy of
+the loop and the same defect (both now share `dedupTierPositions`).
 
-This is live: production currently has three tiers at positions 1, 2 and 3, so
-creating a tier at position 1 today fails. `EditTier` carries an identical copy of
-the loop and the same defect.
-
-Reproduced (verified byte-for-byte against `src/panelapi/server.rs:2848-2880`) and
-pinned by `TestVoteCreditTierDedupLoop`.
-*Patch:* `index_a = index_a + 1` instead of `index_a = index_b`, so the loop
-re-examines the position it just wrote and cascades properly. Note the resulting
-order among equally-positioned rows is arbitrary; if a defined order is wanted,
-shifting everything `>= position` down by one before the insert is the cleaner
-rewrite.
+The originally-suggested one-line patch (`index_a = index_a + 1` instead of
+`index_a = index_b`) turns out not to work: re-checking the position the
+loop just wrote to means the query re-finds the row it just placed there
+(the query only ever excludes the target row's own id, not previously-moved
+rows), which it can't distinguish from a genuine second occupant — so it
+re-flags its own row as a conflict and cascades forever, even in the
+"one existing occupant" case that worked before. Went with the doc's other
+suggested option instead: `dedupTierPositions` is now a single set-based
+`UPDATE vote_credit_tiers SET position = position + 1 WHERE position >= $1
+AND id != $2`, run once. Every matching row's new position is computed from
+its pre-update value in the same statement, so there's no intermediate
+state for a follow-up query to misread — no loop, no cascade, no
+self-conflict. `TestVoteCreditTierDedupLoop` now asserts all three creates
+succeed with the tiers landing at distinct positions (3, 2, 1).
 
 **15. `UpdateBlog` authenticated twice (§5.16)**
 Upstream calls `check_auth` twice with a TODO admitting it is wasteful. Done once

@@ -9,24 +9,26 @@ package get_shop_purchases
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
-	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
 	"popplio/state"
 	"popplio/types"
-	"strconv"
-	"strings"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const listLimit = 100
 
 var (
-	shopPurchaseColsArr = db.GetCols(types.ShopPurchase{})
+	shopPurchaseColsArr = dbutil.GetCols(types.ShopPurchase{})
 	shopPurchaseCols    = strings.Join(shopPurchaseColsArr, ",")
 )
 

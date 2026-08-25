@@ -3,8 +3,9 @@ package types
 import (
 	"time"
 
-	"github.com/infinitybotlist/eureka/dovewing/dovetypes"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 type UserExperiment string
@@ -70,10 +71,6 @@ type StaffPosition struct {
 	Index              int         `db:"index" json:"index"`
 	CorrespondingRoles []Link      `db:"corresponding_roles" json:"corresponding_roles"`
 	Icon               string      `db:"icon" json:"icon"`
-}
-
-type StaffTeam struct {
-	Members []StaffMember `json:"members"`
 }
 
 type ProfileUpdate struct {

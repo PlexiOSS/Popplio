@@ -3,17 +3,19 @@ package get_server_meta
 import (
 	"errors"
 	"net/http"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
-	"time"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/ratelimit"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/ratelimit"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 func Docs() *docs.Doc {

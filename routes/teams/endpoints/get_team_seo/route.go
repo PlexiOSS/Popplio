@@ -6,16 +6,18 @@ package get_team_seo
 
 import (
 	"net/http"
+
 	"popplio/api/resp"
 
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/google/uuid"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 )

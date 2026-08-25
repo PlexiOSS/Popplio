@@ -3,9 +3,9 @@ package create_oauth2_login
 import (
 	"time"
 
+	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/state"
 	"popplio/types"
-	"popplio/validators"
 
 	"github.com/disgoorg/disgo/discord"
 	"go.uber.org/zap"
@@ -65,7 +65,7 @@ func sendAuthLog(user oauthUser, req types.AuthorizeRequest, isNew bool) {
 				Footer: &discord.EmbedFooter{
 					Text: "© Copyright 2026 - NodeByte LTD",
 				},
-				Timestamp: validators.Pointer(time.Now()),
+				Timestamp: ptr.Pointer(time.Now()),
 			},
 		},
 	})
@@ -95,7 +95,7 @@ func authLogFields(user oauthUser, req types.AuthorizeRequest, bans banState, is
 		embedFields = append(embedFields, discord.EmbedField{
 			Name:   f.name,
 			Value:  f.value,
-			Inline: validators.TruePtr,
+			Inline: ptr.TruePtr,
 		})
 	}
 

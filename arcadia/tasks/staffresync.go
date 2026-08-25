@@ -18,17 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// The staff resync itself, in the five steps it has always run in.
-//
-// The steps are deliberately left inline rather than broken into a function
-// each: they share a transaction, a working set that each one narrows, and an
-// ordering that is load-bearing — step 5 acts on exactly what step 4 did not
-// account for. Splitting them would mean passing that state around in a struct
-// and would make the order look optional when it is not. What could be lifted
-// out without touching that — the reporting, and the Discord role mirroring —
-// is in staffresync_report.go and staffresync_roles.go.
-
-// cachedPosition is a staff position with everything the resync needs.
 type cachedPosition struct {
 	ID                 string
 	Name               string
@@ -38,19 +27,11 @@ type cachedPosition struct {
 	CorrespondingRoles []types.Link
 }
 
-// String is the Display impl used in the staff-log embeds.
 func (c cachedPosition) String() string {
 	return fmt.Sprintf("%s [%s] (<@&%s>)", c.ID, c.Name, c.RoleID)
 }
 
-// StaffResync makes staff_members agree with Discord role assignments in the
-// STAFF guild and mirrors "corresponding roles" into the other guilds.
-//
-// This is the highest-risk task in the system: it can delete staff rows and strip
-// roles.
 func StaffResync(ctx context.Context) error {
-	// Step 1: snapshot the staff guild. If it is not cached we abort the whole
-	// task rather than acting on partial data.
 	if _, ok := dclient.Get().Caches().Guild(state.Config.Servers.Staff); !ok {
 		return fmt.Errorf("Failed to get staff guild for staff perms resync")
 	}
@@ -70,8 +51,6 @@ func StaffResync(ctx context.Context) error {
 			roles = append(roles, roleID.String())
 		}
 
-		// The gateway is the authority on what an account is, so bots are
-		// recognised here rather than looked up again later.
 		staffResync = append(staffResync, guildMember{UserID: member.User.ID, Roles: roles, IsBot: member.User.Bot})
 	})
 
@@ -83,7 +62,6 @@ func StaffResync(ctx context.Context) error {
 
 	defer tx.Rollback(ctx)
 
-	// Step 2: load every position into three lookup maps.
 	rows, err := tx.Query(ctx, "SELECT id, name, role_id, index, perms, corresponding_roles FROM staff_positions")
 
 	if err != nil {
@@ -130,7 +108,6 @@ func StaffResync(ctx context.Context) error {
 		posByName[pos.Name] = pos
 	}
 
-	// Step 3: load staff members FOR UPDATE.
 	rows, err = tx.Query(ctx, "SELECT user_id, positions, perm_overrides, no_autosync, unaccounted FROM staff_members FOR UPDATE")
 
 	if err != nil {
@@ -173,19 +150,11 @@ func StaffResync(ctx context.Context) error {
 		memberPosCache[member.UserID] = impls.UUIDStrings(member.Positions)
 	}
 
-	// bots are the bot accounts sitting in the staff server. They are tracked so
-	// that step 5 can say why it is removing one, rather than reporting them as
-	// having left a server they are still in.
 	bots := make(map[string]struct{})
 
-	// Step 4: reconcile each Discord staff member.
 	for _, user := range staffResync {
 		userID := user.UserID.String()
 
-		// A bot never becomes a staff member, whatever roles it has been given
-		// in the staff server. Leaving it out of the reconcile is also what
-		// takes an existing bot's staff row away: step 5 handles everyone the
-		// reconcile did not account for.
 		if user.IsBot {
 			bots[userID] = struct{}{}
 			continue
@@ -200,7 +169,6 @@ func StaffResync(ctx context.Context) error {
 		currentPositions := make(map[string]struct{})
 
 		for _, posID := range dbPositions {
-			// Garbage collection: drop position ids that no longer exist.
 			if _, ok := posByID[posID]; !ok {
 				_, err := tx.Exec(ctx,
 					"UPDATE staff_members SET positions = array_remove(positions, $1) WHERE user_id = $2",
@@ -218,7 +186,6 @@ func StaffResync(ctx context.Context) error {
 
 		rolePositions := make(map[string]struct{})
 
-		// Special case: config owners always hold the position named "owner".
 		if isOwner(user.UserID) {
 			if ownerPos, ok := posByName["owner"]; ok {
 				rolePositions[ownerPos.ID] = struct{}{}
@@ -232,7 +199,6 @@ func StaffResync(ctx context.Context) error {
 				continue
 			}
 
-			// "owner" is owners-list-driven only and never derived from roles.
 			if pos.Name == "owner" {
 				continue
 			}
@@ -248,9 +214,6 @@ func StaffResync(ctx context.Context) error {
 		newPositionIDs := sortedKeys(rolePositions)
 		oldPositionIDs := sortedKeys(currentPositions)
 
-		// staff_members.user_id has a foreign key into users, so a staff
-		// member who has never logged into Omniplex (no users row yet) has
-		// to be backfilled here before the insert/update below, not after.
 		var exists bool
 
 		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)", userID).Scan(&exists)
@@ -308,7 +271,6 @@ func StaffResync(ctx context.Context) error {
 		delete(unaccountedUserIDs, userID)
 	}
 
-	// Step 5: handle everyone left in the working set.
 	for _, userID := range sortedKeys(unaccountedUserIDs) {
 		if _, skip := noAutosync[userID]; skip {
 			continue
@@ -318,8 +280,6 @@ func StaffResync(ctx context.Context) error {
 			continue
 		}
 
-		// A member with permission overrides is kept (blanked and flagged); one
-		// without is deleted outright.
 		remove := len(overridePerms[userID]) == 0
 
 		if remove {
@@ -334,9 +294,6 @@ func StaffResync(ctx context.Context) error {
 			}
 		}
 
-		// The Rust code unwraps this lookup, which panics for a user that was in
-		// the DB but filtered out of the cache. A missing entry is treated as "no
-		// positions" here and logged.
 		oldPositions, ok := memberPosCache[userID]
 
 		if !ok {
@@ -345,8 +302,6 @@ func StaffResync(ctx context.Context) error {
 
 		oldSP := buildPermissions(posByID, oldPositions, overridePerms[userID])
 
-		// A bot is still in the staff server; it is being removed for being a
-		// bot, and saying it left would be wrong as well as confusing.
 		_, isBot := bots[userID]
 
 		verb, reason := "Removed", "they are no longer in the staff server"

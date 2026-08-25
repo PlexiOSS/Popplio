@@ -18,7 +18,6 @@ We'll acknowledge your report within 3 business days and aim to give you a more 
 This policy covers:
 
 - [spider.omniplex.gg](https://spider.omniplex.gg) (production)
-- [spider-staging.omniplex.gg](https://spider-staging.omniplex.gg) (staging)
 - The source code in this repository
 
 Vulnerabilities in third-party services we depend on (Discord's API, our CDN provider, and so on) should be reported to those providers directly, unless the issue is in how we integrate with them.

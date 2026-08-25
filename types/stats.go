@@ -23,10 +23,3 @@ type ListStats struct {
 	TotalDeniedServers     int64 `json:"total_denied_servers" description:"The total number of servers denied on review"`
 	TotalVoteBannedServers int64 `json:"total_vote_banned_servers" description:"The total number of servers banned from voting"`
 }
-
-type StatusDocs struct {
-	Key1 string `json:"key1" description:"Some key-value pairs from our status API"`
-	Key2 string `json:"key2" description:"Some key-value pairs from our status API"`
-	Key3 string `json:"key3" description:"Some key-value pairs from our status API"`
-	Etc  string `json:"etc" description:"And so on..."`
-}

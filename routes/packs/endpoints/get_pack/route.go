@@ -5,24 +5,26 @@ package get_pack
 
 import (
 	"net/http"
-	"popplio/api/resp"
 	"strings"
 
-	"popplio/db"
+	"popplio/api/resp"
+
+	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/routes/packs/assets"
 	"popplio/state"
 	"popplio/types"
 
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
 
 var (
-	packColArr = db.GetCols(types.BotPack{})
+	packColArr = dbutil.GetCols(types.BotPack{})
 	packCols   = strings.Join(packColArr, ",")
 )
 

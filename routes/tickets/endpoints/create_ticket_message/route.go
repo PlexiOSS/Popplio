@@ -8,19 +8,21 @@ package create_ticket_message
 import (
 	"errors"
 	"net/http"
+	"time"
+
 	"popplio/api/resp"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
-	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	docs "github.com/infinitybotlist/eureka/doclib"
-	"github.com/infinitybotlist/eureka/uapi"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+
+	docs "github.com/PlexiOSS/Keel/doclib"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 var compiledMessages = uapi.CompileValidationErrors(types.CreateTicketMessage{})

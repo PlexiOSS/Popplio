@@ -113,7 +113,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.dispatch(r.Context(), &req)
+	resp, err := s.dispatch(withClientIP(r.Context(), r), &req)
 
 	if err != nil {
 		var perr Error

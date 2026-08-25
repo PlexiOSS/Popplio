@@ -50,9 +50,10 @@ import (
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/infinitybotlist/eureka/ratelimit"
-	"github.com/infinitybotlist/eureka/uapi"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/ratelimit"
+	"github.com/PlexiOSS/Keel/uapi"
 )
 
 // Err logs a server-side fault and returns a 500 carrying uapi's generic
