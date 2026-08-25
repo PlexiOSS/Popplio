@@ -1,3 +1,5 @@
+github.com/PlexiOSS/Keel v1.0.1 h1:PFQtURiokxlPq/KcR7aS3owSaxd8+JyRqVr/nMC8ETU=
+github.com/PlexiOSS/Keel v1.0.1/go.mod h1:jYgCMBOahtZC+c2vf53gB/dTIJeLpmNWqGBqHuRF1Nk=
 github.com/SherClockHolmes/webpush-go v1.3.0 h1:CAu3FvEE9QS4drc3iKNgpBWFfGqNthKlZhp5QpYnu6k=
 github.com/SherClockHolmes/webpush-go v1.3.0/go.mod h1:AxRHmJuYwKGG1PVgYzToik1lphQvDnqFYDqimHvwhIw=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=

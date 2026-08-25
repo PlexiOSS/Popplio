@@ -5,7 +5,7 @@ go 1.23
 toolchain go1.23.0
 
 require (
-	github.com/PlexiOSS/Keel v1.0.0
+	github.com/PlexiOSS/Keel v1.0.1
 	github.com/getkin/kin-openapi v0.127.0 // indirect
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/google/uuid v1.6.0
@@ -81,5 +81,3 @@ require (
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
 	golang.org/x/sys v0.24.0 // indirect
 )
-
-replace github.com/PlexiOSS/Keel => ../Keel

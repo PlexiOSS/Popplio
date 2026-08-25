@@ -32,5 +32,3 @@ require (
 	golang.org/x/term v0.23.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 )
-
-replace github.com/PlexiOSS/Keel => ../../../Keel
