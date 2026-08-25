@@ -1,8 +1,6 @@
 module popplio
 
-go 1.23
-
-toolchain go1.23.0
+go 1.24
 
 require (
 	github.com/PlexiOSS/Keel v1.0.1
@@ -21,11 +19,12 @@ require (
 )
 
 require (
+	github.com/anthropics/anthropic-sdk-go v1.66.0
 	github.com/disgoorg/disgo v0.18.11
 	github.com/disgoorg/snowflake/v2 v2.0.3
 	github.com/pquerna/otp v1.5.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
-	golang.org/x/sync v0.8.0
+	golang.org/x/sync v0.16.0
 )
 
 require (
@@ -41,15 +40,23 @@ require (
 
 require (
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.5 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
-	golang.org/x/net v0.28.0 // indirect
+	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
+	golang.org/x/net v0.41.0 // indirect
 )
 
 require (
@@ -67,8 +74,8 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
-	golang.org/x/text v0.17.0
+	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/text v0.27.0
 )
 
 require (
@@ -79,5 +86,5 @@ require (
 	github.com/redis/go-redis/v9 v9.6.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
-	golang.org/x/sys v0.24.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 )

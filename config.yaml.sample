@@ -68,6 +68,10 @@ meta:
   stripe_secret_key:  # Stripe Public Key
   popplio_proxy: https://gateway.nodebyte.host/proxy/discord # Popplio Proxy URL
   openai_api_key: sk-proj-your-key-here # OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset (optional)
+  anthropic_api_key:  # Anthropic API key, used to draft changelog entries with Claude. Preferred over openai_api_key for the changelog generator when both are set; falls back to OpenAI, then a plain heuristic, when unset (optional)
+  github_token:  # GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+ (optional)
+  blog_announce_mentions:  # Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty (optional)
+  changelog_announce_mentions:  # Role mention(s) included in the changelog-entry announcement, same shape as blog_announce_mentions. Skipped when empty (optional)
 
 arcadia:
   token:  # Staff bot Discord token. This is a SEPARATE Discord application from Popplio's

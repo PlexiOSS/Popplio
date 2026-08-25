@@ -87,6 +87,7 @@ type Meta struct {
 	StripeSecretKey string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
 	PopplioProxy    string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
 	OpenAIAPIKey    string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset" required:"false"`
+	AnthropicAPIKey string   `yaml:"anthropic_api_key" default:"" comment:"Anthropic API key, used to draft changelog entries with Claude. Preferred over openai_api_key for the changelog generator when both are set; falls back to OpenAI, then a plain heuristic, when unset" required:"false"`
 	GithubToken     string   `yaml:"github_token" default:"" comment:"GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+" required:"false"`
 
 	BlogAnnounceMentions      string `yaml:"blog_announce_mentions" default:"" comment:"Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty" required:"false"`
