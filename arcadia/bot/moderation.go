@@ -10,10 +10,12 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/perms"
+	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 )
 
 // Guild moderation: kick, ban, timeout, and a log-only warn.
@@ -30,7 +32,51 @@ import (
 const maxTimeout = 28 * 24 * time.Hour
 
 func registerModerationCommands() {
-	register(cmdKick(), cmdBan(), cmdTimeout(), cmdWarn())
+	register(cmdKick(), cmdBan(), cmdTimeout(), cmdWarn(), cmdPurge(), cmdLock(), cmdUnlock(), cmdModlogs())
+}
+
+// modCase is one row written to mod_cases: a durable, queryable moderation
+// history behind the Discord-only embeds logModeration posts.
+type modCase struct {
+	GuildID     snowflake.ID
+	UserID      snowflake.ID
+	ModeratorID snowflake.ID
+	Action      string
+	Reason      string
+}
+
+// writeModCase persists a moderation action. Best-effort, same contract as
+// logModeration: called after the action already succeeded, a failure here
+// is logged by the caller but never undoes it.
+func writeModCase(ctx context.Context, mc modCase) error {
+	_, err := state.Pool.Exec(ctx,
+		`INSERT INTO mod_cases (guild_id, user_id, moderator_id, action, reason) VALUES ($1, $2, $3, $4, $5)`,
+		mc.GuildID.String(), mc.UserID.String(), mc.ModeratorID.String(), mc.Action, mc.Reason)
+
+	return err
+}
+
+// logPurge posts a mod-log entry for a purge. Separate from logModeration
+// because a purge may have no single target user (an unfiltered purge), and
+// logModeration's embed always renders a "User" field.
+func logPurge(c *Ctx, channelID snowflake.ID, count int, filterUser snowflake.ID) error {
+	fields := []discord.EmbedField{
+		{Name: "Channel", Value: fmt.Sprintf("<#%s>", channelID), Inline: impls.InlineTrue()},
+		{Name: "Count", Value: fmt.Sprintf("%d", count), Inline: impls.InlineTrue()},
+		{Name: "Staff", Value: fmt.Sprintf("<@%s>", c.Author.ID), Inline: impls.InlineTrue()},
+	}
+
+	if filterUser != 0 {
+		fields = append(fields, discord.EmbedField{Name: "Filtered To", Value: fmt.Sprintf("<@%s>", filterUser), Inline: impls.InlineTrue()})
+	}
+
+	return impls.SendModLog(discord.MessageCreate{
+		Embeds: []discord.Embed{{
+			Title:  "Messages Purged",
+			Fields: fields,
+			Color:  impls.ColourRed,
+		}},
+	})
 }
 
 // resolveTargetUser parses a mention or raw id option into a snowflake.
@@ -142,6 +188,10 @@ func cmdKick() *Command {
 				return err
 			}
 
+			if err := writeModCase(c.Context, modCase{GuildID: c.GuildID, UserID: target, ModeratorID: c.Author.ID, Action: "kick", Reason: reason}); err != nil {
+				state.Logger.Error("Failed to record kick mod case", zap.Error(err))
+			}
+
 			if err := logModeration(c, "Member Kicked", target, reason); err != nil {
 				return err
 			}
@@ -189,6 +239,10 @@ func cmdBan() *Command {
 				return err
 			}
 
+			if err := writeModCase(c.Context, modCase{GuildID: c.GuildID, UserID: target, ModeratorID: c.Author.ID, Action: "ban", Reason: reason}); err != nil {
+				state.Logger.Error("Failed to record ban mod case", zap.Error(err))
+			}
+
 			if err := logModeration(c, "Member Banned", target, reason); err != nil {
 				return err
 			}
@@ -234,6 +288,10 @@ func cmdTimeout() *Command {
 				return err
 			}
 
+			if err := writeModCase(c.Context, modCase{GuildID: c.GuildID, UserID: target, ModeratorID: c.Author.ID, Action: "timeout", Reason: fmt.Sprintf("%s (until <t:%d:f>)", reason, until.Unix())}); err != nil {
+				state.Logger.Error("Failed to record timeout mod case", zap.Error(err))
+			}
+
 			if err := logModeration(c, "Member Timed Out", target, fmt.Sprintf("%s (until <t:%d:f>)", reason, until.Unix())); err != nil {
 				return err
 			}
@@ -275,6 +333,10 @@ func cmdWarn() *Command {
 					Color:       impls.ColourRed,
 				}},
 			})
+
+			if err := writeModCase(c.Context, modCase{GuildID: c.GuildID, UserID: target, ModeratorID: c.Author.ID, Action: "warn", Reason: reason}); err != nil {
+				state.Logger.Error("Failed to record warn mod case", zap.Error(err))
+			}
 
 			if err := logModeration(c, "Member Warned", target, reason); err != nil {
 				return err

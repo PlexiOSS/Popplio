@@ -217,10 +217,10 @@ func Listener(ctx context.Context) bot.EventListener {
 		OnModalSubmit:                   func(e *events.ModalSubmitInteractionCreate) { onModalSubmit(ctx, e) },
 	}
 
-	// Slash commands are the primary interface. The legacy prefix listener is
-	// only attached when explicitly enabled, because reading message content
-	// needs the privileged Message Content intent.
-	if state.Config.Arcadia.PrefixCommands {
+	// Slash commands are the primary interface. The message listener is only
+	// attached when prefix commands or auto-mod are enabled, because reading
+	// message content needs the privileged Message Content intent.
+	if state.Config.Arcadia.PrefixCommands || state.Config.Arcadia.AutoMod {
 		adapter.OnMessageCreate = func(e *events.MessageCreate) { onMessageCreate(ctx, e) }
 	}
 
@@ -234,6 +234,14 @@ func prefix() string {
 
 func onMessageCreate(ctx context.Context, e *events.MessageCreate) {
 	if e.Message.Author.Bot {
+		return
+	}
+
+	if state.Config.Arcadia.AutoMod {
+		scanMessage(ctx, e)
+	}
+
+	if !state.Config.Arcadia.PrefixCommands {
 		return
 	}
 
