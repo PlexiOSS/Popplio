@@ -11,9 +11,6 @@ import (
 	"time"
 
 	"popplio/state"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
 // Draft is a not-yet-saved changelog entry body -- everything CreateEntry
@@ -71,50 +68,32 @@ const diffSystemPrompt = `You are writing a changelog entry for end users of a s
 Respond with ONLY a JSON object of this exact shape:
 {"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "extra_description": "..."}`
 
-// summarizer is implemented by callClaude and callChat -- whichever backend
-// is configured gets called the same way from Summarize.
-type summarizer func(ctx context.Context, systemPrompt, userContent string) (Draft, error)
-
-// Summarize turns a GitHub compare result into a Draft. Claude
-// (Meta.AnthropicAPIKey) is preferred when set; otherwise it falls back to
-// OpenAI (Meta.OpenAIAPIKey), then to a title/commit-bucketing heuristic --
-// rougher output, but the feature still works rather than erroring out,
-// same contract as moderation.CheckText.
+// Summarize turns a GitHub compare result into a Draft. When
+// Meta.OpenAIAPIKey is unset it falls back to a title/commit-bucketing
+// heuristic -- rougher output, but the feature still works rather than
+// erroring out, same contract as moderation.CheckText.
 func Summarize(ctx context.Context, cmp CompareResult) (Draft, error) {
-	var call summarizer
-
-	switch {
-	case state.Config.Meta.AnthropicAPIKey != "":
-		apiKey := state.Config.Meta.AnthropicAPIKey
-		call = func(ctx context.Context, systemPrompt, userContent string) (Draft, error) {
-			return callClaude(ctx, apiKey, systemPrompt, userContent)
-		}
-	case state.Config.Meta.OpenAIAPIKey != "":
-		apiKey := state.Config.Meta.OpenAIAPIKey
-		call = func(ctx context.Context, systemPrompt, userContent string) (Draft, error) {
-			return callChat(ctx, apiKey, systemPrompt, userContent)
-		}
-	}
+	apiKey := state.Config.Meta.OpenAIAPIKey
 
 	if len(cmp.PRs) > 0 {
-		if call == nil {
+		if apiKey == "" {
 			return heuristicDraftFromTitles(titlesOf(cmp.PRs)), nil
 		}
 
-		return call(ctx, prSystemPrompt, prPrompt(cmp.PRs, cmp.Stats))
+		return callChat(ctx, apiKey, prSystemPrompt, prPrompt(cmp.PRs, cmp.Stats))
 	}
 
 	if len(cmp.Files) == 0 && len(cmp.CommitMessages) == 0 {
 		return Draft{}, nil
 	}
 
-	if call == nil {
+	if apiKey == "" {
 		// No LLM available to actually read the diff -- bucket the raw
 		// commit subjects instead, same as the PR-title heuristic.
 		return heuristicDraftFromTitles(cmp.CommitMessages), nil
 	}
 
-	return call(ctx, diffSystemPrompt, diffPrompt(cmp.CommitMessages, cmp.Files, cmp.Stats))
+	return callChat(ctx, apiKey, diffSystemPrompt, diffPrompt(cmp.CommitMessages, cmp.Files, cmp.Stats))
 }
 
 func titlesOf(prs []PullRequest) []string {
@@ -256,63 +235,6 @@ func callChat(ctx context.Context, apiKey, systemPrompt, userContent string) (Dr
 	}
 
 	return draft, nil
-}
-
-// draftTool is a forced single tool call used to get Draft back as
-// structured JSON from Claude, instead of asking it to emit raw JSON in a
-// text block and hoping it complies.
-var draftTool = anthropic.ToolParam{
-	Name:        "submit_changelog_draft",
-	Description: anthropic.String("Submit the categorized changelog draft."),
-	InputSchema: anthropic.ToolInputSchemaParam{
-		Properties: map[string]any{
-			"added":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"updated":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"fixed":             map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"removed":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-			"extra_description": map[string]any{"type": "string"},
-		},
-		Required: []string{"added", "updated", "fixed", "removed", "extra_description"},
-	},
-}
-
-func callClaude(ctx context.Context, apiKey, systemPrompt, userContent string) (Draft, error) {
-	client := anthropic.NewClient(option.WithAPIKey(apiKey))
-
-	resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     "claude-opus-5",
-		MaxTokens: 4096,
-		System: []anthropic.TextBlockParam{
-			{Text: systemPrompt},
-		},
-		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(userContent)),
-		},
-		Tools:      []anthropic.ToolUnionParam{{OfTool: &draftTool}},
-		ToolChoice: anthropic.ToolChoiceParamOfTool(draftTool.Name),
-	})
-
-	if err != nil {
-		return Draft{}, fmt.Errorf("claude summarize request failed: %w", err)
-	}
-
-	for _, block := range resp.Content {
-		toolUse, ok := block.AsAny().(anthropic.ToolUseBlock)
-
-		if !ok {
-			continue
-		}
-
-		var draft Draft
-
-		if err := json.Unmarshal([]byte(toolUse.JSON.Input.Raw()), &draft); err != nil {
-			return Draft{}, fmt.Errorf("failed to decode claude draft: %w", err)
-		}
-
-		return draft, nil
-	}
-
-	return Draft{}, fmt.Errorf("claude response had no tool call")
 }
 
 // heuristicDraftFromTitles buckets plain title/subject strings (PR titles or

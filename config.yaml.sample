@@ -27,6 +27,8 @@ channels:
   system: 762958420277067786 # System Channel
   uptime: 1083108330442076292 # Uptime Channel
   staff_logs: 1186195848497999912 # Staff Logs Channel
+  blog_announcements: 1083108330442076292 # Blog Post Announcements
+  changelog_announcements: 1186195848497999912 # Changelog Announcements
 
 roles:
   awaiting_staff: 1029058929361174678 # Awaiting Staff Role
@@ -67,8 +69,7 @@ meta:
   stripe_public_key:  # Stripe Public Key
   stripe_secret_key:  # Stripe Public Key
   popplio_proxy: https://gateway.nodebyte.host/proxy/discord # Popplio Proxy URL
-  openai_api_key: sk-proj-your-key-here # OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time. Moderation is skipped entirely when this is unset (optional)
-  anthropic_api_key:  # Anthropic API key, used to draft changelog entries with Claude. Preferred over openai_api_key for the changelog generator when both are set; falls back to OpenAI, then a plain heuristic, when unset (optional)
+  openai_api_key: sk-proj-your-key-here # OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time, and to draft changelog entries. Moderation is skipped and the changelog generator falls back to a plain heuristic when this is unset (optional)
   github_token:  # GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+ (optional)
   blog_announce_mentions:  # Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty (optional)
   changelog_announce_mentions:  # Role mention(s) included in the changelog-entry announcement, same shape as blog_announce_mentions. Skipped when empty (optional)
