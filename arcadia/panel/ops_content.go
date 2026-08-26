@@ -379,7 +379,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return response{}, newError(err)
 		}
 
-		exists, err := changelogExists(ctx, itag)
+		wasPublished, exists, err := changelogPublished(ctx, itag)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -395,6 +395,23 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 
 		if err != nil {
 			return response{}, newError(err)
+		}
+
+		// Only announce the draft -> published transition, not every edit
+		// of an already-published entry (that would re-post on every typo
+		// fix).
+		if entry.Published && !wasPublished {
+			announceChangelogEntry(types.ChangelogCreateEntry{
+				Project:          entry.Project,
+				Version:          entry.Version,
+				Added:            entry.Added,
+				Updated:          entry.Updated,
+				Fixed:            entry.Fixed,
+				Removed:          entry.Removed,
+				ExtraDescription: entry.ExtraDescription,
+				Prerelease:       entry.Prerelease,
+				Published:        entry.Published,
+			})
 		}
 
 		return writeNoContent(), nil
@@ -473,6 +490,23 @@ func changelogExists(ctx context.Context, itag uuid.UUID) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+// changelogPublished returns the entry's current published state, and
+// whether it exists at all -- used by UpdateEntry to detect a draft ->
+// published transition before the update overwrites it.
+func changelogPublished(ctx context.Context, itag uuid.UUID) (published bool, exists bool, err error) {
+	err = state.Pool.QueryRow(ctx, "SELECT published FROM changelogs WHERE itag = $1", itag).Scan(&published)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+
+	if err != nil {
+		return false, false, err
+	}
+
+	return published, true, nil
 }
 
 type blogRow struct {
@@ -560,7 +594,7 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 			return response{}, newError(err)
 		}
 
-		exists, err := blogExists(ctx, itag)
+		wasDraft, exists, err := blogDraft(ctx, itag)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -576,6 +610,18 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 
 		if err != nil {
 			return response{}, newError(err)
+		}
+
+		// Only announce the draft -> published transition, not every edit
+		// of an already-published post.
+		if !entry.Draft && wasDraft {
+			announceBlogPost(types.BlogCreateEntry{
+				Slug:        entry.Slug,
+				Title:       entry.Title,
+				Description: entry.Description,
+				Content:     entry.Content,
+				Tags:        entry.Tags,
+			})
 		}
 
 		return writeNoContent(), nil
@@ -618,4 +664,21 @@ func blogExists(ctx context.Context, itag uuid.UUID) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+// blogDraft returns the entry's current draft state, and whether it exists
+// at all -- used by UpdateEntry to detect a draft -> published transition
+// before the update overwrites it, same reasoning as changelogPublished.
+func blogDraft(ctx context.Context, itag uuid.UUID) (draft bool, exists bool, err error) {
+	err = state.Pool.QueryRow(ctx, "SELECT draft FROM blogs WHERE itag = $1", itag).Scan(&draft)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+
+	if err != nil {
+		return false, false, err
+	}
+
+	return draft, true, nil
 }
