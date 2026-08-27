@@ -2,17 +2,21 @@ package panel
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/notifications"
 	"popplio/perms"
 	"popplio/reports"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
 )
 
 type reportRow struct {
@@ -123,21 +127,47 @@ func (s *Server) resolveReport(ctx context.Context, staffID string, action *type
 		return writeText(http.StatusBadRequest, "id is required"), nil
 	}
 
-	tag, err := state.Pool.Exec(
+	var reporterID string
+
+	err := state.Pool.QueryRow(
 		ctx,
-		"UPDATE reports SET status = $1, resolved_by = $2, resolution_note = $3, resolved_at = NOW() WHERE id = $4 AND status IN ('open', 'under_review')",
+		"UPDATE reports SET status = $1, resolved_by = $2, resolution_note = $3, resolved_at = NOW() WHERE id = $4 AND status IN ('open', 'under_review') RETURNING reporter_id",
 		status,
 		staffID,
 		action.Note,
 		action.ID,
-	)
+	).Scan(&reporterID)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return writeText(http.StatusNotFound, "Report not found, or has already been resolved/dismissed"), nil
+		}
+
 		return response{}, newError(err)
 	}
 
-	if tag.RowsAffected() == 0 {
-		return writeText(http.StatusNotFound, "Report not found, or has already been resolved/dismissed"), nil
+	// Best-effort: the report is already resolved/dismissed at this point,
+	// so a failure to notify the reporter shouldn't read back as the
+	// resolution itself having failed.
+	alertTitle := "Report Dismissed"
+	alertMessage := "Your report has been reviewed and dismissed."
+
+	if status == "resolved" {
+		alertTitle = "Report Resolved"
+		alertMessage = "Your report has been reviewed and resolved."
+	}
+
+	if action.Note != "" {
+		alertMessage += " Staff note: " + action.Note
+	}
+
+	if err := notifications.PushNotification(reporterID, ptypes.Alert{
+		Type:     ptypes.AlertTypeInfo,
+		Title:    alertTitle,
+		Message:  alertMessage,
+		Category: ptypes.AlertCategoryReports,
+	}); err != nil {
+		state.Logger.Warn("Failed to notify reporter of report resolution", zap.Error(err), zap.String("reportId", action.ID), zap.String("reporterId", reporterID))
 	}
 
 	return writeText(http.StatusOK, "OK"), nil

@@ -17,6 +17,7 @@ import (
 	"popplio/votes"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -91,9 +92,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if err := notifications.PushNotification(d.Auth.ID, types.Alert{
-		Type:    types.AlertTypeSuccess,
-		Title:   "Votes Redeemed",
-		Message: strconv.Itoa(votesInt) + " votes converted to credits for " + targetId + ".",
+		Type:     types.AlertTypeSuccess,
+		Title:    "Votes Redeemed",
+		Message:  strconv.Itoa(votesInt) + " votes converted to credits for " + targetId + ".",
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/shop", Valid: true},
+		Category: types.AlertCategoryVotes,
 	}); err != nil {
 		state.Logger.Warn("Failed to send vote credit redemption alert", zap.Error(err), zap.String("user_id", d.Auth.ID), zap.String("target_id", targetId))
 	}

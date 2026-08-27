@@ -8,7 +8,9 @@ import (
 	"popplio/routes/notifications/endpoints/create_user_notifications"
 	"popplio/routes/notifications/endpoints/delete_user_notifications"
 	"popplio/routes/notifications/endpoints/get_notification_info"
+	"popplio/routes/notifications/endpoints/get_notification_prefs"
 	"popplio/routes/notifications/endpoints/get_user_notifications"
+	"popplio/routes/notifications/endpoints/update_notification_prefs"
 
 	"github.com/go-chi/chi/v5"
 
@@ -72,6 +74,40 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.POST,
 		Docs:    create_user_notifications.Docs,
 		Handler: create_user_notifications.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/notification-prefs",
+		OpId:    "get_notification_prefs",
+		Method:  uapi.GET,
+		Docs:    get_notification_prefs.Docs,
+		Handler: get_notification_prefs.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/notification-prefs",
+		OpId:    "update_notification_prefs",
+		Method:  uapi.PATCH,
+		Docs:    update_notification_prefs.Docs,
+		Handler: update_notification_prefs.Route,
 		Auth: []uapi.AuthType{
 			{
 				URLVar: "id",

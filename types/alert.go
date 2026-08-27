@@ -19,6 +19,36 @@ const (
 	AlertPriorityHigh
 )
 
+// AlertCategory groups alerts for per-user notification preferences
+// (user_notification_prefs). Keep this list small and topic-level -- it's
+// meant to map onto a handful of settings-page toggles, not one category
+// per event type.
+type AlertCategory string
+
+const (
+	AlertCategoryVotes             AlertCategory = "votes"
+	AlertCategoryBotServerReviews  AlertCategory = "bot_server_reviews"
+	AlertCategoryPayments          AlertCategory = "payments"
+	AlertCategoryShop              AlertCategory = "shop"
+	AlertCategoryWebhooks          AlertCategory = "webhooks"
+	AlertCategoryStaffApplications AlertCategory = "staff_applications"
+	AlertCategoryReports           AlertCategory = "reports"
+	AlertCategoryAccountSecurity   AlertCategory = "account_security"
+)
+
+// AllAlertCategories is every known category, in the order a preferences
+// UI should display them.
+var AllAlertCategories = []AlertCategory{
+	AlertCategoryVotes,
+	AlertCategoryBotServerReviews,
+	AlertCategoryPayments,
+	AlertCategoryShop,
+	AlertCategoryWebhooks,
+	AlertCategoryStaffApplications,
+	AlertCategoryReports,
+	AlertCategoryAccountSecurity,
+}
+
 type Alert struct {
 	ITag      pgtype.UUID        `db:"itag" json:"itag" description:"The alerts ID, while this was originally a db migration artifact, it is now the de-facto ID."`
 	URL       pgtype.Text        `db:"url" json:"url" description:"The URL to send the alert to"` // Optional
@@ -30,7 +60,8 @@ type Alert struct {
 	AlertData map[string]any     `db:"alert_data" json:"alert_data"`          // Optional
 	Icon      string             `db:"icon" json:"icon"`                      // Optional
 	Priority  AlertPriority      `db:"priority" json:"priority" enum:"1,2,3"` // Optional
-	NoSave    bool               `db:"-" json:"-"`                            // This is an internal field used to determine whether or not to save the alert to the database or not
+	Category  AlertCategory      `db:"category" json:"category" validate:"required"`
+	NoSave    bool               `db:"-" json:"-"` // This is an internal field used to determine whether or not to save the alert to the database or not
 }
 
 type AlertList struct {
@@ -47,6 +78,12 @@ type FeaturedUserAlerts struct {
 type AlertPatch struct {
 	Patches []AlertPatchItem `json:"patches" validate:"required" description:"List of patches to apply to alerts"`
 }
+
+// NotificationPrefs maps an AlertCategory to whether the user wants
+// notifications for it. GET returns every known category (defaulting to
+// true for anything with no stored row); PATCH accepts a partial map and
+// only updates the categories present.
+type NotificationPrefs map[AlertCategory]bool
 
 type AlertPatchItem struct {
 	ITag  string `json:"itag" validate:"required" description:"The alert's ID"`

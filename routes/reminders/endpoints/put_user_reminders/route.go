@@ -15,6 +15,7 @@ import (
 	"popplio/validators"
 	"popplio/votes"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -89,10 +90,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Fan out notification
 	err = notifications.PushNotification(d.Auth.ID, types.Alert{
-		Type:    types.AlertTypeSuccess,
-		Icon:    entityInfo.Avatar,
-		Title:   "Added Reminder: " + entityInfo.Name + "(" + targetType + ":" + targetId + ")",
-		Message: "This is an automated message to let you know that vote reminders have been setup for this " + targetType + "!",
+		Type:     types.AlertTypeSuccess,
+		Icon:     entityInfo.Avatar,
+		Title:    "Reminder Added: " + entityInfo.Name,
+		Message:  "This is an automated message to let you know that vote reminders have been setup for this " + targetType + "!",
+		URL:      pgtype.Text{String: entityInfo.VoteURL, Valid: true},
+		Category: types.AlertCategoryVotes,
 	})
 
 	if err != nil {

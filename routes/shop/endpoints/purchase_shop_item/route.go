@@ -209,9 +209,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// shouldn't turn into an error response the client would read as "the
 	// purchase failed" when it didn't.
 	if err := notifications.PushNotification(d.Auth.ID, types.Alert{
-		Type:    types.AlertTypeSuccess,
-		Title:   "Shop Purchase Complete",
-		Message: item.Name + " has been applied to " + targetID + ".",
+		Type:     types.AlertTypeSuccess,
+		Title:    "Shop Purchase Complete",
+		Message:  item.Name + " has been applied to " + targetID + ".",
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/" + targetType + "s/" + targetID, Valid: true},
+		Category: types.AlertCategoryShop,
 	}); err != nil {
 		state.Logger.Warn("Failed to send shop purchase confirmation alert", zap.Error(err), zap.String("user_id", d.Auth.ID), zap.String("item_id", item.ID))
 	}

@@ -15,6 +15,7 @@ import (
 	"popplio/state"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -123,6 +124,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			Message:  "Your payment for \"" + payload.ProductName + "\" for " + payload.For + " has failed. Please contact our support team to learn more!",
 			Type:     types.AlertTypeError,
 			Priority: types.AlertPriorityHigh,
+			URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/support", Valid: true},
+			Category: types.AlertCategoryPayments,
 		})
 
 		return uapi.HttpResponse{
@@ -150,6 +153,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				Message:  "Your payment for \"" + payload.ProductName + "\" for " + payload.For + " has succeeded but couldn't be handled correctly. Please contact our support team IMMEDIATELY: " + err.Error(),
 				Type:     types.AlertTypeError,
 				Priority: types.AlertPriorityHigh,
+				URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/support", Valid: true},
+				Category: types.AlertCategoryPayments,
 			})
 		}
 	}()

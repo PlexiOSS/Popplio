@@ -1,12 +1,14 @@
 package notifications
 
 import (
+	"errors"
 	"fmt"
 
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/SherClockHolmes/webpush-go"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/PlexiOSS/Keel/jsonimpl"
@@ -23,17 +25,29 @@ func PushNotification(userId string, notif types.Alert) error {
 		notif.AlertData = map[string]any{}
 	}
 
+	enabled, err := categoryEnabled(userId, notif.Category)
+
+	if err != nil {
+		return fmt.Errorf("failed to check notification preference: %s", err)
+	}
+
+	if !enabled {
+		return nil
+	}
+
 	// NoSave means what it says: true skips persisting the alert to the
-	// inbox (used for spammy/high-frequency notifications like vote
-	// reminders), false (the zero value, so most callers get this by
-	// default) saves it. This used to be inverted (`if notif.NoSave`),
-	// which meant every "normal" alert silently never reached a user's
-	// inbox — only the one caller that explicitly opted OUT of saving
-	// (vote_reminders.go) ever actually persisted anything.
+	// inbox, false (the zero value, so most callers get this by default)
+	// saves it. Muting an entire category via user_notification_prefs
+	// (checked above) is the normal way to quiet a noisy alert type now --
+	// NoSave is only for a genuinely one-off, ephemeral push that was never
+	// meant to be readable later. This used to be inverted (`if
+	// notif.NoSave`), which meant every "normal" alert silently never
+	// reached a user's inbox — only the one caller that explicitly opted
+	// OUT of saving ever actually persisted anything.
 	if !notif.NoSave {
 		_, err = state.Pool.Exec(
 			state.Context,
-			"INSERT INTO alerts (user_id, type, url, message, title, icon, alert_data, priority) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+			"INSERT INTO alerts (user_id, type, url, message, title, icon, alert_data, priority, category) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
 			userId,
 			notif.Type,
 			notif.URL,
@@ -42,6 +56,7 @@ func PushNotification(userId string, notif types.Alert) error {
 			notif.Icon,
 			notif.AlertData,
 			notif.Priority,
+			notif.Category,
 		)
 
 		if err != nil {
@@ -106,4 +121,28 @@ func PushNotification(userId string, notif types.Alert) error {
 	}
 
 	return nil
+}
+
+// categoryEnabled reports whether userId wants notifications for category.
+// No row in user_notification_prefs means enabled -- this is an opt-out
+// model, so existing users keep seeing everything until they explicitly
+// mute a category, no backfill required.
+func categoryEnabled(userId string, category types.AlertCategory) (bool, error) {
+	var enabled bool
+
+	err := state.Pool.QueryRow(
+		state.Context,
+		"SELECT enabled FROM user_notification_prefs WHERE user_id = $1 AND category = $2",
+		userId, category,
+	).Scan(&enabled)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return enabled, nil
 }

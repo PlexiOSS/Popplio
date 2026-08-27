@@ -6,6 +6,7 @@ import (
 	"popplio/types"
 	"popplio/webhooks/core/events"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -94,9 +95,11 @@ func (st *webhookSendState) cancelSend(saveState string) {
 // undeliverable notification would misreport the outcome.
 func (st *webhookSendState) notify(alertType types.AlertType, title, message string) {
 	err := notifications.PushNotification(st.UserID, types.Alert{
-		Type:    alertType,
-		Message: message,
-		Title:   title,
+		Type:     alertType,
+		Message:  message,
+		Title:    title,
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/dashboard", Valid: true},
+		Category: types.AlertCategoryWebhooks,
 	})
 
 	if err != nil {

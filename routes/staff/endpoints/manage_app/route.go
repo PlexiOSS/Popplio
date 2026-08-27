@@ -14,6 +14,7 @@ import (
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
 	"popplio/apps"
+	"popplio/notifications"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
 	"popplio/state"
@@ -22,6 +23,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -248,6 +250,26 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Failed to send message to apps channel", err, zap.String("appId", appId))
+	}
+
+	alertTitle := "Application Denied"
+	alertMessage := "Your application for " + app.Position + " was denied. " + payload.Reason
+	alertType := types.AlertTypeError
+
+	if payload.Approved {
+		alertTitle = "Application Approved"
+		alertMessage = "Your application for " + app.Position + " was approved!"
+		alertType = types.AlertTypeSuccess
+	}
+
+	if err := notifications.PushNotification(app.UserID, types.Alert{
+		Type:     alertType,
+		Title:    alertTitle,
+		Message:  alertMessage,
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/apps/" + appId, Valid: true},
+		Category: types.AlertCategoryStaffApplications,
+	}); err != nil {
+		state.Logger.Warn("Failed to notify applicant of application verdict", zap.Error(err), zap.String("appId", appId), zap.String("userId", app.UserID))
 	}
 
 	return uapi.DefaultResponse(http.StatusNoContent)

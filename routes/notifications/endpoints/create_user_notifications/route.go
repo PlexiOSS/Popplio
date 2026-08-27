@@ -94,9 +94,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Fan out notification
 	err = notifications.PushNotification(id, types.Alert{
-		Type:    types.AlertTypeSuccess,
-		Title:   "New Subscription",
-		Message: "This is an automated message to let you know that you have successfully subscribed to push notifications!",
+		Type:     types.AlertTypeSuccess,
+		Title:    "New Subscription",
+		Message:  "This is an automated message to let you know that you have successfully subscribed to push notifications!",
+		Category: types.AlertCategoryAccountSecurity,
 	})
 
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 	"popplio/webhooks/core/events"
 	"popplio/webhooks/sender"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/PlexiOSS/Keel/dovewing"
@@ -124,9 +125,11 @@ func Send(with With) error {
 
 	if err != nil {
 		perr := notifications.PushNotification(d.UserID, types.Alert{
-			Type:    types.AlertTypeError,
-			Message: fmt.Sprintf("Failed to send webhooks: %s", err.Error()),
-			Title:   "Webhook Send Successful!",
+			Type:     types.AlertTypeError,
+			Message:  fmt.Sprintf("Failed to send webhooks: %s", err.Error()),
+			Title:    "Webhook Send Failed",
+			URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/dashboard", Valid: true},
+			Category: types.AlertCategoryWebhooks,
 		})
 
 		if perr != nil {

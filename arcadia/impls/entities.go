@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"popplio/arcadia/types"
+	"popplio/notifications"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -396,4 +398,17 @@ func GetOwnedBy(ctx context.Context, userID string) ([]OwnedBy, error) {
 	}
 
 	return ownedBy, nil
+}
+
+// NotifyOwners sends alert to every user ID in owners, best-effort -- a
+// failed send is logged and otherwise ignored, same contract as every other
+// notifications.PushNotification call site (the staff action this is
+// called from has already succeeded and committed, so a notification
+// failure shouldn't read back as the action itself having failed).
+func NotifyOwners(owners []string, alert ptypes.Alert) {
+	for _, owner := range owners {
+		if err := notifications.PushNotification(owner, alert); err != nil {
+			state.Logger.Warn("Failed to notify entity owner", zap.Error(err), zap.String("owner", owner), zap.String("title", alert.Title))
+		}
+	}
 }

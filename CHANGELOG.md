@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-27
+
+### Added
+
+- Per-category notification preferences: a new `user_notification_prefs`
+  table and `types.AlertCategory` (8 topic-level categories -- votes,
+  bot/server reviews, payments, shop, webhooks, staff applications,
+  reports, account security) let a user mute a whole class of alert
+  instead of it being all-or-nothing. `notifications.PushNotification` now
+  checks the sender's preference before saving to the inbox or sending a
+  push; no stored row for a (user, category) pair defaults to enabled, so
+  existing users see no change until they explicitly mute something. New
+  `GET`/`PATCH /users/{id}/notification-prefs`.
+- ~24 staff/system actions that previously only posted to the Discord
+  mod-log now also notify the affected user directly (in-site alert +
+  push): bot/server approve, deny, unverify, certify/uncertify,
+  claim/unclaim, vote ban/unban, single-entity vote reset, auto-unclaim,
+  bot removal (deleted from Discord), premium removal, ban/unban sync, and
+  staff application approve/deny. Report resolution is new entirely --
+  previously a resolved/dismissed report had zero visibility anywhere,
+  including the mod-log.
+- `arcadia/impls.NotifyOwners`, a small best-effort helper (fetch an
+  entity's managers, send each one an alert, log-and-continue on failure)
+  used by all of the above instead of each call site re-implementing the
+  same loop.
+
+### Fixed
+
+- Vote reminders never actually reached a user's in-site notification bell
+  -- `votereminders/vote_reminders.go` set `NoSave: true` on every
+  reminder ("spammy, fills the db"), which skipped the `alerts` table
+  insert entirely. Removed; a user who finds reminders noisy can now mute
+  the `votes` category instead of them being silently broken for everyone.
+- The monthly automated vote reset (`VoteResetter`) voided the underlying
+  `entity_votes` rows but never recalculated bots/servers/teams' cached
+  `approximate_votes` column, which is what the public listings actually
+  sort and display by. Any entity that hadn't been voted for *since* a
+  reset kept showing its stale pre-reset total indefinitely. The reset now
+  recomputes every entity's count from what's left in `entity_votes` in
+  the same transaction.
+- `webhooks/core/drivers/core.go`'s failed-webhook-send alert had the
+  title "Webhook Send Successful!" on an `AlertTypeError` alert -- a
+  copy/paste bug. Now reads "Webhook Send Failed".
+- `dependabot_alert.go`'s dismissal-reason truncation used `+=` instead of
+  `=`, which duplicated the text instead of shortening it whenever it
+  exceeded the field limit.
+- Every existing `PushNotification` call site was missing a click-through
+  `URL` (shop purchases, vote credit redemptions, premium/payment alerts,
+  webhook alerts); most now link somewhere useful instead of being a dead
+  end in the inbox.
+
 ## [1.5.0] - 2026-08-24
 
 ### Added

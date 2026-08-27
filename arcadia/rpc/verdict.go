@@ -9,9 +9,11 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -84,6 +86,14 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 	if err := tx.Commit(ctx); err != nil {
 		return Success{}, err
 	}
+
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeSuccess,
+		Title:    "Bot Approved!",
+		Message:  "Your bot has been approved and is now listed.",
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
 
 	managers, err := impls.GetEntityManagers(ctx, types.TargetTypeBot, m.TargetID)
 
@@ -194,6 +204,14 @@ func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeSuccess,
+		Title:    "Server Approved!",
+		Message:  "Your server has been approved and is now listed.",
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
+
 	return NoContent(), nil
 }
 
@@ -256,6 +274,14 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		return Success{}, err
 	}
 
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeError,
+		Title:    "Bot Denied",
+		Message:  m.Reason,
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
+
 	return NoContent(), nil
 }
 
@@ -312,6 +338,14 @@ func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		return Success{}, err
 	}
 
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeError,
+		Title:    "Server Denied",
+		Message:  m.Reason,
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
+
 	return NoContent(), nil
 }
 
@@ -334,11 +368,17 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 		return Success{}, errors.New("Certified bots cannot be unverified")
 	}
 
+	owners, err := impls.GetEntityManagers(ctx, types.TargetTypeBot, m.TargetID)
+
+	if err != nil {
+		return Success{}, err
+	}
+
 	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET type = 'pending', claimed_by = NULL WHERE bot_id = $1", m.TargetID); err != nil {
 		return Success{}, err
 	}
 
-	err := impls.SendModLog(discord.MessageCreate{
+	err = impls.SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title: "__ Unverified For Futher Review!__",
 			Fields: []discord.EmbedField{
@@ -354,6 +394,14 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 	if err != nil {
 		return Success{}, err
 	}
+
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeWarning,
+		Title:    "Bot Unverified",
+		Message:  "Your bot has been sent back for further review. " + m.Reason,
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
 
 	return NoContent(), nil
 }
@@ -373,11 +421,17 @@ func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Su
 		return Success{}, errors.New("Certified servers cannot be unverified")
 	}
 
+	owners, err := impls.GetEntityManagers(ctx, types.TargetTypeServer, m.TargetID)
+
+	if err != nil {
+		return Success{}, err
+	}
+
 	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'pending', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
 		return Success{}, err
 	}
 
-	err := impls.SendModLog(discord.MessageCreate{
+	err = impls.SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title: "Server Unverified For Further Review",
 			Fields: []discord.EmbedField{
@@ -393,6 +447,14 @@ func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Su
 	if err != nil {
 		return Success{}, err
 	}
+
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeWarning,
+		Title:    "Server Unverified",
+		Message:  "Your server has been sent back for further review. " + m.Reason,
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
 
 	return NoContent(), nil
 }

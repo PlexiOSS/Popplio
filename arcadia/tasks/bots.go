@@ -13,10 +13,12 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -123,6 +125,14 @@ For more information, you can contact the current reviewer <@%s>
 		if err != nil {
 			return fmt.Errorf("Error while sending message in #mod-logs: %s", err)
 		}
+
+		impls.NotifyOwners(owners.All(), ptypes.Alert{
+			Type:     ptypes.AlertTypeInfo,
+			Title:    "Bot Review Paused",
+			Message:  "Your bot was claimed for review by staff but wasn't approved or denied within an hour, so it's been unclaimed and will be picked back up soon.",
+			URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, n.BotID), Valid: true},
+			Category: ptypes.AlertCategoryBotServerReviews,
+		})
 	}
 
 	return nil
@@ -232,6 +242,14 @@ func DeletedBots(ctx context.Context) error {
 		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
+
+		impls.NotifyOwners(owners.All(), ptypes.Alert{
+			Type:     ptypes.AlertTypeWarning,
+			Title:    "Bot Removed From Listing",
+			Message:  "Your bot `" + botID + "` was deleted from Discord, so it's been removed from the listing. If this is a mistake, please contact support.",
+			URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/support", Valid: true},
+			Category: ptypes.AlertCategoryBotServerReviews,
+		})
 	}
 
 	return nil
@@ -312,6 +330,20 @@ func PremiumRemove(ctx context.Context) error {
 		if err := impls.SendModLog(discord.MessageCreate{Content: msg}); err != nil {
 			return err
 		}
+
+		expiredReason := "your subscription has expired"
+
+		if bot.Type != "approved" && bot.Type != "certified" {
+			expiredReason = "it is not/no longer approved or certified"
+		}
+
+		impls.NotifyOwners(owners.All(), ptypes.Alert{
+			Type:     ptypes.AlertTypeWarning,
+			Title:    "Premium Removed",
+			Message:  "Premium has been removed from " + user.Username + " because " + expiredReason + ".",
+			URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, bot.BotID), Valid: true},
+			Category: ptypes.AlertCategoryPayments,
+		})
 	}
 
 	return nil

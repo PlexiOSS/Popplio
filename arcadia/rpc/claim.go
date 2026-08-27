@@ -9,8 +9,10 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
@@ -67,6 +69,14 @@ func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
 	if err != nil {
 		return Success{}, err
 	}
+
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeInfo,
+		Title:    "Bot Claimed for Review",
+		Message:  "A staff member has started reviewing your bot submission.",
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
 
 	return NoContent(), nil
 }
@@ -128,6 +138,14 @@ func claimServer(ctx context.Context, m *types.RPCClaim, h Handle) (Success, err
 	if err != nil {
 		return Success{}, err
 	}
+
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeInfo,
+		Title:    "Server Claimed for Review",
+		Message:  "A staff member has started reviewing your server submission.",
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
 
 	return NoContent(), nil
 }
@@ -202,6 +220,14 @@ func unclaim(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		return Success{}, err
 	}
 
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeInfo,
+		Title:    "Bot Review Paused",
+		Message:  "Your bot's review has been unclaimed and will be picked back up by a staff member soon.",
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
+
 	return NoContent(), nil
 }
 
@@ -264,6 +290,14 @@ func unclaimServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 	if err != nil {
 		return Success{}, err
 	}
+
+	impls.NotifyOwners(owners.All(), ptypes.Alert{
+		Type:     ptypes.AlertTypeInfo,
+		Title:    "Server Review Paused",
+		Message:  "Your server's review has been unclaimed and will be picked back up by a staff member soon.",
+		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
+		Category: ptypes.AlertCategoryBotServerReviews,
+	})
 
 	return NoContent(), nil
 }

@@ -7,8 +7,11 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
 )
 
 // Vote moderation: banning an entity from being voted for, and voiding votes
@@ -71,6 +74,24 @@ func voteBanSet(ctx context.Context, m *types.RPCTargetReason, h Handle, banned 
 		return Success{}, err
 	}
 
+	banAlert := ptypes.Alert{
+		Type:     ptypes.AlertTypeSuccess,
+		Title:    "Vote Ban Removed",
+		Message:  "Votes for this entity have been re-enabled.",
+		Category: ptypes.AlertCategoryVotes,
+	}
+
+	if banned {
+		banAlert = ptypes.Alert{
+			Type:     ptypes.AlertTypeWarning,
+			Title:    "Vote Banned",
+			Message:  "Votes for this entity have been disabled. " + m.Reason,
+			Category: ptypes.AlertCategoryVotes,
+		}
+	}
+
+	notifyEntityOwners(ctx, h.TargetType, m.TargetID, banAlert)
+
 	return NoContent(), nil
 }
 
@@ -105,6 +126,13 @@ func voteReset(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success
 	if err != nil {
 		return Success{}, err
 	}
+
+	notifyEntityOwners(ctx, h.TargetType, m.TargetID, ptypes.Alert{
+		Type:     ptypes.AlertTypeWarning,
+		Title:    "Votes Reset",
+		Message:  "Your entity's votes have been reset by staff. " + m.Reason,
+		Category: ptypes.AlertCategoryVotes,
+	})
 
 	return NoContent(), nil
 }
@@ -154,4 +182,27 @@ func voteResetAll(ctx context.Context, m *types.RPCVoteResetAll, h Handle) (Succ
 	}
 
 	return NoContent(), nil
+}
+
+// notifyEntityOwners fetches targetID's owners and sends them alert,
+// filling in URL from targetType/targetID. Best-effort throughout: a
+// failure to look up owners or send the alert is logged and otherwise
+// ignored, same contract as every other notification in this package.
+//
+// Only used for single-entity actions (vote bans, a single entity's vote
+// reset) -- voteResetAll targets every entity of a type at once, which
+// doesn't map to "notify this one entity's owners" the same way, so it
+// intentionally isn't wired up here.
+func notifyEntityOwners(ctx context.Context, targetType types.TargetType, targetID string, alert ptypes.Alert) {
+	owners, err := impls.GetEntityManagers(ctx, targetType, targetID)
+
+	if err != nil {
+		state.Logger.Warn("Failed to fetch entity managers for vote notification", zap.Error(err), zap.String("targetID", targetID))
+		return
+	}
+
+	urlPath := targetType.String() + "s"
+	alert.URL = pgtype.Text{String: fmt.Sprintf("%s/%s/%s", state.Config.Sites.Frontend, urlPath, targetID), Valid: true}
+
+	impls.NotifyOwners(owners.All(), alert)
 }

@@ -62,12 +62,12 @@ func vrCheck() error {
 			}
 
 			message := types.Alert{
-				Type:    types.AlertTypeInfo,
-				URL:     pgtype.Text{String: entityInfo.VoteURL, Valid: true},
-				Message: "You can vote for the " + targetType + " " + entityInfo.Name + " now!",
-				Title:   "Vote for " + entityInfo.Name + "!",
-				Icon:    entityInfo.Avatar,
-				NoSave:  true, // Spammy and fills up db very quickly
+				Type:     types.AlertTypeInfo,
+				URL:      pgtype.Text{String: entityInfo.VoteURL, Valid: true},
+				Message:  "You can vote for the " + targetType + " " + entityInfo.Name + " now!",
+				Title:    "Vote for " + entityInfo.Name + "!",
+				Icon:     entityInfo.Avatar,
+				Category: types.AlertCategoryVotes,
 			}
 
 			err = notifications.PushNotification(userId, message)
