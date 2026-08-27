@@ -8,6 +8,7 @@ import (
 	"popplio/arcadia/types"
 	"popplio/state"
 	ptypes "popplio/types"
+	"popplio/votes"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -109,6 +110,14 @@ func voteReset(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success
 		return Success{}, err
 	}
 
+	// Same cached-column problem as voteResetAll, just for one entity --
+	// EntityPostVote already does exactly this recompute (it's the same
+	// function a real vote triggers), so reuse it instead of hand-rolling
+	// a single-row version of RecomputeApproximateVotes.
+	if err := votes.EntityPostVote(ctx, state.Pool, h.TargetType.String(), m.TargetID); err != nil {
+		return Success{}, err
+	}
+
 	err = impls.SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title: "__Entity Vote Reset!__",
@@ -157,6 +166,13 @@ func voteResetAll(ctx context.Context, m *types.RPCVoteResetAll, h Handle) (Succ
 	)
 
 	if err != nil {
+		return Success{}, err
+	}
+
+	// Voiding entity_votes rows above doesn't touch the cached
+	// approximate_votes column that public listings actually sort/display
+	// by -- same reasoning as VoteResetter's fix in arcadia/tasks/discord.go.
+	if err := votes.RecomputeApproximateVotes(ctx, tx, h.TargetType.String()); err != nil {
 		return Success{}, err
 	}
 

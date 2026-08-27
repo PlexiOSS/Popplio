@@ -9,6 +9,7 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/state"
 	ptypes "popplio/types"
+	"popplio/votes"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
@@ -233,8 +234,10 @@ func VoteResetter(ctx context.Context) error {
 	// for anything that hasn't been voted for since. Recompute every
 	// entity's count from what's left in entity_votes (immutable votes
 	// survive the reset above, so this isn't just "set everything to 0").
-	if err := recomputeApproximateVotes(ctx, tx); err != nil {
-		return err
+	for _, targetType := range []string{"bot", "server", "team"} {
+		if err := votes.RecomputeApproximateVotes(ctx, tx, targetType); err != nil {
+			return err
+		}
 	}
 
 	if _, err := tx.Exec(ctx, "INSERT INTO automated_vote_resets (created_at) VALUES (NOW())"); err != nil {
@@ -252,48 +255,6 @@ func VoteResetter(ctx context.Context) error {
 			Color:  impls.ColourRed,
 		}},
 	})
-}
-
-// recomputeApproximateVotes recalculates bots/servers/teams' cached
-// approximate_votes column from what's currently non-void in entity_votes.
-// Zeroes every row first, then adds back whatever's left (e.g. immutable
-// votes that survive a reset) via the same upvote-minus-downvote count
-// EntityGetVoteCount uses per-entity -- done in bulk here since this runs
-// across every entity at once, not one at a time.
-func recomputeApproximateVotes(ctx context.Context, tx pgx.Tx) error {
-	targets := map[string]string{
-		"bot":    "bots",
-		"server": "servers",
-		"team":   "teams",
-	}
-
-	idCols := map[string]string{
-		"bot":    "bot_id",
-		"server": "server_id",
-		"team":   "id",
-	}
-
-	for targetType, table := range targets {
-		idCol := idCols[targetType]
-
-		if _, err := tx.Exec(ctx, "UPDATE "+table+" SET approximate_votes = 0"); err != nil {
-			return fmt.Errorf("failed to zero approximate_votes on %s: %w", table, err)
-		}
-
-		_, err := tx.Exec(ctx,
-			"UPDATE "+table+" t SET approximate_votes = v.count FROM "+
-				"(SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS count "+
-				"FROM entity_votes WHERE target_type = $1 AND void = false GROUP BY target_id) v "+
-				"WHERE t."+idCol+" = v.target_id",
-			targetType,
-		)
-
-		if err != nil {
-			return fmt.Errorf("failed to recompute approximate_votes on %s: %w", table, err)
-		}
-	}
-
-	return nil
 }
 
 func isNoRows(err error) bool {

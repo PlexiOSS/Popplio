@@ -354,3 +354,47 @@ func EntityPostVote(ctx context.Context, c DbConn, targetType, targetId string) 
 
 	return nil
 }
+
+// approximateVotesTargets maps a target type to the table/id-column its
+// cached approximate_votes column lives on. Packs aren't included --
+// EntityPostVote doesn't track them either, so there's nothing to keep in
+// sync for that type.
+var approximateVotesTargets = map[string]struct{ table, idCol string }{
+	"bot":    {"bots", "bot_id"},
+	"server": {"servers", "server_id"},
+	"team":   {"teams", "id"},
+}
+
+// RecomputeApproximateVotes recalculates every entity of targetType's
+// cached approximate_votes column from what's currently non-void in
+// entity_votes. Zeroes every row of that type first, then adds back
+// whatever's left (e.g. immutable votes that survive a reset) via the same
+// upvote-minus-downvote count EntityGetVoteCount uses per-entity -- done in
+// bulk here since this is meant for "every entity of a type at once"
+// operations (a full vote reset), not a single entity (use EntityPostVote
+// for that).
+func RecomputeApproximateVotes(ctx context.Context, c DbConn, targetType string) error {
+	target, ok := approximateVotesTargets[targetType]
+
+	if !ok {
+		return nil
+	}
+
+	if _, err := c.Exec(ctx, "UPDATE "+target.table+" SET approximate_votes = 0"); err != nil {
+		return fmt.Errorf("failed to zero approximate_votes on %s: %w", target.table, err)
+	}
+
+	_, err := c.Exec(ctx,
+		"UPDATE "+target.table+" t SET approximate_votes = v.count FROM "+
+			"(SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS count "+
+			"FROM entity_votes WHERE target_type = $1 AND void = false GROUP BY target_id) v "+
+			"WHERE t."+target.idCol+" = v.target_id",
+		targetType,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to recompute approximate_votes on %s: %w", target.table, err)
+	}
+
+	return nil
+}
