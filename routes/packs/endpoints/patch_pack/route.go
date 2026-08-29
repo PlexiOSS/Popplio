@@ -1,8 +1,3 @@
-// Package patch_pack implements PATCH /users/{uid}/packs/{id} — "Patch
-// Pack".
-//
-// Edits a pack you are owner of based on the URL only. Returns 204 on
-// success
 package patch_pack
 
 import (
@@ -10,6 +5,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -25,9 +21,6 @@ import (
 
 var compiledMessages = uapi.CompileValidationErrors(PatchPack{})
 
-// PatchPack intentionally has no pack_type field — a pack's type is
-// immutable after creation (see types.BotPack.PackType doc comment), so
-// there is simply nothing here to change it with.
 type PatchPack struct {
 	Name    string                 `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
 	Short   string                 `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
@@ -71,7 +64,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -81,10 +73,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	var id = chi.URLParam(r, "id")
 
-	// Check that the pack exists and get its owner + type in one query
-	var owner, packType string
+	q := db.New(state.Pool)
 
-	err = state.Pool.QueryRow(d.Context, "SELECT owner, pack_type FROM packs WHERE url = $1", id).Scan(&owner, &packType)
+	ownerType, err := q.GetPackOwnerAndType(d.Context, id)
+	owner, packType := ownerType.Owner, ownerType.PackType
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -98,7 +90,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("You are not the owner of this pack")
 	}
 
-	// Content requirement depends on the pack's (immutable) type.
 	switch packType {
 	case types.PackTypeBot:
 		if len(payload.Bots) == 0 {
@@ -114,9 +105,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Check that all bots exist. Anyone may add any existing bot/server to a
-	// pack — packs are curated lists, not something scoped to what the
-	// author owns.
 	for _, bot := range payload.Bots {
 		botUser, err := dovewing.GetUser(d.Context, bot, state.DovewingPlatformDiscord)
 
@@ -129,11 +117,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Check that all servers exist
 	for _, server := range payload.Servers {
-		var serverCount int64
-
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE server_id = $1", server).Scan(&serverCount)
+		serverCount, err := q.CountServerByID(d.Context, server)
 
 		if err != nil {
 			return resp.ErrBody("Error checking if server exists:", "Error checking if server exists: "+err.Error(), err)
@@ -144,8 +129,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Both columns are NOT NULL — a nil Go slice encodes as SQL NULL, so
-	// normalize an omitted field to an empty slice before it ever reaches a query.
 	if payload.Bots == nil {
 		payload.Bots = []string{}
 	}
@@ -161,31 +144,38 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Update the pack
-	_, err = tx.Exec(d.Context, "UPDATE packs SET name = $1, short = $2, tags = $3, bots = $4, servers = $5 WHERE url = $6", payload.Name, payload.Short, payload.Tags, payload.Bots, payload.Servers, id)
+	txQ := db.New(tx)
+
+	err = txQ.UpdatePack(d.Context, db.UpdatePackParams{
+		Name:    payload.Name,
+		Short:   payload.Short,
+		Tags:    payload.Tags,
+		Bots:    payload.Bots,
+		Servers: payload.Servers,
+		Url:     id,
+	})
 
 	if err != nil {
 		return resp.Err("Error while updating pack [db exec]", err, zap.String("id", id))
 	}
 
-	// Emojis are replaced wholesale, same as bots/servers above, rather than
-	// incrementally patched.
 	if packType == types.PackTypeEmoji {
-		_, err = tx.Exec(d.Context, "DELETE FROM pack_emojis WHERE pack_url = $1", id)
+		err = txQ.DeletePackEmojis(d.Context, id)
 
 		if err != nil {
 			return resp.Err("Error while clearing existing pack emojis [db exec]", err, zap.String("id", id))
 		}
 
 		for i, emoji := range payload.Emojis {
-			_, err = tx.Exec(
+			err = txQ.InsertPackEmoji(
 				d.Context,
-				"INSERT INTO pack_emojis (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5)",
-				emoji.ID,
-				id,
-				emoji.Name,
-				emoji.Animated,
-				i,
+				db.InsertPackEmojiParams{
+					ID:       emoji.ID,
+					PackUrl:  id,
+					Name:     emoji.Name,
+					Animated: emoji.Animated,
+					Position: int32(i),
+				},
 			)
 
 			if err != nil {

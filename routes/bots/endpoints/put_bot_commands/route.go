@@ -1,14 +1,10 @@
-// Package put_bot_commands implements PUT /bots/{id}/commands — "Update Bot
-// Commands".
-//
-// Replaces the whole list of documented commands for a bot. You must have
-// 'Edit Bot Settings' in the team if the bot is in a team.
 package put_bot_commands
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -69,17 +65,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Full replace: simplest correct way to handle reordering/removal
-	// without tracking individual row IDs client-side, same as how
-	// bots.extra_links is written wholesale on every settings save.
-	if _, err := tx.Exec(d.Context, "DELETE FROM bot_commands WHERE bot_id = $1", botId); err != nil {
+	q := db.New(tx)
+
+	if err := q.DeleteBotCommands(d.Context, botId); err != nil {
 		return resp.Err("Failed to clear existing commands", err, zap.String("botID", botId))
 	}
 
 	for i, cmd := range payload.Commands {
-		_, err := tx.Exec(d.Context,
-			"INSERT INTO bot_commands (bot_id, name, description, usage, category, position) VALUES ($1, $2, $3, $4, $5, $6)",
-			botId, cmd.Name, cmd.Description, cmd.Usage, cmd.Category, i)
+		err := q.InsertBotCommand(d.Context, db.InsertBotCommandParams{
+			BotID:       botId,
+			Name:        cmd.Name,
+			Description: cmd.Description,
+			Usage:       cmd.Usage,
+			Category:    cmd.Category,
+			Position:    int32(i),
+		})
 
 		if err != nil {
 			return resp.Err("Failed to insert command", err, zap.String("botID", botId), zap.String("command", cmd.Name))

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -16,18 +18,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// maxBodySize is 1000 MB, the limit upstream set. It is far larger than any
-// remaining operation needs now that chunked CDN uploads are gone; see
-// CONFORMANCE.md before lowering it, since the panel may still post large
-// bodies.
 const maxBodySize = 1_048_576_000
 
-// Server is the panel API server.
 type Server struct {
 	http *http.Server
 }
 
-// New builds the panel server. It does not listen yet.
 func New() *Server {
 	s := &Server{}
 
@@ -44,13 +40,8 @@ func New() *Server {
 	)
 
 	s.http = &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", state.Config.Arcadia.ServerPort),
-		Handler: handler,
-
-		// TIMEOUTS (§14c): long read/write windows were sized for 1 GB chunked
-		// uploads. They are left as-is rather than retuned blindly. ReadHeaderTimeout stays short so a stalled client cannot
-		// hold a connection open without sending anything. The Rust version set no
-		// timeouts at all.
+		Addr:              fmt.Sprintf("0.0.0.0:%d", state.Config.Arcadia.ServerPort),
+		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       30 * time.Minute,
 		WriteTimeout:      30 * time.Minute,
@@ -60,8 +51,6 @@ func New() *Server {
 	return s
 }
 
-// Start runs the startup DDL and begins serving. It blocks until the server
-// stops.
 func (s *Server) Start(ctx context.Context) error {
 	if err := ensureAuthchainTable(ctx); err != nil {
 		return fmt.Errorf("failed to create staffpanel__authchain table: %w", err)
@@ -76,7 +65,6 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Shutdown drains the server.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
 }
@@ -108,7 +96,6 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	var req types.PanelQuery
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		// axum rejects an unparseable body with 400 and the serde message.
 		writeText(http.StatusBadRequest, "Failed to parse the request body as JSON: "+err.Error()).write(w)
 		return
 	}
@@ -130,8 +117,6 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	resp.write(w)
 }
 
-// recoverMiddleware turns a panic into a 500 plain-text response and logs the
-// stack.
 func recoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -150,7 +135,6 @@ func recoverMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// statusRecorder captures the status code for the request log.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -177,8 +161,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// corsMiddleware reproduces tower-http's CorsLayer with Any/Any/Any and answers
-// preflights itself.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -202,12 +184,10 @@ func maxBodyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// instanceDescription is the panel instance blurb in the Hello response.
 func instanceDescription() string {
 	return "Arcadia Production Panel Instance"
 }
 
-// serverIDs renders the configured guild ids as strings for CoreConstants.
 func serverIDs() types.PanelServers {
 	return types.PanelServers{
 		Main:    strconv.FormatUint(uint64(state.Config.Servers.Main), 10),

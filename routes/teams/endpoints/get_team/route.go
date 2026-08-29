@@ -1,15 +1,13 @@
-// Package get_team implements GET /teams/{id} — "Get Team".
-//
-// Gets a team by ID
 package get_team
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
@@ -23,11 +21,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	teamColsArr = dbutil.GetCols(types.Team{})
-	teamCols    = strings.Join(teamColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -59,12 +52,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetStr := r.URL.Query().Get("targets")
 	targets := strings.Split(targetStr, ",")
 
-	// Convert ID to UUID
 	if _, err := uuid.Parse(id); err != nil {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+teamCols+" FROM teams WHERE id = $1", id)
+	q := db.New(state.Pool)
+
+	row, err := q.GetTeamByID(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -74,15 +68,26 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error querying team [db query]", err, zap.String("id", id))
 	}
 
-	team, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[types.Team])
-
-	if err != nil {
-		return resp.Err("Error querying team [db collect]", err, zap.String("id", id))
+	var extraLinks []types.Link
+	if err := json.Unmarshal(row.ExtraLinks, &extraLinks); err != nil {
+		return resp.Err("Error parsing team extra_links [json]", err, zap.String("id", id))
 	}
 
-	// Ensure these always marshal as `[]` rather than `null` — a nil Go
-	// slice serializes to JSON null, which crashes frontend consumers that
-	// call .length/.map on it without a null check.
+	team := types.Team{
+		ID:               row.ID,
+		Name:             row.Name,
+		Short:            row.Short,
+		Tags:             row.Tags,
+		VoteBanned:       row.VoteBanned,
+		ApproximateVotes: int(row.ApproximateVotes),
+		ExtraLinks:       extraLinks,
+		NSFW:             row.Nsfw,
+		VanityRef:        row.VanityRef,
+		Service:          row.Service,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
+	}
+
 	if team.Tags == nil {
 		team.Tags = []string{}
 	}
@@ -96,9 +101,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error resolving team entities", err, zap.String("id", id))
 	}
 
-	var code string
-
-	err = state.Pool.QueryRow(d.Context, "SELECT code FROM vanity WHERE itag = $1", team.VanityRef).Scan(&code)
+	code, err := q.GetVanityCodeByItag(d.Context, team.VanityRef)
 
 	if err != nil {
 		return resp.Err("Error while getting bot vanity code [db fetch]", err, zap.String("id", id), zap.String("teamId", team.ID))

@@ -1,16 +1,11 @@
-// Package get_app_list implements GET /staff/apps — "Staff: Get Application
-// List".
-//
-// Gets all applications returning a list of apps.
 package get_app_list
 
 import (
-	"errors"
+	"encoding/json"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
 	"popplio/state"
@@ -22,12 +17,7 @@ import (
 	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/uapi"
 
-	"github.com/jackc/pgx/v5"
-)
-
-var (
-	appColsArr = dbutil.GetCols(types.AppResponse{})
-	appCols    = strings.Join(appColsArr, ",")
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func Docs() *docs.Doc {
@@ -61,36 +51,45 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Status(http.StatusFailedDependency, err.Error())
 	}
 
-	// Check if the user has the permission to view apps
 	if !staffPerms.Has(perms.StaffViewApps) {
 		return resp.Forbidden("You do not have permission to view apps.")
 	}
 
 	userId := r.URL.Query().Get("user_id")
 
-	var row pgx.Rows
+	userIDFilter := pgtype.Text{}
 	if userId != "" {
-		row, err = state.Pool.Query(d.Context, "SELECT "+appCols+" FROM apps WHERE user_id = $1 ORDER BY created_at DESC", userId)
-	} else {
-		row, err = state.Pool.Query(d.Context, "SELECT "+appCols+" FROM apps ORDER BY created_at DESC")
+		userIDFilter = pgtype.Text{String: userId, Valid: true}
 	}
+
+	rows, err := db.New(state.Pool).GetAppsList(d.Context, userIDFilter)
 
 	if err != nil {
 		return resp.Err("Failed to fetch application list [db fetch]", err)
 	}
 
-	app, err := pgx.CollectRows(row, pgx.RowToStructByName[types.AppResponse])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uapi.HttpResponse{
-			Json: types.AppListResponse{
-				Apps: []types.AppResponse{},
-			},
+	app := make([]types.AppResponse, len(rows))
+	for i, row := range rows {
+		var questions []types.Question
+		if err := json.Unmarshal(row.Questions, &questions); err != nil {
+			return resp.Err("Failed to parse application questions [json]", err)
 		}
-	}
 
-	if err != nil {
-		return resp.Err("Failed to fetch application list [collection]", err)
+		var reviewFeedback *string
+		if row.ReviewFeedback.Valid {
+			reviewFeedback = &row.ReviewFeedback.String
+		}
+
+		app[i] = types.AppResponse{
+			AppID:          row.AppID,
+			UserID:         row.UserID,
+			Questions:      questions,
+			Answers:        row.Answers,
+			State:          row.State,
+			CreatedAt:      row.CreatedAt.Time,
+			Position:       row.Position,
+			ReviewFeedback: reviewFeedback,
+		}
 	}
 
 	for i := range app {

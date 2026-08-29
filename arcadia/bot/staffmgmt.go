@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
@@ -108,31 +109,24 @@ func (m managerContext) canEditRole(role staffRole) error {
 }
 
 func listStaffRoles(ctx context.Context) ([]staffRole, error) {
-	rows, err := state.Pool.Query(ctx, "SELECT id::text, name, role_id, index, perms FROM staff_positions ORDER BY index")
+	rows, err := db.New(state.Pool).ListStaffRolesOrdered(ctx)
 
 	if err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
-
-	var out []staffRole
-
-	for rows.Next() {
-		var (
-			r     staffRole
-			perml []string
-		)
-
-		if err := rows.Scan(&r.ID, &r.Name, &r.RoleID, &r.Index, &perml); err != nil {
-			return nil, err
+	out := make([]staffRole, len(rows))
+	for i, row := range rows {
+		out[i] = staffRole{
+			ID:     row.ID,
+			Name:   row.Name,
+			RoleID: row.RoleID,
+			Index:  row.Index,
+			Perms:  perms.ParseStrings(row.Perms),
 		}
-
-		r.Perms = perms.ParseStrings(perml)
-		out = append(out, r)
 	}
 
-	return out, rows.Err()
+	return out, nil
 }
 
 // lookupStaffRole finds a role by name, by Discord role mention or id, or by its
@@ -146,16 +140,10 @@ func lookupStaffRole(ctx context.Context, input string) (staffRole, error) {
 
 	roleID := strings.Trim(input, "<@&>")
 
-	var (
-		r     staffRole
-		perml []string
-	)
-
-	err := state.Pool.QueryRow(ctx, `
-		SELECT id::text, name, role_id, index, perms
-		FROM staff_positions
-		WHERE lower(name) = lower($1) OR role_id = $2 OR id::text = $2
-		LIMIT 1`, input, roleID).Scan(&r.ID, &r.Name, &r.RoleID, &r.Index, &perml)
+	row, err := db.New(state.Pool).LookupStaffRole(ctx, db.LookupStaffRoleParams{
+		Input:  input,
+		RoleID: roleID,
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		names, listErr := listStaffRoles(ctx)
@@ -177,40 +165,31 @@ func lookupStaffRole(ctx context.Context, input string) (staffRole, error) {
 		return staffRole{}, err
 	}
 
-	r.Perms = perms.ParseStrings(perml)
+	r := staffRole{
+		ID:     row.ID,
+		Name:   row.Name,
+		RoleID: row.RoleID,
+		Index:  row.Index,
+		Perms:  perms.ParseStrings(row.Perms),
+	}
 
 	return r, nil
 }
 
 func roleHolderCounts(ctx context.Context) (map[string]int, error) {
-	rows, err := state.Pool.Query(ctx, `
-		SELECT sp.id::text, count(sm.user_id)
-		FROM staff_positions sp
-		LEFT JOIN staff_members sm ON sp.id = ANY(sm.positions)
-		GROUP BY sp.id`)
+	rows, err := db.New(state.Pool).GetStaffRoleHolderCounts(ctx)
 
 	if err != nil {
 		return nil, err
 	}
 
-	defer rows.Close()
-
 	out := map[string]int{}
 
-	for rows.Next() {
-		var (
-			id    string
-			count int
-		)
-
-		if err := rows.Scan(&id, &count); err != nil {
-			return nil, err
-		}
-
-		out[id] = count
+	for _, row := range rows {
+		out[row.SpID] = int(row.Count)
 	}
 
-	return out, rows.Err()
+	return out, nil
 }
 
 // resolvePermission turns what someone typed into a declared permission, and

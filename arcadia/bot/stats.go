@@ -9,6 +9,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/tasks"
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
@@ -25,67 +26,25 @@ func cmdAnalytics() *Command {
 		Run: func(c *Ctx) error {
 			byType := map[string]int64{}
 
-			rows, err := state.Pool.Query(c.Context, "SELECT type as method, COUNT(*) FROM bots GROUP BY type;")
+			q := db.New(state.Pool)
+
+			typeRows, err := q.CountBotsByType(c.Context)
 
 			if err != nil {
 				return err
 			}
 
-			for rows.Next() {
-				var (
-					method string
-					count  int64
-				)
-
-				if err := rows.Scan(&method, &count); err != nil {
-					rows.Close()
-					return err
-				}
-
-				byType[method] = count
+			for _, row := range typeRows {
+				byType[row.Method] = row.Count
 			}
 
-			rows.Close()
-
-			if err := rows.Err(); err != nil {
-				return err
-			}
-
-			count := func(query string) (int64, error) {
-				var n int64
-				err := state.Pool.QueryRow(c.Context, query).Scan(&n)
-				return n, err
-			}
-
-			bots, err := count("SELECT COUNT(*) FROM bots;")
+			counts, err := q.GetAnalyticsCounts(c.Context)
 
 			if err != nil {
 				return err
 			}
 
-			teams, err := count("SELECT COUNT(*) FROM teams;")
-
-			if err != nil {
-				return err
-			}
-
-			users, err := count("SELECT COUNT(*) FROM users;")
-
-			if err != nil {
-				return err
-			}
-
-			guilds, err := count("SELECT COUNT(*) FROM servers;")
-
-			if err != nil {
-				return err
-			}
-
-			packs, err := count("SELECT COUNT(*) FROM packs;")
-
-			if err != nil {
-				return err
-			}
+			bots, teams, users, guilds, packs := counts.Bots, counts.Teams, counts.Users, counts.Servers, counts.Packs
 
 			return c.Send(discord.MessageCreate{
 				Embeds: []discord.Embed{{

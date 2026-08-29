@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -7,11 +9,6 @@ import (
 	"popplio/arcadia/types"
 )
 
-/*
-dispatch is the main entrypoint for all panel queries. It is responsible for routing the request to the appropriate handler based on the fields present in the request.
-Each case in the switch statement corresponds to a specific type of request, and the appropriate handler function is called with the context and request data.
-If no recognized operation is specified in the request, an error response is returned indicating a bad request.
-*/
 func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response, error) {
 	switch {
 	case req.Authorize != nil:

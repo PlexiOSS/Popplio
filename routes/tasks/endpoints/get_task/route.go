@@ -6,23 +6,18 @@ package get_task
 import (
 	"errors"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	taskColsArr = dbutil.GetCols(types.Task{})
-	taskColsStr = strings.Join(taskColsArr, ", ")
 )
 
 func Docs() *docs.Doc {
@@ -65,20 +60,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("task id is required")
 	}
 
+	q := db.New(state.Pool)
+
 	// Delete expired tasks first
-	_, err := state.Pool.Exec(d.Context, "DELETE FROM tasks WHERE created_at + expiry < NOW()")
+	err := q.DeleteExpiredTasks(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to delete expired tasks [db delete]", err)
 	}
 
-	row, err := state.Pool.Query(d.Context, "SELECT "+taskColsStr+" FROM tasks WHERE task_id = $1", taskId)
-
-	if err != nil {
-		return resp.Err("Failed to fetch task [db fetch]", err)
-	}
-
-	task, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Task])
+	row, err := q.GetTask(d.Context, taskId)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return resp.NotFound("Task not found")
@@ -86,6 +77,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Failed to fetch task [db fetch]", err)
+	}
+
+	task := types.Task{
+		TaskId:               row.TaskID,
+		TaskKey:              row.TaskKey,
+		AllowUnauthenticated: row.AllowUnauthenticated,
+		TaskName:             row.TaskName,
+		Output:               row.Output,
+		Statuses:             row.Statuses,
+		ForUser:              row.ForUser,
+		Expiry:               row.Expiry,
+		State:                row.State,
+		CreatedAt:            pgtype.Timestamptz{Time: row.CreatedAt.Time, Valid: row.CreatedAt.Valid},
 	}
 
 	if task.TaskKey.Valid {

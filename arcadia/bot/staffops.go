@@ -9,6 +9,7 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/tasks"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
@@ -92,42 +93,27 @@ func cmdStaff() *Command {
 
 					userID = strings.Trim(userID, "<@!>")
 
-					rows, err := state.Pool.Query(c.Context, "SELECT method, COUNT(*) FROM rpc_logs WHERE user_id = $1 GROUP BY method", userID)
+					rows, err := db.New(state.Pool).GetRPCMethodCountsForUser(c.Context, userID)
 
 					if err != nil {
 						return err
 					}
-
-					defer rows.Close()
 
 					fields := []discord.EmbedField{
 						{Name: "Username", Value: c.Author.Username, Inline: impls.InlineTrue()},
 						{Name: "User ID", Value: userID, Inline: impls.InlineTrue()},
 					}
 
-					for rows.Next() {
-						var (
-							method string
-							count  int64
-						)
-
-						if err := rows.Scan(&method, &count); err != nil {
-							return err
-						}
-
-						if count == 0 {
+					for _, row := range rows {
+						if row.Count == 0 {
 							continue
 						}
 
 						fields = append(fields, discord.EmbedField{
-							Name:   method,
-							Value:  strconv.FormatInt(count, 10),
+							Name:   row.Method,
+							Value:  strconv.FormatInt(row.Count, 10),
 							Inline: impls.InlineTrue(),
 						})
-					}
-
-					if err := rows.Err(); err != nil {
-						return err
 					}
 
 					return c.Send(discord.MessageCreate{

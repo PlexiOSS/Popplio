@@ -9,10 +9,12 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -64,14 +66,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
+	q := db.New(tx)
+
 	for _, patch := range payload.Patches {
+		var itagUUID pgtype.UUID
+		if err := itagUUID.Scan(patch.ITag); err != nil {
+			return resp.Err("Invalid itag in patch", err, zap.Any("patch", patch), zap.String("userID", d.Auth.ID))
+		}
+
 		switch patch.Patch {
 		case "ack":
-			_, err = tx.Exec(d.Context, "UPDATE alerts SET acked = true WHERE user_id = $1 AND itag = $2", d.Auth.ID, patch.ITag)
+			err = q.AckAlert(d.Context, db.AckAlertParams{UserID: d.Auth.ID, Itag: itagUUID})
 		case "unack":
-			_, err = tx.Exec(d.Context, "UPDATE alerts SET acked = false WHERE user_id = $1 AND itag = $2", d.Auth.ID, patch.ITag)
+			err = q.UnackAlert(d.Context, db.UnackAlertParams{UserID: d.Auth.ID, Itag: itagUUID})
 		case "delete":
-			_, err = tx.Exec(d.Context, "DELETE FROM alerts WHERE user_id = $1 AND itag = $2", d.Auth.ID, patch.ITag)
+			err = q.DeleteUserAlert(d.Context, db.DeleteUserAlertParams{UserID: d.Auth.ID, Itag: itagUUID})
 		}
 
 		if err != nil {

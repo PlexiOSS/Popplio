@@ -1,8 +1,3 @@
-// Package hooks contains the per-target-type webhook drivers.
-//
-// Each driver implements the interface from webhooks/core/drivers for one
-// target type and registers itself at init; the package is imported for that
-// side effect alone.
 package hooks
 
 import (

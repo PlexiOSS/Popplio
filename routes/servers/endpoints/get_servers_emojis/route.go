@@ -2,27 +2,19 @@ package get_servers_emojis
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 12
-
-var (
-	previewColsArr = dbutil.GetCols(types.ServerEmojiPreview{})
-	previewCols    = strings.Join(previewColsArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -52,29 +44,35 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (pageNum - 1) * perPage
 
-	rows, err := state.Pool.Query(
-		d.Context,
-		"SELECT "+previewCols+" FROM servers WHERE show_emojis = true AND (type = 'approved' OR type = 'certified') AND state = 'public' ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-		limit, offset,
-	)
+	q := db.New(state.Pool)
+
+	rows, err := q.GetServerEmojiPreviews(d.Context, db.GetServerEmojiPreviewsParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 
 	if err != nil {
 		return resp.Err("Error while querying servers emojis [db fetch]", err)
 	}
 
-	previews, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.ServerEmojiPreview])
-
-	if err != nil {
-		return resp.Err("Error while querying servers emojis [collect]", err)
+	previews := make([]types.ServerEmojiPreview, len(rows))
+	for i, row := range rows {
+		previews[i] = types.ServerEmojiPreview{
+			ServerID: row.ServerID,
+			Name:     row.Name,
+			Avatar:   row.Avatar,
+			Emojis:   row.Emojis,
+			Stickers: row.Stickers,
+		}
 	}
 
-	var count uint64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE show_emojis = true AND (type = 'approved' OR type = 'certified') AND state = 'public'").Scan(&count)
+	countRaw, err := q.CountServerEmojiPreviews(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while counting servers emojis [db count]", err)
 	}
+
+	count := uint64(countRaw)
 
 	data := types.PagedResult[[]types.ServerEmojiPreview]{
 		Count:   count,

@@ -7,6 +7,7 @@ package create_oauth2_login
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"popplio/api/resp"
@@ -21,7 +22,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	ua "github.com/mileusna/useragent"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 var (

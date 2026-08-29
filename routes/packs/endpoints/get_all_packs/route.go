@@ -1,22 +1,17 @@
-// Package get_all_packs implements GET /packs/@all — "Get All Packs".
-//
-// Gets all packs on the list. This endpoint is paginated.
 package get_all_packs
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
 
 	"popplio/routes/packs/assets"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -24,11 +19,6 @@ import (
 )
 
 const perPage = 12
-
-var (
-	packColArr = dbutil.GetCols(types.BotPack{})
-	packCols   = strings.Join(packColArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -67,26 +57,77 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	packType := r.URL.Query().Get("pack_type")
 
-	var rows pgx.Rows
+	q := db.New(state.Pool)
+	var packs []types.BotPack
+	var count int64
 
 	if packType != "" {
 		if packType != types.PackTypeBot && packType != types.PackTypeServer && packType != types.PackTypeEmoji {
 			return resp.BadRequest("pack_type must be one of bot, server, or emoji")
 		}
 
-		rows, err = state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs WHERE pack_type = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3", packType, limit, offset)
+		rows, err := q.GetAllPacksByType(d.Context, db.GetAllPacksByTypeParams{
+			PackType: packType,
+			Limit:    int32(limit),
+			Offset:   int32(offset),
+		})
+
+		if err != nil {
+			return resp.Err("Error while querying packs [db fetch]", err)
+		}
+
+		packs = make([]types.BotPack, len(rows))
+		for i, row := range rows {
+			packs[i] = types.BotPack{
+				Owner:      row.Owner,
+				Name:       row.Name,
+				Short:      row.Short,
+				Tags:       row.Tags,
+				URL:        row.Url,
+				CreatedAt:  row.CreatedAt.Time,
+				PackType:   row.PackType,
+				Bots:       row.Bots,
+				Servers:    row.Servers,
+				VoteBanned: row.VoteBanned,
+			}
+		}
+
+		count, err = q.CountPacksByType(d.Context, packType)
+
+		if err != nil {
+			return resp.Err("Error while querying packs [db count]", err)
+		}
 	} else {
-		rows, err = state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
-	}
+		rows, err := q.GetAllPacks(d.Context, db.GetAllPacksParams{
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
 
-	if err != nil {
-		return resp.Err("Error while querying packs [db fetch]", err)
-	}
+		if err != nil {
+			return resp.Err("Error while querying packs [db fetch]", err)
+		}
 
-	packs, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.BotPack])
+		packs = make([]types.BotPack, len(rows))
+		for i, row := range rows {
+			packs[i] = types.BotPack{
+				Owner:      row.Owner,
+				Name:       row.Name,
+				Short:      row.Short,
+				Tags:       row.Tags,
+				URL:        row.Url,
+				CreatedAt:  row.CreatedAt.Time,
+				PackType:   row.PackType,
+				Bots:       row.Bots,
+				Servers:    row.Servers,
+				VoteBanned: row.VoteBanned,
+			}
+		}
 
-	if err != nil {
-		return resp.Err("Error while querying packs [collect]", err)
+		count, err = q.CountPacks(d.Context)
+
+		if err != nil {
+			return resp.Err("Error while querying packs [db count]", err)
+		}
 	}
 
 	for i := range packs {
@@ -97,20 +138,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	var count uint64
-
-	if packType != "" {
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM packs WHERE pack_type = $1", packType).Scan(&count)
-	} else {
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM packs").Scan(&count)
-	}
-
-	if err != nil {
-		return resp.Err("Error while querying packs [db count]", err)
-	}
-
 	data := types.PagedResult[[]types.BotPack]{
-		Count:   count,
+		Count:   uint64(count),
 		PerPage: perPage,
 		Results: packs,
 	}

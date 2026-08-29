@@ -6,6 +6,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -38,8 +39,7 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	var name, short string
-	err := state.Pool.QueryRow(d.Context, "SELECT name, short FROM servers WHERE server_id = $1", id).Scan(&name, &short)
+	row, err := db.New(state.Pool).GetServerNameAndShort(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -51,8 +51,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	seoData := types.SEO{
 		ID:    id,
-		Name:  name,
-		Short: short,
+		Name:  row.Name,
+		Short: row.Short,
 	}
 
 	return uapi.HttpResponse{

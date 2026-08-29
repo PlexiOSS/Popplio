@@ -16,6 +16,10 @@ type TableRef struct {
 	ForeignColumnName string `db:"foreign_column_name"`
 }
 
+// getAllTableRefs is intentionally left as raw pgx, not converted to sqlc:
+// it queries pg_constraint/pg_class/pg_attribute directly, and sqlc's static
+// catalog (built from db/schema.sql) doesn't model pg_catalog system tables
+// at all, so sqlc generate fails outright on a query against them.
 func getAllTableRefs(tx pgx.Tx) ([]TableRef, error) {
 	rows, err := tx.Query(
 		state.Context,

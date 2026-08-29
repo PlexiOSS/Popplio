@@ -4,30 +4,19 @@
 package get_partners
 
 import (
+	"encoding/json"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	// Partners
-	partnersColsArr = dbutil.GetCols(types.Partner{})
-	partnersCols    = strings.Join(partnersColsArr, ",")
-
-	// Partner types
-	partnerTypesColsArr = dbutil.GetCols(types.PartnerTypes{})
-	partnerTypesCols    = strings.Join(partnerTypesColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -39,18 +28,36 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+partnersCols+" FROM partners ORDER BY created_at DESC")
+	q := db.New(state.Pool)
+
+	partnerRows, err := q.GetPartners(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to fetch partner list [db fetch]", err)
 	}
 
-	defer rows.Close()
+	partners := make([]types.Partner, len(partnerRows))
+	for i, row := range partnerRows {
+		var links []types.Link
+		if err := json.Unmarshal(row.Links, &links); err != nil {
+			return resp.ErrBody("Failed to parse partner links", "Could not parse links for partner "+row.ID+".", err, zap.String("partner_id", row.ID))
+		}
 
-	partners, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.Partner])
+		var botID *string
+		if row.BotID.Valid {
+			botID = &row.BotID.String
+		}
 
-	if err != nil {
-		return resp.Err("Failed to fetch partner list [db fetch]", err)
+		partners[i] = types.Partner{
+			ID:        row.ID,
+			Name:      row.Name,
+			Short:     row.Short,
+			Links:     links,
+			Type:      row.Type,
+			CreatedAt: row.CreatedAt.Time,
+			UserID:    row.UserID,
+			BotID:     botID,
+		}
 	}
 
 	for i := range partners {
@@ -68,18 +75,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	}
 
-	rows, err = state.Pool.Query(d.Context, "SELECT "+partnerTypesCols+" FROM partner_types ORDER BY created_at DESC")
+	typeRows, err := q.GetPartnerTypes(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to fetch partner types [db fetch]", err)
 	}
 
-	defer rows.Close()
-
-	partnerTypes, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.PartnerTypes])
-
-	if err != nil {
-		return resp.Err("Failed to fetch partner types [db fetch]", err)
+	partnerTypes := make([]types.PartnerTypes, len(typeRows))
+	for i, row := range typeRows {
+		partnerTypes[i] = types.PartnerTypes{
+			ID:        row.ID,
+			Name:      row.Name,
+			Short:     row.Short,
+			Icon:      row.Icon,
+			CreatedAt: row.CreatedAt.Time,
+		}
 	}
 
 	return uapi.HttpResponse{

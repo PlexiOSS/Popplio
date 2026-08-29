@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -49,7 +50,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	_, err = tx.Exec(d.Context, "DELETE FROM bots WHERE bot_id = $1", id)
+	err = db.New(tx).DeleteBotByID(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Error while deleting bot", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))

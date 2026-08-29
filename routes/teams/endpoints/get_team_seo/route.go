@@ -1,7 +1,3 @@
-// Package get_team_seo implements GET /teams/{id}/seo — "Get Team SEO Info".
-//
-// Gets the minimal SEO information about a team for embed/search purposes.
-// Used by v4 website for meta tags
 package get_team_seo
 
 import (
@@ -9,11 +5,11 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -42,29 +38,25 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	tid := chi.URLParam(r, "id")
 
-	// Convert ID to UUID
 	if _, err := uuid.Parse(tid); err != nil {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
-	var id string
-	var name string
-	var short pgtype.Text
-	err := state.Pool.QueryRow(d.Context, "SELECT id, name, short FROM teams WHERE id = $1", tid).Scan(&id, &name, &short)
+	row, err := db.New(state.Pool).GetTeamSEO(d.Context, tid)
 
 	if err != nil {
 		return resp.Err("Error getting team SEO info [db queryrow]", err, zap.String("id", tid))
 	}
 
 	seoData := types.SEO{
-		ID:   id,
-		Name: name,
+		ID:   row.ID,
+		Name: row.Name,
 		Short: func() string {
-			if !short.Valid || short.String == "" {
-				return "View the team " + name + " on Omniplex"
+			if !row.Short.Valid || row.Short.String == "" {
+				return "View the team " + row.Name + " on Omniplex"
 			}
 
-			return short.String
+			return row.Short.String
 		}(),
 	}
 

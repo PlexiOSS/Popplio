@@ -6,6 +6,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 	ptypes "popplio/types"
 
@@ -22,7 +23,7 @@ func certifyAdd(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET type = 'certified' WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).CertifyBot(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -45,7 +46,7 @@ func certifyAddServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'certified' WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).CertifyServer(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -72,7 +73,7 @@ func certifyRemove(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET type = 'approved' WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).UncertifyBot(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -95,7 +96,7 @@ func certifyRemoveServer(ctx context.Context, m *types.RPCTargetReason, h Handle
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'approved' WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).UncertifyServer(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"popplio/db"
 	"popplio/infernoplex/dclient"
 	"popplio/perms"
 	"popplio/state"
@@ -92,7 +93,10 @@ func startUpdateInvite(c *Ctx) error {
 			return err
 		}
 
-		if _, err := state.Pool.Exec(ctx, "UPDATE servers SET invite = $2 WHERE server_id = $1", guildID.String(), inviteStr); err != nil {
+		if err := db.New(state.Pool).UpdateServerInvite(ctx, db.UpdateServerInviteParams{
+			ServerID: guildID.String(),
+			Invite:   inviteStr,
+		}); err != nil {
 			return fmt.Errorf("error while updating invite: %w", err)
 		}
 
@@ -179,7 +183,11 @@ func handleUpdateBasicModal(ctx context.Context, e *events.ModalSubmitInteractio
 	short := e.Data.Text("short")
 	long := e.Data.Text("long")
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET short = $2, long = $3 WHERE server_id = $1", s.GuildID.String(), short, long); err != nil {
+	if err := db.New(state.Pool).UpdateServerShortLong(ctx, db.UpdateServerShortLongParams{
+		ServerID: s.GuildID.String(),
+		Short:    short,
+		Long:     long,
+	}); err != nil {
 		c.Fail(fmt.Sprintf("Error while updating server: %s", err))
 		return
 	}

@@ -8,6 +8,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 	ptypes "popplio/types"
 
@@ -20,15 +21,16 @@ func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
 		return claimServer(ctx, m, h)
 	}
 
-	var (
-		botType   string
-		claimedBy *string
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by FROM bots WHERE bot_id = $1", m.TargetID).Scan(&botType, &claimedBy)
+	row, err := db.New(state.Pool).GetBotTypeAndClaimedBy(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	botType := row.Type
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
 	}
 
 	if botType != "pending" {
@@ -45,7 +47,10 @@ func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET last_claimed = NOW(), claimed_by = $1 WHERE bot_id = $2", h.UserID, m.TargetID); err != nil {
+	if err := db.New(state.Pool).UpdateBotClaim(ctx, db.UpdateBotClaimParams{
+		ClaimedBy: pgtype.Text{String: h.UserID, Valid: true},
+		BotID:     m.TargetID,
+	}); err != nil {
 		return Success{}, err
 	}
 
@@ -90,15 +95,16 @@ func claim(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
  * Instead, the claim is tied to the server itself, and any of the owners can unclaim it.
  */
 func claimServer(ctx context.Context, m *types.RPCClaim, h Handle) (Success, error) {
-	var (
-		serverType string
-		claimedBy  *string
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType, &claimedBy)
+	row, err := db.New(state.Pool).GetServerTypeAndClaimedBy(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	serverType := row.Type
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
 	}
 
 	if serverType != "pending" {
@@ -115,7 +121,10 @@ func claimServer(ctx context.Context, m *types.RPCClaim, h Handle) (Success, err
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET last_claimed = NOW(), claimed_by = $1 WHERE server_id = $2", h.UserID, m.TargetID); err != nil {
+	if err := db.New(state.Pool).UpdateServerClaim(ctx, db.UpdateServerClaimParams{
+		ClaimedBy: pgtype.Text{String: h.UserID, Valid: true},
+		ServerID:  m.TargetID,
+	}); err != nil {
 		return Success{}, err
 	}
 
@@ -166,16 +175,16 @@ func unclaim(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		return Success{}, err
 	}
 
-	var (
-		botType   string
-		claimedBy *string
-		owner     *string
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, owner FROM bots WHERE bot_id = $1", m.TargetID).Scan(&botType, &claimedBy, &owner)
+	row, err := db.New(state.Pool).GetBotReviewStatusWithOwner(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	botType := row.Type
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
 	}
 
 	if botType == "testbot" {
@@ -196,7 +205,7 @@ func unclaim(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		return Success{}, fmt.Errorf("<@%s> is not claimed", m.TargetID)
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET claimed_by = NULL, type = 'pending' WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).ResubmitBot(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -243,15 +252,16 @@ func unclaimServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
-	var (
-		serverType string
-		claimedBy  *string
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType, &claimedBy)
+	row, err := db.New(state.Pool).GetServerTypeAndClaimedBy(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	serverType := row.Type
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
 	}
 
 	if serverType != "pending" {
@@ -268,7 +278,7 @@ func unclaimServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, fmt.Errorf("server `%s` is not claimed", m.TargetID)
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET claimed_by = NULL, type = 'pending' WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).UnverifyServer(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 

@@ -6,15 +6,13 @@ package get_user_notifications
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -22,11 +20,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	ua "github.com/mileusna/useragent"
-)
-
-var (
-	notifGetCols    = dbutil.GetCols(types.NotifGet{})
-	notifGetColsStr = strings.Join(notifGetCols, ",")
 )
 
 func Docs() *docs.Doc {
@@ -49,20 +42,20 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var id = chi.URLParam(r, "id")
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+notifGetColsStr+" FROM user_notifications WHERE user_id = $1", id)
+	rows, err := db.New(state.Pool).GetUserNotifications(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Failed to get user notifications", err, zap.String("user_id", id))
 	}
 
-	notifications, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.NotifGet])
-
-	if err != nil {
-		return resp.Err("Failed to get user notifications", err, zap.String("user_id", id))
-	}
-
-	if len(notifications) == 0 {
-		notifications = []types.NotifGet{}
+	notifications := make([]types.NotifGet, len(rows))
+	for i, row := range rows {
+		notifications[i] = types.NotifGet{
+			Endpoint:  row.Endpoint,
+			NotifID:   row.NotifID,
+			CreatedAt: row.CreatedAt.Time,
+			UA:        row.Ua,
+		}
 	}
 
 	for i := range notifications {

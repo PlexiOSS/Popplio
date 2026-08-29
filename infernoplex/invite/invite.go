@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"popplio/db"
 	"popplio/infernoplex/dclient"
 	"popplio/state"
 
@@ -119,18 +120,7 @@ func ResolveInvite(ctx context.Context, guildID snowflake.ID, rawInvite string) 
 }
 
 func CreateInviteForUser(ctx context.Context, guildID snowflake.ID, userID *string, skipChecks bool) (string, *CreateInviteError) {
-	var (
-		loginRequired    bool
-		blacklistedUsers []string
-		inviteStr        string
-		serverType       string
-		serverState      string
-	)
-
-	err := state.Pool.QueryRow(ctx,
-		"SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1",
-		guildID.String(),
-	).Scan(&loginRequired, &blacklistedUsers, &inviteStr, &serverType, &serverState)
+	row, err := db.New(state.Pool).GetServerInviteEligibility(ctx, guildID.String())
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", &CreateInviteError{Kind: ErrServerNotFound}
@@ -139,6 +129,8 @@ func CreateInviteForUser(ctx context.Context, guildID snowflake.ID, userID *stri
 	if err != nil {
 		return "", generic("Failed to fetch server data: %v", err)
 	}
+
+	loginRequired, blacklistedUsers, inviteStr, serverType, serverState := row.LoginRequiredForInvite, row.BlacklistedUsers, row.Invite, row.Type, row.State
 
 	if !skipChecks {
 		if loginRequired {

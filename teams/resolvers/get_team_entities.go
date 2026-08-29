@@ -1,58 +1,54 @@
-// Package resolvers loads the entities that belong to a team.
-//
-// It is separate from popplio/teams because it depends on the bot and server
-// asset packages under routes/, and folding it in would make popplio/teams a
-// dependency of most of the route tree.
 package resolvers
 
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"github.com/PlexiOSS/Keel/uuidutil"
+	"popplio/db"
 	botAssets "popplio/routes/bots/assets"
 	serverAssets "popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/PlexiOSS/Keel/dovewing"
 )
 
-var (
-	tmColsArr = dbutil.GetCols(types.TeamMember{})
-	tmCols    = strings.Join(tmColsArr, ",")
-
-	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
-	indexBotCols    = strings.Join(indexBotColsArr, ",")
-
-	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
-	indexServerCols    = strings.Join(indexServerColsArr, ",")
-)
-
 func GetTeamEntities(ctx context.Context, teamId string, targets []string) (*types.TeamEntities, error) {
-	// Ensure this always marshals as `[]` rather than `null` — a nil Go slice
-	// serializes to JSON null, which crashes frontend consumers that call
-	// .length/.map on it without a null check.
+
 	eto := &types.TeamEntities{Targets: []string{}}
+
+	q := db.New(state.Pool)
+
+	var teamUUID pgtype.UUID
+	if err := teamUUID.Scan(teamId); err != nil {
+		return nil, fmt.Errorf("invalid team id: %w", err)
+	}
 
 	for _, st := range targets {
 		var isInvalid bool
 		switch st {
 		case "team_member":
-			// Get team members
-			memberRows, err := state.Pool.Query(ctx, "SELECT "+tmCols+" FROM team_members WHERE team_id = $1", teamId)
+			memberRows, err := q.GetTeamMembersByTeamID(ctx, teamUUID)
 
 			if err != nil {
 				return nil, err
 			}
 
-			eto.Members, err = pgx.CollectRows(memberRows, pgx.RowToStructByName[types.TeamMember])
-
-			if err != nil {
-				return nil, err
+			eto.Members = make([]types.TeamMember, len(memberRows))
+			for i, row := range memberRows {
+				eto.Members[i] = types.TeamMember{
+					ITag:        row.Itag,
+					TeamID:      uuidutil.Encode(row.TeamID.Bytes),
+					UserID:      row.UserID,
+					Flags:       row.Flags,
+					Service:     row.Service,
+					CreatedAt:   row.CreatedAt.Time,
+					Mentionable: row.Mentionable,
+					DataHolder:  row.DataHolder,
+				}
 			}
 
 			for i := range eto.Members {
@@ -63,36 +59,74 @@ func GetTeamEntities(ctx context.Context, teamId string, targets []string) (*typ
 				}
 			}
 		case "bot":
-			indexBotsRows, err := state.Pool.Query(ctx, "SELECT "+indexBotCols+" FROM bots WHERE team_owner = $1", teamId)
+			indexBotRows, err := q.GetIndexBotsByTeamOwner(ctx, teamUUID)
 
 			if err != nil {
 				return nil, err
 			}
 
-			eto.Bots, err = pgx.CollectRows(indexBotsRows, pgx.RowToStructByName[types.IndexBot])
-
-			if err != nil {
-				return nil, err
+			eto.Bots = make([]types.IndexBot, len(indexBotRows))
+			for i, row := range indexBotRows {
+				eto.Bots[i] = types.IndexBot{
+					BotID:            row.BotID,
+					Short:            row.Short,
+					Type:             row.Type,
+					VanityRef:        row.VanityRef,
+					ApproximateVotes: int(row.ApproximateVotes),
+					Shards:           int(row.Shards),
+					Library:          row.Library,
+					InviteClick:      int(row.InviteClicks),
+					Clicks:           int(row.Clicks),
+					Servers:          int(row.Servers),
+					NSFW:             row.Nsfw,
+					Tags:             row.Tags,
+					Premium:          row.Premium,
+					CreatedAt:        row.CreatedAt,
+					SelfStatus:       row.SelfStatus,
+					LastStatsPost:    row.LastStatsPost,
+					SupporterBadge:   row.SupporterBadge,
+					BoostedUntil:     row.BoostedUntil,
+					FeaturedUntil:    row.FeaturedUntil,
+					SpotlightedUntil: row.SpotlightedUntil,
+					VoteBlitzUntil:   row.VoteBlitzUntil,
+				}
 			}
 
-			// Resolve all bots concurrently, since each bot's resolution is independent
 			if err := botAssets.ResolveIndexBots(ctx, eto.Bots); err != nil {
 				return nil, fmt.Errorf("error occurred while resolving index bot: %w", err)
 			}
 		case "server":
-			indexServerRows, err := state.Pool.Query(ctx, "SELECT "+indexServerCols+" FROM servers WHERE team_owner = $1", teamId)
+			indexServerRows, err := q.GetIndexServersByTeamOwner(ctx, teamUUID)
 
 			if err != nil {
 				return nil, err
 			}
 
-			eto.Servers, err = pgx.CollectRows(indexServerRows, pgx.RowToStructByName[types.IndexServer])
-
-			if err != nil {
-				return nil, err
+			eto.Servers = make([]types.IndexServer, len(indexServerRows))
+			for i, row := range indexServerRows {
+				eto.Servers[i] = types.IndexServer{
+					ServerID:         row.ServerID,
+					Name:             row.Name,
+					Avatar:           row.Avatar,
+					TotalMembers:     int(row.TotalMembers),
+					OnlineMembers:    int(row.OnlineMembers),
+					Short:            row.Short,
+					Type:             row.Type,
+					State:            row.State,
+					VanityRef:        row.VanityRef,
+					ApproximateVotes: int(row.ApproximateVotes),
+					InviteClicks:     int(row.InviteClicks),
+					Clicks:           int(row.Clicks),
+					NSFW:             row.Nsfw,
+					Tags:             row.Tags,
+					Premium:          row.Premium,
+					SupporterBadge:   row.SupporterBadge,
+					BoostedUntil:     row.BoostedUntil,
+					FeaturedUntil:    row.FeaturedUntil,
+					SpotlightedUntil: row.SpotlightedUntil,
+				}
 			}
 
-			// Resolve all servers concurrently, since each server's resolution is independent
 			if err := serverAssets.ResolveIndexServers(ctx, eto.Servers); err != nil {
 				return nil, fmt.Errorf("error occurred while resolving index server: %w", err)
 			}

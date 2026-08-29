@@ -73,6 +73,29 @@ Windows) it falls back to a plain `http.ListenAndServe` with a startup
 warning, since tableflip's socket handoff is not supported there. Windows
 is fine for local development but is not a production target.
 
+## Database migrations
+
+Schema changes are versioned [goose](https://github.com/pressly/goose)
+migrations under `db/migrations/`, applied via `cmd/migrate`:
+
+```
+go run ./cmd/migrate status   # see what's applied / pending
+go run ./cmd/migrate up       # apply every pending migration
+go run ./cmd/migrate create add_some_column
+```
+
+or `make migrate` / `make migrate-status`. This connects using the same
+`config.yaml` DSN as the rest of Popplio, and applying migrations is a
+deliberate manual step — never wired into a deploy, so nothing runs
+silently as a side effect of restarting the service. See
+`db/migrations/README.md`.
+
+Everything the module reads or writes goes through
+[sqlc](https://sqlc.dev)-generated code (`db/queries/*.sql` → `db/`), with
+a small number of documented exceptions for queries sqlc's static analysis
+can't model (dynamic table/column dispatch, template-built search SQL, and
+similar) — each one has a comment at the call site explaining why.
+
 ## Tests
 
 ```
@@ -100,8 +123,9 @@ assuming a package exists.
 | `notifications/` | Push notifications and vote reminders |
 | `votes/`, `shop/`, `payments/` (under `routes/`) | Voting, shop/coupons, PayPal/Stripe payment handling |
 | `arcadia/` | The staff panel API and staff Discord bot, ported from the standalone Rust Arcadia service. See `arcadia/CONFORMANCE.md` for what was intentionally reproduced byte-for-byte versus fixed during the port |
-| `cmd/kitehelper/` | Standalone maintenance CLI (DB migration helpers, image proxy, table validation) — separate `go.mod`, built independently |
-| `exp/` | One-off SQL scripts for schema changes applied manually against the live database, not a migration framework |
+| `cmd/kitehelper/` | Standalone operational CLI: rebuilds foreign keys, checks referential integrity, seed/test tooling — separate `go.mod`, built independently. Used to also carry a `migrate` subcommand; superseded by `cmd/migrate` |
+| `cmd/migrate/`, `db/migrations/` | Schema migrations — see [Database migrations](#database-migrations) above |
+| `db/queries/`, `db/` | sqlc query definitions and the generated query package — see [Database migrations](#database-migrations) above |
 | `data/docs.html` | Template served at `/docs` |
 
 ## API documentation

@@ -7,9 +7,11 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Moving a bot to a different owner, gated by transfer_bots.
@@ -22,21 +24,26 @@ func transferOwnershipUser(ctx context.Context, m *types.RPCBotTransferOwnership
 		return Success{}, err
 	}
 
-	var teamOwner *uuid.UUID
+	q := db.New(state.Pool)
 
-	if err := state.Pool.QueryRow(ctx, "SELECT team_owner FROM bots WHERE bot_id = $1", m.TargetID).Scan(&teamOwner); err != nil {
+	teamOwner, err := q.GetBotTeamOwner(ctx, m.TargetID)
+
+	if err != nil {
 		return Success{}, err
 	}
 
-	if teamOwner != nil {
+	if teamOwner.Valid {
 		return Success{}, fmt.Errorf("%q is in a team. Please use BotTransferOwnershipTeam", m.TargetID)
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET owner = $2 WHERE bot_id = $1", m.TargetID, m.NewOwner); err != nil {
+	if err := q.UpdateBotOwner(ctx, db.UpdateBotOwnerParams{
+		BotID: m.TargetID,
+		Owner: pgtype.Text{String: m.NewOwner, Valid: true},
+	}); err != nil {
 		return Success{}, err
 	}
 
-	err := modLogReason(
+	err = modLogReason(
 		"Ownership Force Update!",
 		fmt.Sprintf("<@%s> has force-updated the ownership of <@%s> to <@%s>", h.UserID, m.TargetID, m.NewOwner),
 		"Contact support if you think this is a mistake", impls.ColourRed, m.Reason)
@@ -59,17 +66,22 @@ func transferOwnershipTeam(ctx context.Context, m *types.RPCBotTransferOwnership
 		return Success{}, errors.New("Invalid team ID")
 	}
 
-	var teamOwner *uuid.UUID
+	q := db.New(state.Pool)
 
-	if err := state.Pool.QueryRow(ctx, "SELECT team_owner FROM bots WHERE bot_id = $1", m.TargetID).Scan(&teamOwner); err != nil {
+	teamOwner, err := q.GetBotTeamOwner(ctx, m.TargetID)
+
+	if err != nil {
 		return Success{}, err
 	}
 
-	if teamOwner == nil {
+	if !teamOwner.Valid {
 		return Success{}, fmt.Errorf("%q is not in a team. Please use TransferOwnership", m.TargetID)
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET team_owner = $2 WHERE bot_id = $1", m.TargetID, teamID); err != nil {
+	if err := q.SetBotTeamOwnerDirect(ctx, db.SetBotTeamOwnerDirectParams{
+		BotID:     m.TargetID,
+		TeamOwner: pgtype.UUID{Bytes: teamID, Valid: true},
+	}); err != nil {
 		return Success{}, err
 	}
 

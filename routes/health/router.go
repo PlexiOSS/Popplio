@@ -2,11 +2,11 @@ package health
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	arcadiadclient "popplio/arcadia/dclient"
+	"popplio/db"
 	infernoplexdclient "popplio/infernoplex/dclient"
 	"popplio/state"
 
@@ -30,11 +30,11 @@ type service struct {
 	check func(ctx context.Context) bool
 }
 
-func dbCheck(query string) func(ctx context.Context) bool {
+func dbCheck() func(ctx context.Context) bool {
 	return func(ctx context.Context) bool {
-		var ok bool
+		ok, err := db.New(state.Pool).HealthCheck(ctx)
 
-		if err := state.Pool.QueryRow(ctx, query).Scan(&ok); err != nil {
+		if err != nil {
 			return false
 		}
 
@@ -43,14 +43,19 @@ func dbCheck(query string) func(ctx context.Context) bool {
 }
 
 func tableCheck(table string) func(ctx context.Context) bool {
-	return dbCheck(fmt.Sprintf(
-		"SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '%s')",
-		table,
-	))
+	return func(ctx context.Context) bool {
+		exists, err := db.New(state.Pool).TableExists(ctx, table)
+
+		if err != nil {
+			return false
+		}
+
+		return exists
+	}
 }
 
 var services = []service{
-	{"/health/api", "API", dbCheck("SELECT true")},
+	{"/health/api", "API", dbCheck()},
 	{"/health/bots", "Bot Listings", tableCheck("bots")},
 	{"/health/servers", "Server Listings", tableCheck("servers")},
 	{"/health/packs", "Pack Listings", tableCheck("packs")},
@@ -60,7 +65,7 @@ var services = []service{
 	{"/health/tickets", "Support Tickets", tableCheck("tickets")},
 	{"/health/staff-panel", "Staff Panel", tableCheck("staff_positions")},
 
-	{"/health/database", "Database", dbCheck("SELECT true")},
+	{"/health/database", "Database", dbCheck()},
 	{"/health/infernoplex", "Infernoplex", func(_ context.Context) bool { return infernoplexdclient.Ready() }},
 	{"/health/arcadia", "Arcadia", func(_ context.Context) bool { return arcadiadclient.Ready() }},
 }

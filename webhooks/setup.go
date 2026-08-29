@@ -1,10 +1,3 @@
-// Package webhooks wires up Popplio's outgoing webhook system.
-//
-// Setup registers the documentation tag and pulls in the event and driver
-// implementations for their side effects, which is what makes them
-// discoverable at runtime. The pieces live in the subpackages: core/events
-// defines the event types, core/drivers dispatches per target type, and
-// sender performs delivery.
 package webhooks
 
 import (
@@ -16,7 +9,6 @@ import (
 	docs "github.com/PlexiOSS/Keel/doclib"
 )
 
-// Setup code
 func Setup() {
 	docs.AddTag(
 		"Webhooks",

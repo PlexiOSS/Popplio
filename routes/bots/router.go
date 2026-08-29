@@ -130,7 +130,6 @@ func (b Router) Routes(r *chi.Mux) {
 				Type: api.TargetTypeTeam,
 			},
 		},
-		Setup: add_bot.Setup,
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil, // The endpoint itself handles authorization
 		},
@@ -166,7 +165,6 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.PATCH,
 		Docs:    patch_bot_settings.Docs,
 		Handler: patch_bot_settings.Route,
-		Setup:   patch_bot_settings.Setup,
 		Auth: []uapi.AuthType{
 			{
 				Type: api.TargetTypeUser,

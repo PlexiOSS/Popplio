@@ -1,17 +1,13 @@
-// Package get_ticket implements GET /tickets/{id} — "Get Ticket".
-//
-// Gets a support ticket. Requires you to be the author of the ticket or have
-// the 'staff' permission
 package get_ticket
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
@@ -26,11 +22,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	ticketColsArr = dbutil.GetCols(types.Ticket{})
-	ticketCols    = strings.Join(ticketColsArr, ", ")
 )
 
 func Docs() *docs.Doc {
@@ -57,17 +48,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
-	// Check ownership
-	var userId string
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(d.Context, "SELECT user_id FROM tickets WHERE id = $1", ticketId).Scan(&userId)
+	userId, err := q.GetTicketOwner(d.Context, ticketId)
 
 	if err != nil {
 		return resp.Err("Error getting ticket", err, zap.String("ticket_id", ticketId))
 	}
 
 	if userId != d.Auth.ID {
-		// Check if they are staff with popplio.tickets permission
 		sp, err := perms.StaffPerms(d.Context, d.Auth.ID)
 
 		if err != nil {
@@ -79,14 +68,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Get ticket
-	row, err := state.Pool.Query(d.Context, "SELECT "+ticketCols+" FROM tickets WHERE id = $1", ticketId)
-
-	if err != nil {
-		return resp.Err("Error getting ticket [db fetch]", err, zap.String("ticket_id", ticketId))
-	}
-
-	ticket, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Ticket])
+	row, err := q.GetTicket(d.Context, ticketId)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -96,7 +78,30 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error getting ticket [collect]", err, zap.String("ticket_id", ticketId))
 	}
 
-	// Parse the ticket
+	var messages []types.Message
+	if err := json.Unmarshal(row.Messages, &messages); err != nil {
+		return resp.Err("Error parsing ticket messages [json]", err, zap.String("ticket_id", ticketId))
+	}
+
+	var ticketContext map[string]string
+	if err := json.Unmarshal(row.TicketContext, &ticketContext); err != nil {
+		return resp.Err("Error parsing ticket context [json]", err, zap.String("ticket_id", ticketId))
+	}
+
+	ticket := types.Ticket{
+		ID:            row.ID,
+		ChannelID:     row.ChannelID,
+		TopicID:       row.TopicID,
+		Issue:         row.Issue,
+		TicketContext: ticketContext,
+		Messages:      messages,
+		UserID:        row.UserID,
+		CloseUserID:   row.CloseUserID,
+		Open:          row.Open,
+		CreatedAt:     row.CreatedAt.Time,
+		EncKey:        row.EncKey,
+	}
+
 	ticket.Author, err = dovewing.GetUser(d.Context, ticket.UserID, state.DovewingPlatformDiscord)
 
 	if err != nil {
@@ -118,7 +123,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.Err("Error getting ticket message author [dovewing]", err, zap.String("ticket_id", ticketId))
 		}
 
-		// Convert snowflake ID to timestamp
 		id, err := snowflake.Parse(ticket.Messages[i].ID)
 
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -53,9 +54,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("`notif_id` is required in query params and must be set to the notification ID to delete")
 	}
 
+	q := db.New(state.Pool)
+
 	// Check count of deleted rows
-	var count int64
-	err := state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM user_notifications WHERE user_id = $1 AND notif_id = $2", id, r.URL.Query().Get("notif_id")).Scan(&count)
+	count, err := q.CountUserNotification(d.Context, db.CountUserNotificationParams{
+		UserID:  id,
+		NotifID: notifId,
+	})
 
 	if err != nil {
 		return resp.ErrDetail("Error while checking user notification count", err, zap.String("userID", id), zap.String("notifID", r.URL.Query().Get("notif_id")))
@@ -65,7 +70,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.NotFound("Notification not found")
 	}
 
-	_, err = state.Pool.Exec(d.Context, "DELETE FROM user_notifications WHERE user_id = $1 AND notif_id = $2", id, r.URL.Query().Get("notif_id"))
+	err = q.DeleteUserNotification(d.Context, db.DeleteUserNotificationParams{
+		UserID:  id,
+		NotifID: notifId,
+	})
 
 	if err != nil {
 		return resp.ErrDetail("Error while deleting user notification", err, zap.String("userID", id), zap.String("notifID", r.URL.Query().Get("notif_id")))

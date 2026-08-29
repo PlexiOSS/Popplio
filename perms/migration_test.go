@@ -7,12 +7,13 @@ import (
 	"testing"
 )
 
-// The migration in exp/rewrite/flatperms.sql and the Legacy lists in the catalogues are
-// two statements of the same mapping. These tests keep them from drifting: a
-// permission renamed in one place but not the other is caught here rather than
-// by a staff member who has quietly lost access.
+// The migration in db/migrations/20260801004000_flatperms.sql and the Legacy
+// lists in the catalogues are two statements of the same mapping. These tests
+// keep them from drifting: a permission renamed in one place but not the
+// other is caught here rather than by a staff member who has quietly lost
+// access.
 
-const migrationPath = "../exp/rewrite/flatperms.sql"
+const migrationPath = "../db/migrations/20260801004000_flatperms.sql"
 
 var (
 	// ('staff', 'rpc.Claim', 'review_entities')

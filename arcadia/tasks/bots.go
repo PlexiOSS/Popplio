@@ -12,12 +12,12 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 	ptypes "popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
@@ -39,20 +39,9 @@ func AutoUnclaim(ctx context.Context) error {
 
 	defer tx.Rollback(ctx)
 
-	rows, err := tx.Query(ctx,
-		"SELECT bot_id, claimed_by, last_claimed FROM bots WHERE claimed_by IS NOT NULL AND NOW() - last_claimed > INTERVAL '1 hour' FOR UPDATE")
+	q := db.New(tx)
 
-	if err != nil {
-		return fmt.Errorf("Error while checking for claimed bots: %s", err)
-	}
-
-	type claimedBot struct {
-		BotID       string     `db:"bot_id"`
-		ClaimedBy   *string    `db:"claimed_by"`
-		LastClaimed *time.Time `db:"last_claimed"`
-	}
-
-	bots, err := pgx.CollectRows(rows, pgx.RowToStructByName[claimedBot])
+	bots, err := q.GetStaleClaimedBotsForUpdate(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while checking for claimed bots: %s", err)
@@ -63,19 +52,19 @@ func AutoUnclaim(ctx context.Context) error {
 	for _, bot := range bots {
 		state.Logger.Info("Unclaiming bot", zap.String("botID", bot.BotID))
 
-		if _, err := tx.Exec(ctx, "UPDATE bots SET claimed_by = NULL, type = 'pending' WHERE bot_id = $1", bot.BotID); err != nil {
+		if err := q.ResubmitBot(ctx, bot.BotID); err != nil {
 			return fmt.Errorf("Error while unclaiming bot %s: %s", bot.BotID, err)
 		}
 
 		// Only bots with a known reviewer and claim time get announced.
-		if bot.ClaimedBy == nil || bot.LastClaimed == nil {
+		if !bot.ClaimedBy.Valid || !bot.LastClaimed.Valid {
 			continue
 		}
 
 		notifications = append(notifications, unclaimNotification{
 			BotID:       bot.BotID,
-			ClaimedBy:   *bot.ClaimedBy,
-			LastClaimed: *bot.LastClaimed,
+			ClaimedBy:   bot.ClaimedBy.String,
+			LastClaimed: bot.LastClaimed.Time,
 		})
 	}
 
@@ -140,22 +129,16 @@ For more information, you can contact the current reviewer <@%s>
 
 // DeletedBots removes bots whose Discord application no longer exists.
 func DeletedBots(ctx context.Context) error {
-	rows, err := state.Pool.Query(ctx, "SELECT bot_id FROM bots")
+	q := db.New(state.Pool)
 
-	if err != nil {
-		return fmt.Errorf("Error while fetching all bots: %s", err)
-	}
-
-	botIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	botIDs, err := q.GetAllBotIDs(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while fetching all bots: %s", err)
 	}
 
 	for _, botID := range botIDs {
-		var username string
-
-		err := state.Pool.QueryRow(ctx, "SELECT username FROM internal_user_cache__discord WHERE id = $1", botID).Scan(&username)
+		username, err := q.GetCachedDiscordUsername(ctx, botID)
 
 		if err != nil {
 			state.Logger.Warn("Bot is not in internal_user_cache__discord, forcing indexing of bot", zap.String("botID", botID))
@@ -215,7 +198,7 @@ func DeletedBots(ctx context.Context) error {
 			return fmt.Errorf("Error creating transaction: %s", err)
 		}
 
-		if _, err := tx.Exec(ctx, "DELETE FROM bots WHERE bot_id = $1", botID); err != nil {
+		if err := db.New(tx).DeleteBotByID(ctx, botID); err != nil {
 			tx.Rollback(ctx)
 			return fmt.Errorf("Error while deleting bot %s from database: %s", botID, err)
 		}
@@ -268,29 +251,9 @@ func httpGet(ctx context.Context, url string) (*http.Response, error) {
 // PremiumRemove strips premium from bots that lost approval or whose
 // subscription expired.
 func PremiumRemove(ctx context.Context) error {
-	rows, err := state.Pool.Query(ctx, `
-        SELECT bot_id, start_premium_period, premium_period_length, type FROM bots
-		WHERE (
-			premium = true
-			AND (
-				(type != 'approved' AND type != 'certified')
-				OR (start_premium_period + premium_period_length) < NOW()
-			)
-		)
-        `)
+	q := db.New(state.Pool)
 
-	if err != nil {
-		return fmt.Errorf("Error while checking for expired premium bots: %s", err)
-	}
-
-	type premiumBot struct {
-		BotID               string        `db:"bot_id"`
-		StartPremiumPeriod  *time.Time    `db:"start_premium_period"`
-		PremiumPeriodLength time.Duration `db:"premium_period_length"`
-		Type                string        `db:"type"`
-	}
-
-	botRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[premiumBot])
+	botRows, err := q.GetExpiredPremiumBots(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while checking for expired premium bots: %s", err)
@@ -305,7 +268,7 @@ func PremiumRemove(ctx context.Context) error {
 
 		state.Logger.Info("Removing premium from bot", zap.String("botID", bot.BotID))
 
-		if _, err := state.Pool.Exec(ctx, "UPDATE bots SET premium = false WHERE bot_id = $1", bot.BotID); err != nil {
+		if err := q.RemoveBotPremium(ctx, bot.BotID); err != nil {
 			return fmt.Errorf("Error while removing premium from bot %s: %s", bot.BotID, err)
 		}
 
@@ -397,14 +360,9 @@ func JapiUpdater(ctx context.Context) error {
 		japiLastRefresh.Store(now)
 	}
 
-	rows, err := state.Pool.Query(ctx,
-		"SELECT bot_id FROM bots WHERE (type = 'approved' OR type = 'certified') AND (last_stats_post IS NULL OR NOW() - last_stats_post > INTERVAL '3 days') AND (last_japi_update IS NULL OR NOW() - last_japi_update > INTERVAL '3 days') ORDER BY RANDOM() LIMIT 10")
+	q := db.New(state.Pool)
 
-	if err != nil {
-		return err
-	}
-
-	botIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	botIDs, err := q.GetBotsDueForJapiUpdate(ctx)
 
 	if err != nil {
 		return err
@@ -436,12 +394,17 @@ func JapiUpdater(ctx context.Context) error {
 			return decodeErr
 		}
 
-		if data.Data.Bot != nil {
-			_, err = state.Pool.Exec(ctx,
-				"UPDATE bots SET last_japi_update = NOW(), servers = $1 WHERE bot_id = $2",
-				data.Data.Bot.ApproximateGuildCount, botID)
+		// A nil ApproximateGuildCount used to be handed straight to the raw
+		// driver, which would try to write NULL into the NOT NULL servers
+		// column and fail the whole run -- fall back to just touching the
+		// update timestamp instead, same as the "no bot data at all" case.
+		if data.Data.Bot != nil && data.Data.Bot.ApproximateGuildCount != nil {
+			err = q.UpdateBotJapiServers(ctx, db.UpdateBotJapiServersParams{
+				Servers: *data.Data.Bot.ApproximateGuildCount,
+				BotID:   botID,
+			})
 		} else {
-			_, err = state.Pool.Exec(ctx, "UPDATE bots SET last_japi_update = NOW() WHERE bot_id = $1", botID)
+			err = q.TouchBotJapiUpdate(ctx, botID)
 		}
 
 		if err != nil {

@@ -13,6 +13,7 @@ import (
 	"popplio/api/resp"
 
 	"popplio/api"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/PlexiOSS/Keel/crypto"
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -144,21 +146,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Create session
 	sessionToken := crypto.RandString(128)
-	var sessionId string
 
 	expiry := time.Now().Add(time.Duration(createData.Expiry) * time.Second)
 
-	err = state.Pool.QueryRow(
-		d.Context,
-		"INSERT INTO api_sessions (token, target_id, target_type, name, type, expiry, perm_limits) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-		sessionToken,
-		targetId,
-		targetType,
-		createData.Name,
-		createData.Type,
-		expiry,
-		permLimits.Strings(),
-	).Scan(&sessionId)
+	sessionId, err := db.New(state.Pool).InsertSession(d.Context, db.InsertSessionParams{
+		Token:      sessionToken,
+		TargetID:   targetId,
+		TargetType: targetType,
+		Name:       pgtype.Text{String: createData.Name, Valid: true},
+		Type:       createData.Type,
+		Expiry:     pgtype.Timestamptz{Time: expiry, Valid: true},
+		PermLimits: permLimits.Strings(),
+	})
 
 	if err != nil {
 		return resp.ErrDetail("Error while creating user session", err)

@@ -6,10 +6,9 @@ package get_blog_post
 import (
 	"errors"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -21,12 +20,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	blogColsArr = dbutil.GetCols(types.BlogPost{})
-
-	blogCols = strings.Join(blogColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -47,20 +40,25 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	row, err := state.Pool.Query(d.Context, "SELECT "+blogCols+" FROM blogs WHERE slug = $1", chi.URLParam(r, "slug"))
-
-	if err != nil {
-		return resp.Err("Error fetching blog post [db query]", err, zap.String("slug", chi.URLParam(r, "slug")))
-	}
-
-	blogPost, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.BlogPost])
+	row, err := db.New(state.Pool).GetBlogPost(d.Context, chi.URLParam(r, "slug"))
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	if err != nil {
-		return resp.Err("Error fetching blog post [collect]", err, zap.String("slug", chi.URLParam(r, "slug")))
+		return resp.Err("Error fetching blog post [db query]", err, zap.String("slug", chi.URLParam(r, "slug")))
+	}
+
+	blogPost := types.BlogPost{
+		Slug:        row.Slug,
+		Title:       row.Title,
+		Description: row.Description,
+		UserID:      row.UserID,
+		CreatedAt:   row.CreatedAt.Time,
+		Content:     row.Content,
+		Draft:       row.Draft,
+		Tags:        row.Tags,
 	}
 
 	blogPost.Author, err = dovewing.GetUser(d.Context, blogPost.UserID, state.DovewingPlatformDiscord)

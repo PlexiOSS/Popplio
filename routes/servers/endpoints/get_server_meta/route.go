@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
@@ -70,7 +71,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		OnlineMembers: invite.ApproximatePresenceCount,
 	}
 
-	err = state.Pool.QueryRow(d.Context, "SELECT type FROM servers WHERE server_id = $1", meta.ServerID).Scan(&meta.ListType)
+	meta.ListType, err = db.New(state.Pool).GetServerType(d.Context, meta.ServerID)
 
 	switch {
 	case err == nil:

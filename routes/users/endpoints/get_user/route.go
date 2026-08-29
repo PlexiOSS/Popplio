@@ -4,13 +4,13 @@
 package get_user
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	botAssets "popplio/routes/bots/assets"
 	"popplio/routes/packs/assets"
 	serverAssets "popplio/routes/servers/assets"
@@ -19,7 +19,9 @@ import (
 	"popplio/types"
 	"popplio/votes"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -27,23 +29,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	userColsArr = dbutil.GetCols(types.User{})
-	userCols    = strings.Join(userColsArr, ",")
-
-	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
-	indexBotCols    = strings.Join(indexBotColsArr, ",")
-
-	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
-	indexServerCols    = strings.Join(indexServerColsArr, ",")
-
-	packColsArr = dbutil.GetCols(types.BotPack{})
-	packCols    = strings.Join(packColsArr, ",")
-
-	teamColsArr = dbutil.GetCols(types.Team{})
-	teamCols    = strings.Join(teamColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -70,21 +55,42 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.DefaultResponse(http.StatusBadRequest)
 	}
 
-	row, err := state.Pool.Query(d.Context, "SELECT "+userCols+" FROM users WHERE user_id = $1", userId)
+	q := db.New(state.Pool)
 
-	if err != nil {
-		state.Logger.Error("Error while getting user", zap.Error(err), zap.String("userID", userId))
-		return uapi.DefaultResponse(http.StatusNotFound)
-	}
-
-	user, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.User])
+	row, err := q.GetUserByID(d.Context, userId)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	if err != nil {
-		return resp.Err("Error while getting user [db fetch]", err, zap.String("userID", userId))
+		state.Logger.Error("Error while getting user", zap.Error(err), zap.String("userID", userId))
+		return uapi.DefaultResponse(http.StatusNotFound)
+	}
+
+	var extraLinks []types.Link
+	if err := json.Unmarshal(row.ExtraLinks, &extraLinks); err != nil {
+		return resp.Err("Error parsing user extra_links [json]", err, zap.String("userID", userId))
+	}
+
+	user := types.User{
+		ITag:                  row.Itag,
+		ID:                    row.UserID,
+		Experiments:           row.Experiments,
+		Certified:             row.Certified,
+		BotDeveloper:          row.Developer,
+		BugHunters:            row.BugHunters,
+		CaptchaSponsorEnabled: row.CaptchaSponsorEnabled,
+		ExtraLinks:            extraLinks,
+		About:                 row.About,
+		VoteBanned:            row.VoteBanned,
+		Banned:                row.Banned,
+		CreatedAt:             row.CreatedAt.Time,
+		UpdatedAt:             row.UpdatedAt.Time,
+	}
+
+	if row.LastBoosterClaim.Valid {
+		user.LastBoosterClaim = &row.LastBoosterClaim.Time
 	}
 
 	userObj, err := dovewing.GetUser(d.Context, user.ID, state.DovewingPlatformDiscord)
@@ -95,16 +101,37 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	user.User = userObj
 
-	indexBotRows, err := state.Pool.Query(d.Context, "SELECT "+indexBotCols+" FROM bots WHERE owner = $1", user.ID)
+	indexBotRows, err := q.GetIndexBotsByOwner(d.Context, pgtype.Text{String: user.ID, Valid: true})
 
 	if err != nil {
 		return resp.Err("Failed to get user bots [db fetch]", err, zap.String("userID", user.ID))
 	}
 
-	user.UserBots, err = pgx.CollectRows(indexBotRows, pgx.RowToStructByName[types.IndexBot])
-
-	if err != nil {
-		return resp.Err("Failed to get user bots [collect]", err, zap.String("userID", user.ID))
+	user.UserBots = make([]types.IndexBot, len(indexBotRows))
+	for i, row := range indexBotRows {
+		user.UserBots[i] = types.IndexBot{
+			BotID:            row.BotID,
+			Short:            row.Short,
+			Type:             row.Type,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			Shards:           int(row.Shards),
+			Library:          row.Library,
+			InviteClick:      int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			Servers:          int(row.Servers),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			CreatedAt:        row.CreatedAt,
+			SelfStatus:       row.SelfStatus,
+			LastStatsPost:    row.LastStatsPost,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+			VoteBlitzUntil:   row.VoteBlitzUntil,
+		}
 	}
 
 	// Resolve the userbots concurrently, since each bot's resolution is independent
@@ -114,18 +141,35 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Servers, like bots, but exclusively team-owned there's no direct
 	// `owner` column on servers, so this is always via team membership.
-	indexServerRows, err := state.Pool.Query(d.Context,
-		"SELECT "+indexServerCols+" FROM servers WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1)",
-		user.ID)
+	indexServerRows, err := q.GetIndexServersByTeamMembership(d.Context, user.ID)
 
 	if err != nil {
 		return resp.Err("Failed to get user servers [db fetch]", err, zap.String("userID", user.ID))
 	}
 
-	user.UserServers, err = pgx.CollectRows(indexServerRows, pgx.RowToStructByName[types.IndexServer])
-
-	if err != nil {
-		return resp.Err("Failed to get user servers [collect]", err, zap.String("userID", user.ID))
+	user.UserServers = make([]types.IndexServer, len(indexServerRows))
+	for i, row := range indexServerRows {
+		user.UserServers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
 	}
 
 	if err := serverAssets.ResolveIndexServers(d.Context, user.UserServers); err != nil {
@@ -134,20 +178,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Get user teams
 	// Teams the user is a member in
-	userTeamRows, err := state.Pool.Query(d.Context, "SELECT team_id FROM team_members WHERE user_id = $1", user.ID)
+	teamIdRows, err := q.GetUserTeamIDs(d.Context, user.ID)
 
 	if err != nil {
 		return resp.Err("Error while getting user teams [db fetch]", err, zap.String("userID", user.ID))
-	}
-
-	tids, err := pgx.CollectRows[string](userTeamRows, func(row pgx.CollectableRow) (string, error) {
-		var id string
-		err := row.Scan(&id)
-		return id, err
-	})
-
-	if err != nil {
-		return resp.Err("Error while getting user teams [collect]", err, zap.String("userID", user.ID))
 	}
 
 	// Ensure this always marshals as `[]` rather than `null` when the user
@@ -156,17 +190,40 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// null check.
 	user.UserTeams = []types.Team{}
 
-	for _, tid := range tids {
-		row, err := state.Pool.Query(d.Context, "SELECT "+teamCols+" FROM teams WHERE id = $1", tid)
+	for _, tidRaw := range teamIdRows {
+		tid := uuid.UUID(tidRaw.Bytes).String()
+
+		teamRow, err := q.GetTeamByID(d.Context, tid)
 
 		if err != nil {
 			return resp.Err("Error while getting team [db fetch]", err, zap.String("teamID", tid), zap.String("userID", user.ID))
 		}
 
-		eto, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Team])
+		var teamExtraLinks []types.Link
+		if err := json.Unmarshal(teamRow.ExtraLinks, &teamExtraLinks); err != nil {
+			return resp.Err("Error parsing team extra_links [json]", err, zap.String("teamID", tid), zap.String("userID", user.ID))
+		}
 
-		if err != nil {
-			return resp.Err("Error while getting team [collect]", err, zap.String("teamID", tid), zap.String("userID", user.ID))
+		eto := types.Team{
+			ID:               teamRow.ID,
+			Name:             teamRow.Name,
+			Short:            teamRow.Short,
+			Tags:             teamRow.Tags,
+			VoteBanned:       teamRow.VoteBanned,
+			ApproximateVotes: int(teamRow.ApproximateVotes),
+			ExtraLinks:       teamExtraLinks,
+			NSFW:             teamRow.Nsfw,
+			VanityRef:        teamRow.VanityRef,
+			Service:          teamRow.Service,
+			CreatedAt:        teamRow.CreatedAt.Time,
+			UpdatedAt:        teamRow.UpdatedAt.Time,
+		}
+
+		if eto.Tags == nil {
+			eto.Tags = []string{}
+		}
+		if eto.ExtraLinks == nil {
+			eto.ExtraLinks = []types.Link{}
 		}
 
 		eto.Entities, err = resolvers.GetTeamEntities(d.Context, tid, []string{
@@ -192,16 +249,26 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Packs
-	packsRows, err := state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs WHERE owner = $1 ORDER BY created_at DESC", user.ID)
+	packRows, err := q.GetUserPacksByOwner(d.Context, user.ID)
 
 	if err != nil {
 		return resp.Err("Error while getting user packs [db fetch]", err, zap.String("userID", user.ID))
 	}
 
-	user.UserPacks, err = pgx.CollectRows(packsRows, pgx.RowToStructByName[types.BotPack])
-
-	if err != nil {
-		return resp.Err("Error while getting user packs [collect]", err, zap.String("userID", user.ID))
+	user.UserPacks = make([]types.BotPack, len(packRows))
+	for i, row := range packRows {
+		user.UserPacks[i] = types.BotPack{
+			Owner:      row.Owner,
+			Name:       row.Name,
+			Short:      row.Short,
+			Tags:       row.Tags,
+			URL:        row.Url,
+			CreatedAt:  row.CreatedAt.Time,
+			PackType:   row.PackType,
+			Bots:       row.Bots,
+			Servers:    row.Servers,
+			VoteBanned: row.VoteBanned,
+		}
 	}
 
 	for i := range user.UserPacks {
@@ -213,9 +280,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Fetch staff status
-	var positions int
-
-	err = state.Pool.QueryRow(d.Context, "SELECT cardinality(positions) FROM staff_members WHERE user_id = $1", user.ID).Scan(&positions)
+	positions, err := q.GetStaffPositionCount(d.Context, user.ID)
 
 	if !errors.Is(err, pgx.ErrNoRows) && err != nil {
 		return resp.ErrBody("Error while getting staff status", "Error getting staff status.", err, zap.String("userID", user.ID))

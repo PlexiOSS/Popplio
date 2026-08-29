@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"popplio/db"
 	"popplio/moderation"
 	"popplio/state"
 
@@ -23,48 +24,29 @@ func ModerationScan(ctx context.Context) error {
 		return nil
 	}
 
-	if err := scanTable(ctx, "bots", "bot_id", "bot"); err != nil {
+	if err := scanBots(ctx); err != nil {
 		return fmt.Errorf("scanning bots: %w", err)
 	}
 
-	if err := scanTable(ctx, "servers", "server_id", "server"); err != nil {
+	if err := scanServers(ctx); err != nil {
 		return fmt.Errorf("scanning servers: %w", err)
 	}
 
 	return nil
 }
 
-func scanTable(ctx context.Context, table, idColumn, targetType string) error {
-	rows, err := state.Pool.Query(ctx,
-		"SELECT "+idColumn+", short, long FROM "+table+" "+
-			"WHERE type IN ('approved', 'certified', 'pending') "+
-			"AND (moderation_checked_at IS NULL OR moderation_checked_at < NOW() - INTERVAL '7 days') "+
-			"ORDER BY moderation_checked_at ASC NULLS FIRST "+
-			"LIMIT $1",
-		moderationScanBatchSize,
-	)
+func scanBots(ctx context.Context) error {
+	q := db.New(state.Pool)
+
+	rows, err := q.GetBotsDueForModerationScan(ctx, moderationScanBatchSize)
 
 	if err != nil {
-		return fmt.Errorf("querying %s due for a moderation check: %w", table, err)
+		return fmt.Errorf("querying bots due for a moderation check: %w", err)
 	}
 
-	var due []moderationScanRow
-
-	for rows.Next() {
-		var row moderationScanRow
-
-		if err := rows.Scan(&row.ID, &row.Short, &row.Long); err != nil {
-			rows.Close()
-			return fmt.Errorf("scanning %s row: %w", table, err)
-		}
-
-		due = append(due, row)
-	}
-
-	rows.Close()
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterating %s due for a moderation check: %w", table, err)
+	due := make([]moderationScanRow, len(rows))
+	for i, row := range rows {
+		due[i] = moderationScanRow{ID: row.BotID, Short: row.Short, Long: row.Long}
 	}
 
 	for _, row := range due {
@@ -72,21 +54,64 @@ func scanTable(ctx context.Context, table, idColumn, targetType string) error {
 
 		if err != nil {
 			state.Logger.Error("moderation_scan: check failed, leaving unchecked for next run",
-				zap.String("table", table), zap.String("id", row.ID), zap.Error(err))
+				zap.String("table", "bots"), zap.String("id", row.ID), zap.Error(err))
 			continue
 		}
 
-		if _, err := state.Pool.Exec(ctx,
-			"UPDATE "+table+" SET moderation_flagged = $2, moderation_categories = $3, moderation_checked_at = NOW() WHERE "+idColumn+" = $1",
-			row.ID, result.Flagged, result.Categories,
-		); err != nil {
-			return fmt.Errorf("%s=%s: storing moderation result: %w", idColumn, row.ID, err)
+		if err := q.RecordBotModerationScan(ctx, db.RecordBotModerationScanParams{
+			BotID:                row.ID,
+			ModerationFlagged:    result.Flagged,
+			ModerationCategories: result.Categories,
+		}); err != nil {
+			return fmt.Errorf("bot_id=%s: storing moderation result: %w", row.ID, err)
 		}
 
 		if result.Flagged {
-			if err := moderation.FileAutoReport(ctx, targetType, row.ID, result.Categories); err != nil {
+			if err := moderation.FileAutoReport(ctx, "bot", row.ID, result.Categories); err != nil {
 				state.Logger.Error("moderation_scan: failed to auto-file report",
-					zap.String("table", table), zap.String("id", row.ID), zap.Error(err))
+					zap.String("table", "bots"), zap.String("id", row.ID), zap.Error(err))
+			}
+		}
+	}
+
+	return nil
+}
+
+func scanServers(ctx context.Context) error {
+	q := db.New(state.Pool)
+
+	rows, err := q.GetServersDueForModerationScan(ctx, moderationScanBatchSize)
+
+	if err != nil {
+		return fmt.Errorf("querying servers due for a moderation check: %w", err)
+	}
+
+	due := make([]moderationScanRow, len(rows))
+	for i, row := range rows {
+		due[i] = moderationScanRow{ID: row.ServerID, Short: row.Short, Long: row.Long}
+	}
+
+	for _, row := range due {
+		result, err := moderation.CheckText(ctx, row.Short, row.Long)
+
+		if err != nil {
+			state.Logger.Error("moderation_scan: check failed, leaving unchecked for next run",
+				zap.String("table", "servers"), zap.String("id", row.ID), zap.Error(err))
+			continue
+		}
+
+		if err := q.RecordServerModerationScan(ctx, db.RecordServerModerationScanParams{
+			ServerID:             row.ID,
+			ModerationFlagged:    result.Flagged,
+			ModerationCategories: result.Categories,
+		}); err != nil {
+			return fmt.Errorf("server_id=%s: storing moderation result: %w", row.ID, err)
+		}
+
+		if result.Flagged {
+			if err := moderation.FileAutoReport(ctx, "server", row.ID, result.Categories); err != nil {
+				state.Logger.Error("moderation_scan: failed to auto-file report",
+					zap.String("table", "servers"), zap.String("id", row.ID), zap.Error(err))
 			}
 		}
 	}

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -6,36 +8,45 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/changeloggen"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// parsePartner is the shared validator for Create and Update.
-func parsePartner(ctx context.Context, partner types.CreatePartner) error {
-	var typeID string
+func textFromPtr(v *string) pgtype.Text {
+	if v == nil {
+		return pgtype.Text{}
+	}
 
-	err := state.Pool.QueryRow(ctx, "SELECT id FROM partner_types WHERE id = $1", partner.Type).Scan(&typeID)
+	return pgtype.Text{String: *v, Valid: true}
+}
+
+func ptrFromText(v pgtype.Text) *string {
+	if !v.Valid {
+		return nil
+	}
+
+	return &v.String
+}
+
+func parsePartner(ctx context.Context, partner types.CreatePartner) error {
+	exists, err := db.New(state.Pool).CountPartnerTypeByID(ctx, partner.Type)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("Partner type does not exist")
-		}
-
 		return err
 	}
 
-	// Upstream also required the partner avatar to already exist on the CDN and
-	// checked its size here. That validation went with the CDN; see
-	// CONFORMANCE.md.
+	if !exists {
+		return errors.New("Partner type does not exist")
+	}
+
 	if len(partner.Links) == 0 {
 		return errors.New("Links cannot be empty")
 	}
@@ -54,38 +65,17 @@ func parsePartner(ctx context.Context, partner types.CreatePartner) error {
 		}
 	}
 
-	var userID string
-
-	err = state.Pool.QueryRow(ctx, "SELECT user_id FROM users WHERE user_id = $1", partner.UserID).Scan(&userID)
+	userExists, err := db.New(state.Pool).UserExists(ctx, partner.UserID)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("User does not exist")
-		}
-
 		return err
 	}
 
+	if !userExists {
+		return errors.New("User does not exist")
+	}
+
 	return nil
-}
-
-type partnerRow struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	Short     string    `db:"short"`
-	Links     []byte    `db:"links"`
-	Type      string    `db:"type"`
-	CreatedAt time.Time `db:"created_at"`
-	UserID    string    `db:"user_id"`
-	BotID     *string   `db:"bot_id"`
-}
-
-type partnerTypeRow struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	Short     string    `db:"short"`
-	Icon      string    `db:"icon"`
-	CreatedAt time.Time `db:"created_at"`
 }
 
 func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (response, error) {
@@ -95,16 +85,11 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 		return response{}, err
 	}
 
+	queries := db.New(state.Pool)
+
 	switch {
 	case q.Action.List != nil:
-		// No permission check.
-		rows, err := state.Pool.Query(ctx, "SELECT id, name, short, links, type, created_at, user_id, bot_id FROM partners")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		partnerRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[partnerRow])
+		partnerRows, err := queries.ListPartners(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -125,33 +110,27 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 				Short:     p.Short,
 				Links:     types.NonNilLinks(links),
 				Type:      p.Type,
-				CreatedAt: types.NewTimestamp(p.CreatedAt),
+				CreatedAt: types.NewTimestamp(p.CreatedAt.Time),
 				UserID:    p.UserID,
-				BotID:     p.BotID,
+				BotID:     ptrFromText(p.BotID),
 			})
 		}
 
-		rows, err = state.Pool.Query(ctx, "SELECT id, name, short, icon, created_at FROM partner_types")
+		partnerTypeRows, err := queries.ListPartnerTypes(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		typeRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[partnerTypeRow])
+		partnerTypes := make([]types.PartnerType, 0, len(partnerTypeRows))
 
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		partnerTypes := make([]types.PartnerType, 0, len(typeRows))
-
-		for _, t := range typeRows {
+		for _, t := range partnerTypeRows {
 			partnerTypes = append(partnerTypes, types.PartnerType{
 				ID:        t.ID,
 				Name:      t.Name,
 				Short:     t.Short,
 				Icon:      t.Icon,
-				CreatedAt: types.NewTimestamp(t.CreatedAt),
+				CreatedAt: types.NewTimestamp(t.CreatedAt.Time),
 			})
 		}
 
@@ -163,7 +142,7 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 
 		partner := q.Action.Create.Partner
 
-		exists, err := partnerExists(ctx, partner.ID)
+		exists, err := queries.CountPartnerByID(ctx, partner.ID)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -183,9 +162,15 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 			return response{}, newError(err)
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"INSERT INTO partners (id, name, short, links, type, user_id, bot_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-			partner.ID, partner.Name, partner.Short, links, partner.Type, partner.UserID, partner.BotID)
+		err = queries.InsertPartner(ctx, db.InsertPartnerParams{
+			ID:     partner.ID,
+			Name:   partner.Name,
+			Short:  partner.Short,
+			Links:  links,
+			Type:   partner.Type,
+			UserID: partner.UserID,
+			BotID:  textFromPtr(partner.BotID),
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -199,7 +184,7 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 
 		partner := q.Action.Update.Partner
 
-		exists, err := partnerExists(ctx, partner.ID)
+		exists, err := queries.CountPartnerByID(ctx, partner.ID)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -219,9 +204,15 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 			return response{}, newError(err)
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE partners SET name = $2, short = $3, links = $4, type = $5, user_id = $6, bot_id = $7 WHERE id = $1",
-			partner.ID, partner.Name, partner.Short, links, partner.Type, partner.UserID, partner.BotID)
+		err = queries.UpdatePartner(ctx, db.UpdatePartnerParams{
+			ID:     partner.ID,
+			Name:   partner.Name,
+			Short:  partner.Short,
+			Links:  links,
+			Type:   partner.Type,
+			UserID: partner.UserID,
+			BotID:  textFromPtr(partner.BotID),
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -235,7 +226,7 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 
 		id := q.Action.Delete.ID
 
-		exists, err := partnerExists(ctx, id)
+		exists, err := queries.CountPartnerByID(ctx, id)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -245,9 +236,7 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 			return writeText(http.StatusBadRequest, "Partner does not exist"), nil
 		}
 
-		// Upstream also deleted the partner's CDN image here. That went with the
-		// CDN; see CONFORMANCE.md.
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM partners WHERE id = $1", id); err != nil {
+		if err := queries.DeletePartner(ctx, id); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -257,40 +246,6 @@ func (s *Server) updatePartners(ctx context.Context, q *types.QUpdatePartners) (
 	}
 }
 
-func partnerExists(ctx context.Context, id string) (bool, error) {
-	var found string
-
-	err := state.Pool.QueryRow(ctx, "SELECT id FROM partners WHERE id = $1", id).Scan(&found)
-
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-
-		return false, err
-	}
-
-	return true, nil
-}
-
-type changelogRow struct {
-	Itag             pgtype.UUID `db:"itag"`
-	Project          string      `db:"project"`
-	Version          string      `db:"version"`
-	Added            []string    `db:"added"`
-	Updated          []string    `db:"updated"`
-	Fixed            []string    `db:"fixed"`
-	Removed          []string    `db:"removed"`
-	ExtraDescription string      `db:"extra_description"`
-	Prerelease       bool        `db:"prerelease"`
-	Published        bool        `db:"published"`
-	CreatedBy        string      `db:"created_by"`
-	CreatedAt        time.Time   `db:"created_at"`
-}
-
-// validChangelogProject mirrors changelogs' own CHECK (project IN (...))
-// constraint, checked here too so a bad value 400s with a clear message
-// instead of a raw Postgres constraint-violation error.
 func validChangelogProject(project string) bool {
 	return project == "popplio" || project == "omniplex" || project == "keel"
 }
@@ -302,19 +257,11 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		return response{}, err
 	}
 
+	queries := db.New(state.Pool)
+
 	switch {
 	case q.Action.ListEntries != nil:
-		// No permission check: this is the staff panel's own listing,
-		// reachable only with a valid staff session already (see the
-		// authorize call above), same as blog's listing.
-		rows, err := state.Pool.Query(ctx,
-			"SELECT itag, project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by, created_at FROM changelogs ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		changelogRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[changelogRow])
+		changelogRows, err := queries.ListChangelogEntries(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -324,7 +271,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 
 		for _, row := range changelogRows {
 			entries = append(entries, types.ChangelogEntry{
-				Itag:             impls.UUIDString(row.Itag),
+				Itag:             row.Itag,
 				Project:          row.Project,
 				Version:          row.Version,
 				Added:            types.NonNilStrings(row.Added),
@@ -335,7 +282,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 				Prerelease:       row.Prerelease,
 				Published:        row.Published,
 				CreatedBy:        row.CreatedBy,
-				CreatedAt:        types.NewTimestamp(row.CreatedAt),
+				CreatedAt:        types.NewTimestamp(row.CreatedAt.Time),
 			})
 		}
 
@@ -351,9 +298,28 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
-		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO changelogs (project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, NOW()))",
-			entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, authData.UserID, entry.CreatedAt)
+		var createdAt pgtype.Timestamptz
+
+		if entry.CreatedAt != nil {
+			createdAt = pgtype.Timestamptz{Time: *entry.CreatedAt, Valid: true}
+		}
+
+		// added/updated/fixed/removed are all NOT NULL columns; a client that
+		// omits one of these keys leaves the Go slice nil, which pgx encodes
+		// as SQL NULL rather than an empty array.
+		err := queries.InsertChangelogEntry(ctx, db.InsertChangelogEntryParams{
+			Project:          entry.Project,
+			Version:          entry.Version,
+			Added:            types.NonNilStrings(entry.Added),
+			Updated:          types.NonNilStrings(entry.Updated),
+			Fixed:            types.NonNilStrings(entry.Fixed),
+			Removed:          types.NonNilStrings(entry.Removed),
+			ExtraDescription: entry.ExtraDescription,
+			Prerelease:       entry.Prerelease,
+			Published:        entry.Published,
+			CreatedBy:        authData.UserID,
+			CreatedAt:        createdAt,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -373,33 +339,50 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
-		itag, err := uuid.Parse(entry.Itag)
+		if _, err := uuid.Parse(entry.Itag); err != nil {
+			return response{}, newError(err)
+		}
+
+		wasPublished, err := queries.GetChangelogPublishedByItag(ctx, entry.Itag)
+
+		if err != nil {
+			exists, existsErr := queries.CountChangelogByItag(ctx, entry.Itag)
+
+			if existsErr != nil {
+				return response{}, newError(existsErr)
+			}
+
+			if !exists {
+				return writeText(http.StatusBadRequest, "Entry does not exist"), nil
+			}
+
+			return response{}, newError(err)
+		}
+
+		var createdAt pgtype.Timestamptz
+
+		if entry.CreatedAt != nil {
+			createdAt = pgtype.Timestamptz{Time: *entry.CreatedAt, Valid: true}
+		}
+
+		err = queries.UpdateChangelogEntry(ctx, db.UpdateChangelogEntryParams{
+			Itag:             entry.Itag,
+			Project:          entry.Project,
+			Version:          entry.Version,
+			Added:            types.NonNilStrings(entry.Added),
+			Updated:          types.NonNilStrings(entry.Updated),
+			Fixed:            types.NonNilStrings(entry.Fixed),
+			Removed:          types.NonNilStrings(entry.Removed),
+			ExtraDescription: entry.ExtraDescription,
+			Prerelease:       entry.Prerelease,
+			Published:        entry.Published,
+			CreatedAt:        createdAt,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		wasPublished, exists, err := changelogPublished(ctx, itag)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		if !exists {
-			return writeText(http.StatusBadRequest, "Entry does not exist"), nil
-		}
-
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, removed = $7, extra_description = $8, prerelease = $9, published = $10, created_at = COALESCE($11, created_at) WHERE itag = $1",
-			itag, entry.Project, entry.Version, entry.Added, entry.Updated, entry.Fixed, entry.Removed, entry.ExtraDescription, entry.Prerelease, entry.Published, entry.CreatedAt)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		// Only announce the draft -> published transition, not every edit
-		// of an already-published entry (that would re-post on every typo
-		// fix).
 		if entry.Published && !wasPublished {
 			announceChangelogEntry(types.ChangelogCreateEntry{
 				Project:          entry.Project,
@@ -420,13 +403,13 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusForbidden, "You do not have permission to delete changelog entries [manage_changelog]"), nil
 		}
 
-		itag, err := uuid.Parse(q.Action.DeleteEntry.Itag)
+		itag := q.Action.DeleteEntry.Itag
 
-		if err != nil {
+		if _, err := uuid.Parse(itag); err != nil {
 			return response{}, newError(err)
 		}
 
-		exists, err := changelogExists(ctx, itag)
+		exists, err := queries.CountChangelogByItag(ctx, itag)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -436,7 +419,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "Entry does not exist"), nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM changelogs WHERE itag = $1", itag); err != nil {
+		if err := queries.DeleteChangelogByItag(ctx, itag); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -482,65 +465,19 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 	}
 }
 
-func changelogExists(ctx context.Context, itag uuid.UUID) (bool, error) {
-	var count int64
-
-	if err := state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM changelogs WHERE itag = $1", itag).Scan(&count); err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
-
-// changelogPublished returns the entry's current published state, and
-// whether it exists at all -- used by UpdateEntry to detect a draft ->
-// published transition before the update overwrites it.
-func changelogPublished(ctx context.Context, itag uuid.UUID) (published bool, exists bool, err error) {
-	err = state.Pool.QueryRow(ctx, "SELECT published FROM changelogs WHERE itag = $1", itag).Scan(&published)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, false, nil
-	}
-
-	if err != nil {
-		return false, false, err
-	}
-
-	return published, true, nil
-}
-
-type blogRow struct {
-	Itag        pgtype.UUID `db:"itag"`
-	Slug        string      `db:"slug"`
-	Title       string      `db:"title"`
-	Description string      `db:"description"`
-	UserID      string      `db:"user_id"`
-	Content     string      `db:"content"`
-	CreatedAt   time.Time   `db:"created_at"`
-	Draft       bool        `db:"draft"`
-	Tags        []string    `db:"tags"`
-}
-
 func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response, error) {
-	// Upstream calls check_auth twice here with a TODO admitting it is wasteful;
-	// once is enough.
+
 	authData, userPerms, err := authorize(ctx, q.LoginToken)
 
 	if err != nil {
 		return response{}, err
 	}
 
+	queries := db.New(state.Pool)
+
 	switch {
 	case q.Action.ListEntries != nil:
-		// No permission check.
-		rows, err := state.Pool.Query(ctx,
-			"SELECT itag, slug, title, description, user_id, content, created_at, draft, tags FROM blogs ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		blogRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[blogRow])
+		blogRows, err := queries.ListBlogEntriesFull(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -557,7 +494,7 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 				UserID:      row.UserID,
 				Tags:        types.NonNilStrings(row.Tags),
 				Content:     row.Content,
-				CreatedAt:   types.NewTimestamp(row.CreatedAt),
+				CreatedAt:   types.NewTimestamp(row.CreatedAt.Time),
 				Draft:       row.Draft,
 			})
 		}
@@ -570,9 +507,14 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 
 		entry := q.Action.CreateEntry
 
-		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO blogs (slug, title, description, content, tags, user_id) VALUES ($1, $2, $3, $4, $5, $6)",
-			entry.Slug, entry.Title, entry.Description, entry.Content, entry.Tags, authData.UserID)
+		err := queries.InsertBlogEntry(ctx, db.InsertBlogEntryParams{
+			Slug:        entry.Slug,
+			Title:       entry.Title,
+			Description: entry.Description,
+			Content:     entry.Content,
+			Tags:        types.NonNilStrings(entry.Tags),
+			UserID:      authData.UserID,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -594,26 +536,38 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 			return response{}, newError(err)
 		}
 
-		wasDraft, exists, err := blogDraft(ctx, itag)
+		itagUUID := pgtype.UUID{Bytes: itag, Valid: true}
+
+		wasDraft, err := queries.GetBlogDraftByItag(ctx, itagUUID)
+
+		if err != nil {
+			exists, existsErr := queries.CountBlogByItag(ctx, itagUUID)
+
+			if existsErr != nil {
+				return response{}, newError(existsErr)
+			}
+
+			if !exists {
+				return writeText(http.StatusBadRequest, "Entry does not exist"), nil
+			}
+
+			return response{}, newError(err)
+		}
+
+		err = queries.UpdateBlogEntry(ctx, db.UpdateBlogEntryParams{
+			Itag:        itagUUID,
+			Slug:        entry.Slug,
+			Title:       entry.Title,
+			Description: entry.Description,
+			Content:     entry.Content,
+			Tags:        types.NonNilStrings(entry.Tags),
+			Draft:       entry.Draft,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		if !exists {
-			return writeText(http.StatusBadRequest, "Entry does not exist"), nil
-		}
-
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE blogs SET slug = $2, title = $3, description = $4, content = $5, tags = $6, draft = $7 WHERE itag = $1",
-			itag, entry.Slug, entry.Title, entry.Description, entry.Content, entry.Tags, entry.Draft)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		// Only announce the draft -> published transition, not every edit
-		// of an already-published post.
 		if !entry.Draft && wasDraft {
 			announceBlogPost(types.BlogCreateEntry{
 				Slug:        entry.Slug,
@@ -636,7 +590,9 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 			return response{}, newError(err)
 		}
 
-		exists, err := blogExists(ctx, itag)
+		itagUUID := pgtype.UUID{Bytes: itag, Valid: true}
+
+		exists, err := queries.CountBlogByItag(ctx, itagUUID)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -646,7 +602,7 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 			return writeText(http.StatusBadRequest, "Entry with same id does not already exist"), nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM blogs WHERE itag = $1", itag); err != nil {
+		if err := queries.DeleteBlogByItag(ctx, itagUUID); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -654,31 +610,4 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 	default:
 		return response{}, errStatus(http.StatusBadRequest, "No blog action was specified")
 	}
-}
-
-func blogExists(ctx context.Context, itag uuid.UUID) (bool, error) {
-	var count int64
-
-	if err := state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM blogs WHERE itag = $1", itag).Scan(&count); err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
-
-// blogDraft returns the entry's current draft state, and whether it exists
-// at all -- used by UpdateEntry to detect a draft -> published transition
-// before the update overwrites it, same reasoning as changelogPublished.
-func blogDraft(ctx context.Context, itag uuid.UUID) (draft bool, exists bool, err error) {
-	err = state.Pool.QueryRow(ctx, "SELECT draft FROM blogs WHERE itag = $1", itag).Scan(&draft)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, false, nil
-	}
-
-	if err != nil {
-		return false, false, err
-	}
-
-	return draft, true, nil
 }

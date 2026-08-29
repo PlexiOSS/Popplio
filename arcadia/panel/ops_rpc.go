@@ -1,28 +1,21 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/rpc"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// The panel's way into the shared action layer: running an RPC method, listing
-// what methods exist, and reading the log of what has been run.
-//
-// executeRpc deliberately does no permission check of its own — the rpc package
-// enforces the per-method permission, so both callers get the same answer.
-
 func (s *Server) executeRpc(ctx context.Context, q *types.QExecuteRpc) (response, error) {
-	// The endpoint is open to all staff; the RPC layer enforces per-method perms.
 	authData, err := checkAuth(ctx, q.LoginToken)
 
 	if err != nil {
@@ -35,7 +28,6 @@ func (s *Server) executeRpc(ctx context.Context, q *types.QExecuteRpc) (response
 	})
 
 	if rpcErr != nil {
-		// RPC failures are 400, not 500.
 		return writeText(http.StatusBadRequest, rpcErr.Error()), nil
 	}
 
@@ -80,15 +72,6 @@ func (s *Server) getRpcMethods(ctx context.Context, q *types.QGetRpcMethods) (re
 	return writeJSON(http.StatusOK, actions), nil
 }
 
-type rpcLogRow struct {
-	ID        pgtype.UUID `db:"id"`
-	UserID    string      `db:"user_id"`
-	Method    string      `db:"method"`
-	Data      []byte      `db:"data"`
-	State     string      `db:"state"`
-	CreatedAt time.Time   `db:"created_at"`
-}
-
 func (s *Server) getRpcLogEntries(ctx context.Context, q *types.QLoginTokenOnly) (response, error) {
 	_, userPerms, err := authorize(ctx, q.LoginToken)
 
@@ -100,13 +83,7 @@ func (s *Server) getRpcLogEntries(ctx context.Context, q *types.QLoginTokenOnly)
 		return writeText(http.StatusForbidden, "You do not have permission to view rpc logs [view_audit_logs]"), nil
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT id, user_id, method, data, state, created_at FROM rpc_logs ORDER BY created_at DESC")
-
-	if err != nil {
-		return response{}, newError(err)
-	}
-
-	entries, err := pgx.CollectRows(rows, pgx.RowToStructByName[rpcLogRow])
+	entries, err := db.New(state.Pool).ListRPCLogs(ctx)
 
 	if err != nil {
 		return response{}, newError(err)
@@ -115,13 +92,19 @@ func (s *Server) getRpcLogEntries(ctx context.Context, q *types.QLoginTokenOnly)
 	log := make([]types.RPCLogEntry, 0, len(entries))
 
 	for _, entry := range entries {
+		data, err := json.Marshal(entry.Data)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
 		log = append(log, types.RPCLogEntry{
 			ID:        impls.UUIDString(entry.ID),
 			UserID:    entry.UserID,
 			Method:    entry.Method,
-			Data:      entry.Data,
+			Data:      data,
 			State:     entry.State,
-			CreatedAt: types.NewTimestamp(entry.CreatedAt),
+			CreatedAt: types.NewTimestamp(entry.CreatedAt.Time),
 		})
 	}
 

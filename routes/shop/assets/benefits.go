@@ -1,17 +1,10 @@
-// Package assets implements what buying a shop item actually does.
-//
-// shop_items/shop_item_benefits are a staff-managed catalogue (full CRUD via
-// the Arcadia panel) with no field describing what a benefit's effect is —
-// Name/Description are free text for display only. The IDs below are the
-// bridge: staff must give a shop_item_benefits row one of these exact IDs
-// for a purchase to actually do anything. Unrecognized benefit IDs are
-// silently skipped so staff can still catalogue purely descriptive/future
-// benefits without breaking a purchase.
 package assets
 
 import (
 	"context"
 	"errors"
+
+	"popplio/db"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -32,9 +25,6 @@ var recognizedBenefits = map[string]bool{
 	BenefitVoteBlitz:      true,
 }
 
-// HasRecognizedBenefit reports whether at least one of the given benefit IDs
-// has a defined effect — used to reject purchasing an item that would
-// otherwise just spend credits for nothing.
 func HasRecognizedBenefit(benefitIDs []string) bool {
 	for _, id := range benefitIDs {
 		if recognizedBenefits[id] {
@@ -44,53 +34,41 @@ func HasRecognizedBenefit(benefitIDs []string) bool {
 	return false
 }
 
-// ApplyBenefit applies one recognized shop benefit's effect to a target
-// entity (bot or server — both tables carry identical columns for every
-// benefit below). durationHours comes from the purchased ShopItem's
-// Duration field.
 func ApplyBenefit(ctx context.Context, tx pgx.Tx, benefitID, targetType, targetID string, durationHours int64) error {
-	var table, idCol string
-
-	switch targetType {
-	case "bot":
-		table, idCol = "bots", "bot_id"
-	case "server":
-		table, idCol = "servers", "server_id"
-	default:
+	if targetType != "bot" && targetType != "server" {
 		return errors.New("shop benefits are only supported for bots and servers today")
 	}
 
+	q := db.New(tx)
+	isBot := targetType == "bot"
+
 	switch benefitID {
 	case BenefitPremiumDays:
-		// Matches routes/payments/assets/give_perks.go's GivePerks exactly, so
-		// a credits-bought premium period behaves identically to a paid one.
-		_, err := tx.Exec(ctx,
-			"UPDATE "+table+" SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE "+idCol+" = $2",
-			durationHours, targetID,
-		)
-		return err
+		if isBot {
+			return q.ApplyBotPremiumDays(ctx, db.ApplyBotPremiumDaysParams{Hours: int32(durationHours), BotID: targetID})
+		}
+		return q.ApplyServerPremiumDays(ctx, db.ApplyServerPremiumDaysParams{Hours: int32(durationHours), ServerID: targetID})
 	case BenefitPriorityBoost:
-		_, err := tx.Exec(ctx,
-			"UPDATE "+table+" SET boosted_until = GREATEST(COALESCE(boosted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
-			durationHours, targetID,
-		)
-		return err
+		if isBot {
+			return q.ApplyBotPriorityBoost(ctx, db.ApplyBotPriorityBoostParams{Hours: int32(durationHours), BotID: targetID})
+		}
+		return q.ApplyServerPriorityBoost(ctx, db.ApplyServerPriorityBoostParams{Hours: int32(durationHours), ServerID: targetID})
 	case BenefitFeaturedSlot:
-		_, err := tx.Exec(ctx,
-			"UPDATE "+table+" SET featured_until = GREATEST(COALESCE(featured_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
-			durationHours, targetID,
-		)
-		return err
+		if isBot {
+			return q.ApplyBotFeaturedSlot(ctx, db.ApplyBotFeaturedSlotParams{Hours: int32(durationHours), BotID: targetID})
+		}
+		return q.ApplyServerFeaturedSlot(ctx, db.ApplyServerFeaturedSlotParams{Hours: int32(durationHours), ServerID: targetID})
 	case BenefitSupporterBadge:
-		_, err := tx.Exec(ctx, "UPDATE "+table+" SET supporter_badge = true WHERE "+idCol+" = $1", targetID)
-		return err
+		if isBot {
+			return q.ApplyBotSupporterBadge(ctx, targetID)
+		}
+		return q.ApplyServerSupporterBadge(ctx, targetID)
 	case BenefitVoteBlitz:
-		_, err := tx.Exec(ctx,
-			"UPDATE "+table+" SET vote_blitz_until = GREATEST(COALESCE(vote_blitz_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
-			durationHours, targetID,
-		)
-		return err
+		if isBot {
+			return q.ApplyBotVoteBlitz(ctx, db.ApplyBotVoteBlitzParams{Hours: int32(durationHours), BotID: targetID})
+		}
+		return q.ApplyServerVoteBlitz(ctx, db.ApplyServerVoteBlitzParams{Hours: int32(durationHours), ServerID: targetID})
 	default:
-		return nil // unrecognized benefit — no-op, not an error
+		return nil
 	}
 }

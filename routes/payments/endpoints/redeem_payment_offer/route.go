@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 
@@ -117,8 +118,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest("This offer code is only valid for boosters")
 		}
 
-		var lastRedeemedBoosterOffer *time.Time
-		err = state.Pool.QueryRow(d.Context, "SELECT last_booster_claim FROM users WHERE user_id = $1", d.Auth.ID).Scan(&lastRedeemedBoosterOffer)
+		q := db.New(state.Pool)
+
+		lastRedeemedBoosterOffer, err := q.GetUserLastBoosterClaim(d.Context, d.Auth.ID)
 
 		if err != nil {
 			state.Logger.Error("Error while checking last booster claim", zap.Error(err), zap.String("userID", d.Auth.ID))
@@ -126,8 +128,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		// Check the last time the user redeemed a booster offer
-		if lastRedeemedBoosterOffer != nil {
-			if time.Since(*lastRedeemedBoosterOffer) < 30*24*time.Hour {
+		if lastRedeemedBoosterOffer.Valid {
+			if time.Since(lastRedeemedBoosterOffer.Time) < 30*24*time.Hour {
 				return resp.BadRequest("You can only redeem a booster offer once every 30 days")
 			}
 		}
@@ -139,7 +141,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest("Error: " + err.Error())
 		}
 
-		_, err = state.Pool.Exec(d.Context, "UPDATE users SET last_booster_claim = NOW() WHERE user_id = $1", d.Auth.ID)
+		err = q.UpdateUserLastBoosterClaim(d.Context, d.Auth.ID)
 
 		if err != nil {
 			state.Logger.Error("Error while updating last booster claim", zap.Error(err), zap.String("userID", d.Auth.ID))

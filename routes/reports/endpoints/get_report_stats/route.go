@@ -8,14 +8,12 @@
 package get_report_stats
 
 import (
-	"errors"
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -30,18 +28,19 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT reason, status, COUNT(*) AS count FROM reports GROUP BY reason, status ORDER BY reason, status")
+	rows, err := db.New(state.Pool).GetReportStats(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while querying report stats [db fetch]", err)
 	}
 
-	stats, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.ReportStatCount])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		stats = []types.ReportStatCount{}
-	} else if err != nil {
-		return resp.Err("Error while querying report stats [collect]", err)
+	stats := make([]types.ReportStatCount, len(rows))
+	for i, row := range rows {
+		stats[i] = types.ReportStatCount{
+			Reason: row.Reason,
+			Status: row.Status,
+			Count:  row.Count,
+		}
 	}
 
 	return uapi.HttpResponse{

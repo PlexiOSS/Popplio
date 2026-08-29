@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -16,10 +17,10 @@ func FileAutoReport(ctx context.Context, targetType, targetID string, categories
 		strings.Join(categories, ", "),
 	)
 
-	_, err := state.Pool.Exec(ctx,
-		"INSERT INTO reports (target_type, target_id, reporter_id, reason, description) VALUES ($1, $2, $3, 'tos_violation', $4) ON CONFLICT DO NOTHING",
-		targetType, targetID, SystemReporterID, description,
-	)
-
-	return err
+	return db.New(state.Pool).InsertAutoReport(ctx, db.InsertAutoReportParams{
+		TargetType: targetType,
+		TargetID:   targetID,
+		ReporterID: SystemReporterID,
+		Description: description,
+	})
 }

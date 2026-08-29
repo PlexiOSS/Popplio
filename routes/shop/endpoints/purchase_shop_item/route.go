@@ -1,8 +1,3 @@
-// Package purchase_shop_item implements POST
-// /{target_type}/{target_id}/shop/purchase — "Purchase Shop Item".
-//
-// Spends an entity's earned vote credits on a shop item, applying whatever
-// recognized benefits the item grants. Returns a 204 on success.
 package purchase_shop_item
 
 import (
@@ -10,10 +5,9 @@ import (
 	"math"
 	"net/http"
 	"slices"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/routes/shop/assets"
 	"popplio/state"
@@ -37,9 +31,6 @@ type PurchaseShopItem struct {
 
 var (
 	compiledMessages = uapi.CompileValidationErrors(PurchaseShopItem{})
-
-	shopItemColsArr = dbutil.GetCols(types.ShopItem{})
-	shopItemCols    = strings.Join(shopItemColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -67,12 +58,6 @@ func Docs() *docs.Doc {
 	}
 }
 
-type redeemLogRow struct {
-	ID              pgtype.UUID `db:"id"`
-	Credits         int         `db:"credits"`
-	RedeemedCredits int         `db:"redeemed_credits"`
-}
-
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetID := chi.URLParam(r, "target_id")
 	targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
@@ -98,13 +83,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errs)
 	}
 
-	itemRows, err := state.Pool.Query(d.Context, "SELECT "+shopItemCols+" FROM shop_items WHERE id = $1", payload.ItemID)
-
-	if err != nil {
-		return resp.Err("Failed to fetch shop item", err)
-	}
-
-	item, err := pgx.CollectOneRow(itemRows, pgx.RowToStructByName[types.ShopItem])
+	itemRow, err := db.New(state.Pool).GetShopItemByID(d.Context, payload.ItemID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return resp.BadRequest("Shop item not found")
@@ -112,6 +91,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Failed to fetch shop item", err)
+	}
+
+	item := types.ShopItem{
+		ID:          itemRow.ID,
+		Name:        itemRow.Name,
+		Cents:       itemRow.Cents,
+		TargetTypes: itemRow.TargetTypes,
+		Benefits:    itemRow.Benefits,
+		CreatedAt:   itemRow.CreatedAt.Time,
+		LastUpdated: itemRow.LastUpdated.Time,
+		CreatedByID: itemRow.CreatedBy,
+		UpdatedByID: itemRow.UpdatedBy,
+		Duration:    itemRow.Duration,
+		Description: itemRow.Description,
 	}
 
 	if !slices.Contains(item.TargetTypes, targetType) {
@@ -132,6 +125,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
+	q := db.New(tx)
+
 	summary, err := votes.EntityGetVoteRedeemLogsSummary(d.Context, tx, targetID, targetType)
 
 	if err != nil {
@@ -142,22 +137,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Not enough credits to purchase this item")
 	}
 
-	// Spend oldest-first across every not-fully-spent credit batch this
-	// entity has earned, locking the rows so a concurrent purchase can't
-	// double-spend the same credits.
-	logRows, err := tx.Query(d.Context,
-		"SELECT id, credits, redeemed_credits FROM entity_vote_redeem_logs WHERE target_id = $1 AND target_type = $2 AND redeemed_credits < credits ORDER BY created_at ASC FOR UPDATE",
-		targetID, targetType,
-	)
+	batches, err := q.GetRedeemableCreditBatches(d.Context, db.GetRedeemableCreditBatchesParams{
+		TargetID:   targetID,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.ErrBody("An error occurred while fetching credit batches", "An error occurred while fetching credit batches.", err)
-	}
-
-	batches, err := pgx.CollectRows(logRows, pgx.RowToStructByName[redeemLogRow])
-
-	if err != nil {
-		return resp.ErrBody("An error occurred while collecting credit batches", "An error occurred while collecting credit batches.", err)
 	}
 
 	remaining := itemCents
@@ -167,13 +153,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			break
 		}
 
-		available := batch.Credits - batch.RedeemedCredits
+		available := int(batch.Credits) - int(batch.RedeemedCredits)
 		spend := min(available, remaining)
 
-		_, err = tx.Exec(d.Context,
-			"UPDATE entity_vote_redeem_logs SET redeemed_credits = redeemed_credits + $1, redeemed_at = NOW() WHERE id = $2",
-			spend, batch.ID,
-		)
+		err = q.SpendCreditBatch(d.Context, db.SpendCreditBatchParams{
+			RedeemedCredits: int32(spend),
+			ID:              batch.ID,
+		})
 
 		if err != nil {
 			return resp.ErrBody("An error occurred while spending credits", "An error occurred while spending credits.", err)
@@ -186,10 +172,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Not enough available credits to complete this purchase", "Not enough available credits to complete this purchase.", nil)
 	}
 
-	_, err = tx.Exec(d.Context,
-		"INSERT INTO shop_purchases (target_type, target_id, item_id, cents) VALUES ($1, $2, $3, $4)",
-		targetType, targetID, item.ID, item.Cents,
-	)
+	err = q.InsertShopPurchase(d.Context, db.InsertShopPurchaseParams{
+		TargetType: targetType,
+		TargetID:   targetID,
+		ItemID:     item.ID,
+		Cents:      item.Cents,
+	})
 
 	if err != nil {
 		return resp.ErrBody("An error occurred while logging the purchase", "An error occurred while logging the purchase.", err)
@@ -205,9 +193,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error committing transaction", "An error occurred while committing transaction.", err)
 	}
 
-	// Best-effort: the purchase already committed, so a failure here
-	// shouldn't turn into an error response the client would read as "the
-	// purchase failed" when it didn't.
 	if err := notifications.PushNotification(d.Auth.ID, types.Alert{
 		Type:     types.AlertTypeSuccess,
 		Title:    "Shop Purchase Complete",

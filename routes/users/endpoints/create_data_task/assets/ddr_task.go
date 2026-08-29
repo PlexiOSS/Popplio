@@ -1,8 +1,10 @@
 package assets
 
 import (
+	"popplio/db"
 	"popplio/state"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/PlexiOSS/Keel/dovewing"
@@ -27,7 +29,7 @@ func DataTask(taskId, taskName, id, ip string) {
 		if err != nil {
 			l.Error("Panic", zap.Any("err", err), zap.String("id", id), zap.Bool("del", del))
 
-			_, err := state.Pool.Exec(state.Context, "UPDATE tasks SET state = $1 WHERE task_id = $2", "failed", taskId)
+			err := db.New(state.Pool).UpdateTaskState(state.Context, db.UpdateTaskStateParams{State: "failed", TaskID: taskId})
 
 			if err != nil {
 				l.Error("Failed to update task", zap.Error(err), zap.String("id", id), zap.Bool("del", del))
@@ -37,7 +39,7 @@ func DataTask(taskId, taskName, id, ip string) {
 		if !done {
 			l.Error("Failed to complete task", zap.String("id", id), zap.Bool("del", del))
 
-			_, err := state.Pool.Exec(state.Context, "UPDATE tasks SET state = $1 WHERE task_id = $2", "failed", taskId)
+			err := db.New(state.Pool).UpdateTaskState(state.Context, db.UpdateTaskStateParams{State: "failed", TaskID: taskId})
 
 			if err != nil {
 				l.Error("Failed to update task", zap.Error(err), zap.String("id", id), zap.Bool("del", del))
@@ -54,7 +56,13 @@ func DataTask(taskId, taskName, id, ip string) {
 
 	defer tx.Rollback(state.Context)
 
-	_, err = tx.Exec(state.Context, "DELETE FROM tasks WHERE task_name = $1 AND task_id != $2 AND for_user = $3", taskName, taskId, id)
+	q := db.New(tx)
+
+	err = q.DeleteOldDataTasks(state.Context, db.DeleteOldDataTasksParams{
+		TaskName: taskName,
+		TaskID:   taskId,
+		ForUser:  pgtype.Text{String: id, Valid: true},
+	})
 
 	if err != nil {
 		l.Error("Failed to delete old data tasks", zap.Error(err), zap.String("id", id), zap.Bool("del", del))
@@ -178,7 +186,7 @@ func DataTask(taskId, taskName, id, ip string) {
 			}
 		}
 
-		_, err = tx.Exec(state.Context, "DELETE FROM users WHERE user_id = $1", id)
+		err = q.DeleteUserByID(state.Context, id)
 
 		if err != nil {
 			l.Error("Failed to delete user", zap.Error(err), zap.String("id", id), zap.Bool("del", del))
@@ -197,7 +205,11 @@ func DataTask(taskId, taskName, id, ip string) {
 		}
 	}
 
-	_, err = tx.Exec(state.Context, "UPDATE tasks SET output = $1, state = $2 WHERE task_id = $3", finalOutput, "completed", taskId)
+	err = q.UpdateTaskOutputAndState(state.Context, db.UpdateTaskOutputAndStateParams{
+		Output: finalOutput,
+		State:  "completed",
+		TaskID: taskId,
+	})
 
 	if err != nil {
 		l.Error("Failed to update task", zap.Error(err), zap.String("id", id), zap.Bool("del", del))

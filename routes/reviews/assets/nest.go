@@ -1,8 +1,3 @@
-// Package assets holds the review logic shared between endpoints.
-//
-// Reviews form a tree through their parent references, so this package
-// covers both nesting a flat result set into that tree and collecting the
-// orphans left behind when a parent is deleted.
 package assets
 
 import (
@@ -10,21 +5,28 @@ import (
 	"errors"
 	"fmt"
 
+	"popplio/db"
 	"popplio/state"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// The Review Nest Engine calculates the depths of reviews
 func Nest(ctx context.Context, id string) (int, error) {
 	var depth int
 
 	var reachedRoot bool
 
+	q := db.New(state.Pool)
+
 	for !reachedRoot {
-		var parent pgtype.Text
-		err := state.Pool.QueryRow(ctx, "SELECT parent_id FROM reviews WHERE id = $1", id).Scan(&parent)
+		var idUUID pgtype.UUID
+		if err := idUUID.Scan(id); err != nil {
+			return depth, fmt.Errorf("invalid review id %s: %w", id, err)
+		}
+
+		parent, err := q.GetReviewParentID(ctx, idUUID)
 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return depth, nil
@@ -34,10 +36,10 @@ func Nest(ctx context.Context, id string) (int, error) {
 			return depth, fmt.Errorf("failed to query parent_id of id %s: %w", id, err)
 		}
 
-		if !parent.Valid || parent.String == "" {
+		if !parent.Valid {
 			reachedRoot = true
 		} else {
-			id = parent.String
+			id = uuid.UUID(parent.Bytes).String()
 			depth++
 		}
 	}

@@ -8,18 +8,17 @@ package get_all_user_votes
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -27,11 +26,6 @@ import (
 )
 
 const perPage = 5
-
-var (
-	entityVoteColsArr = dbutil.GetCols(types.EntityVote{})
-	entityVoteCols    = strings.Join(entityVoteColsArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -90,28 +84,50 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (pageNum - 1) * perPage
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+entityVoteCols+" FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND author = $3 LIMIT $4 OFFSET $5", targetId, targetType, uid, limit, offset)
+	q := db.New(state.Pool)
+
+	rows, err := q.GetUserEntityVotesPage(d.Context, db.GetUserEntityVotesPageParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		Author:     uid,
+		Limit:      int32(limit),
+		Offset:     int32(offset),
+	})
 
 	if err != nil {
 		return resp.Err("Failed to get user entity votes", err, zap.String("userId", uid), zap.String("targetId", targetId), zap.String("targetType", targetType))
 	}
 
-	ev, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.EntityVote])
-
-	if err != nil {
-		return resp.Err("Failed to get user entity votes", err, zap.String("userId", uid), zap.String("targetId", targetId), zap.String("targetType", targetType))
+	ev := make([]types.EntityVote, len(rows))
+	for i, row := range rows {
+		ev[i] = types.EntityVote{
+			ITag:       row.Itag,
+			TargetType: row.TargetType,
+			TargetID:   row.TargetID,
+			AuthorID:   row.Author,
+			Upvote:     row.Upvote,
+			Void:       row.Void,
+			VoidReason: row.VoidReason,
+			VoidedAt:   pgtype.Timestamp{Time: row.VoidedAt.Time, Valid: row.VoidedAt.Valid},
+			CreatedAt:  row.CreatedAt.Time,
+			VoteNum:    int(row.VoteNum),
+			Credit:     row.CreditRedeem,
+			Immutable:  row.Immutable,
+		}
 	}
 
-	var count uint64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND author = $3", targetId, targetType, uid).Scan(&count)
+	count, err := q.CountUserEntityVotes(d.Context, db.CountUserEntityVotesParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		Author:     uid,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to get user entity votes", err, zap.String("userId", uid), zap.String("targetId", targetId), zap.String("targetType", targetType))
 	}
 
 	data := types.PagedResult[[]types.EntityVote]{
-		Count:   count,
+		Count:   uint64(count),
 		PerPage: perPage,
 		Results: ev,
 	}

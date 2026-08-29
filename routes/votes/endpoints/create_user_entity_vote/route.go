@@ -16,6 +16,7 @@ import (
 	"popplio/captcha"
 
 	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -93,9 +94,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	upvote := upvoteStr == "true"
 
 	// Check if user is allowed to even make a vote right now.
-	var voteBanned bool
-
-	err := state.Pool.QueryRow(d.Context, "SELECT vote_banned FROM users WHERE user_id = $1", d.Auth.ID).Scan(&voteBanned)
+	voteBanned, err := db.New(state.Pool).GetUserVoteBanned(d.Context, d.Auth.ID)
 
 	if err != nil {
 		state.Logger.Error("Failed to check if user is vote banned", zap.Error(err), zap.String("userId", d.Auth.ID))
@@ -176,7 +175,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				return resp.BadRequest("You have already voted for this entity before!")
 			} else {
 				// Remove all old votes by said user
-				_, err = tx.Exec(d.Context, "DELETE FROM entity_votes WHERE author = $1 AND target_id = $2 AND target_type = $3", d.Auth.ID, targetId, targetType)
+				err = db.New(tx).DeleteUserEntityVotes(d.Context, db.DeleteUserEntityVotesParams{
+					Author:     d.Auth.ID,
+					TargetID:   targetId,
+					TargetType: targetType,
+				})
 
 				if err != nil {
 					return resp.ErrDetail("Failed to delete old vote", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))

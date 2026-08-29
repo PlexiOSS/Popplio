@@ -7,11 +7,10 @@ package get_user_perms
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -23,11 +22,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	userPermColsArr = dbutil.GetCols(types.UserPerm{})
-	userPermCols    = strings.Join(userPermColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -50,21 +44,25 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	row, err := state.Pool.Query(d.Context, "SELECT "+userPermCols+" FROM users WHERE user_id = $1", id)
+	q := db.New(state.Pool)
 
-	if err != nil {
-		state.Logger.Error("Failed to get user perms", zap.Error(err), zap.String("user_id", id))
-		return uapi.DefaultResponse(http.StatusNotFound)
-	}
-
-	up, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.UserPerm])
+	row, err := q.GetUserPerm(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	if err != nil {
-		return resp.Err("Failed to get user perms", err, zap.String("user_id", id))
+		state.Logger.Error("Failed to get user perms", zap.Error(err), zap.String("user_id", id))
+		return uapi.DefaultResponse(http.StatusNotFound)
+	}
+
+	up := types.UserPerm{
+		ID:                    id,
+		Experiments:           row.Experiments,
+		Banned:                row.Banned,
+		CaptchaSponsorEnabled: row.CaptchaSponsorEnabled,
+		VoteBanned:            row.VoteBanned,
 	}
 
 	user, err := dovewing.GetUser(d.Context, id, state.DovewingPlatformDiscord)
@@ -76,9 +74,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	up.User = user
 
 	// Fetch staff status
-	var positions int
-
-	err = state.Pool.QueryRow(d.Context, "SELECT cardinality(positions) FROM staff_members WHERE user_id = $1", user.ID).Scan(&positions)
+	positions, err := q.GetStaffPositionCount(d.Context, user.ID)
 
 	if !errors.Is(err, pgx.ErrNoRows) && err != nil {
 		return resp.Err("Error while getting staff status", err, zap.String("userID", user.ID))

@@ -1,15 +1,19 @@
 // Command kitehelper is the operational CLI for Popplio's database.
 //
-// It applies schema migrations, rebuilds foreign keys, validates that tables
-// match the types they are scanned into, and runs the seed/test tooling. It
-// is a separate module from Popplio itself so that operating on the database
-// does not require building the API.
+// It rebuilds foreign keys, checks referential integrity between tables,
+// and runs the seed/test tooling. It is a separate module from Popplio
+// itself so that operating on the database does not require building the
+// API.
+//
+// Schema migrations used to live here too (a "migrate" subcommand against
+// a hardcoded postgres:///infinity DSN, fully disconnected from Popplio's
+// own config.yaml) -- that's been replaced by popplio/cmd/migrate, a real
+// goose-backed tool wired to the same config the API itself uses. See
+// popplio/db/migrations/README.md.
 package main
 
 import (
 	"fmt"
-	_ "kitehelper/icb/icb_migrations"
-	"kitehelper/migrate"
 	"kitehelper/rebuildfkeys"
 	"kitehelper/tests"
 	"kitehelper/validatetable"
@@ -44,10 +48,6 @@ var cmds = map[string]command{
 	"test": {
 		Func: tests.Tester,
 		Help: "Run tests [Set NO_INTERACTION environment variable to disable all input interaction]",
-	},
-	"migrate": {
-		Func: migrate.Migrate,
-		Help: "Run custom migrations",
 	},
 	"validate-table": {
 		Func: validatetable.ValidateTable,

@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
@@ -20,11 +21,7 @@ func cmdInviteDB() *Command {
 			discord.ApplicationCommandOptionString{Name: "bot", Description: "The invite to the bot", Required: true},
 		},
 		Run: func(c *Ctx) error {
-			var invite string
-
-			err := state.Pool.QueryRow(c.Context,
-				"SELECT invite FROM bots WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 1",
-				c.Option("bot", 0)).Scan(&invite)
+			invite, err := db.New(state.Pool).GetBotInvite(c.Context, c.Option("bot", 0))
 
 			if err != nil {
 				return err
@@ -44,9 +41,7 @@ func cmdInvite() *Command {
 			discord.ApplicationCommandOptionString{Name: "bot", Description: "The invite to the bot", Required: true},
 		},
 		Run: func(c *Ctx) error {
-			var clientID string
-
-			err := state.Pool.QueryRow(c.Context, "SELECT client_id FROM bots WHERE bot_id = $1", c.Option("bot", 0)).Scan(&clientID)
+			clientID, err := db.New(state.Pool).GetBotClientID(c.Context, c.Option("bot", 0))
 
 			if err != nil {
 				return err

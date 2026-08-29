@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -8,6 +10,7 @@ import (
 	"strings"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -49,9 +52,7 @@ func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (resp
 		return writeText(http.StatusBadRequest, err.Error()), nil
 	}
 
-	var popplioToken string
-
-	err = state.Pool.QueryRow(ctx, "SELECT popplio_token FROM staffpanel__authchain WHERE token = $1", q.LoginToken).Scan(&popplioToken)
+	popplioToken, err := db.New(state.Pool).GetPopplioTokenByToken(ctx, q.LoginToken)
 
 	if err != nil {
 		return response{}, newError(err)

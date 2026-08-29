@@ -1,36 +1,19 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
-
-type shopCouponRow struct {
-	ID                string    `db:"id"`
-	Code              string    `db:"code"`
-	Public            bool      `db:"public"`
-	MaxUses           *int32    `db:"max_uses"`
-	CreatedAt         time.Time `db:"created_at"`
-	CreatedBy         string    `db:"created_by"`
-	LastUpdated       time.Time `db:"last_updated"`
-	UpdatedBy         string    `db:"updated_by"`
-	ReuseWaitDuration *int32    `db:"reuse_wait_duration"`
-	Expiry            *int32    `db:"expiry"`
-	ApplicableItems   []string  `db:"applicable_items"`
-	Cents             *float64  `db:"cents"`
-	Requirements      []string  `db:"requirements"`
-	AllowedUsers      []string  `db:"allowed_users"`
-	Usable            bool      `db:"usable"`
-	TargetTypes       []string  `db:"target_types"`
-}
 
 func validateCoupon(action *types.ShopCouponUpsert) *response {
 	if action.MaxUses != nil && *action.MaxUses <= 0 {
@@ -57,8 +40,10 @@ func validateCoupon(action *types.ShopCouponUpsert) *response {
 }
 
 func validateCouponItems(ctx context.Context, items []string) (*response, error) {
+	q := db.New(state.Pool)
+
 	for _, item := range items {
-		exists, err := countExists(ctx, "SELECT COUNT(*) FROM shop_items WHERE id = $1", item)
+		exists, err := q.CountShopItemByID(ctx, item)
 
 		if err != nil {
 			return nil, err
@@ -71,6 +56,38 @@ func validateCouponItems(ctx context.Context, items []string) (*response, error)
 	}
 
 	return nil, nil
+}
+
+func int4FromPtr(v *int32) pgtype.Int4 {
+	if v == nil {
+		return pgtype.Int4{}
+	}
+
+	return pgtype.Int4{Int32: *v, Valid: true}
+}
+
+func float8FromPtr(v *float64) pgtype.Float8 {
+	if v == nil {
+		return pgtype.Float8{}
+	}
+
+	return pgtype.Float8{Float64: *v, Valid: true}
+}
+
+func ptrFromInt4(v pgtype.Int4) *int32 {
+	if !v.Valid {
+		return nil
+	}
+
+	return &v.Int32
+}
+
+func ptrFromFloat8(v pgtype.Float8) *float64 {
+	if !v.Valid {
+		return nil
+	}
+
+	return &v.Float64
 }
 
 func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoupons) (response, error) {
@@ -86,14 +103,7 @@ func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoup
 			return writeText(http.StatusForbidden, "You do not have permission to list shop coupons [view_shop]"), nil
 		}
 
-		rows, err := state.Pool.Query(ctx,
-			"SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, cents, requirements, allowed_users, usable, target_types FROM shop_coupons ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		couponRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[shopCouponRow])
+		couponRows, err := db.New(state.Pool).ListShopCoupons(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -106,15 +116,15 @@ func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoup
 				ID:                c.ID,
 				Code:              c.Code,
 				Public:            c.Public,
-				MaxUses:           c.MaxUses,
-				CreatedAt:         types.NewTimestamp(c.CreatedAt),
+				MaxUses:           ptrFromInt4(c.MaxUses),
+				CreatedAt:         types.NewTimestamp(c.CreatedAt.Time),
 				CreatedBy:         c.CreatedBy,
-				LastUpdated:       types.NewTimestamp(c.LastUpdated),
+				LastUpdated:       types.NewTimestamp(c.LastUpdated.Time),
 				UpdatedBy:         c.UpdatedBy,
-				ReuseWaitDuration: c.ReuseWaitDuration,
-				Expiry:            c.Expiry,
+				ReuseWaitDuration: ptrFromInt4(c.ReuseWaitDuration),
+				Expiry:            ptrFromInt4(c.Expiry),
 				ApplicableItems:   types.NonNilStrings(c.ApplicableItems),
-				Cents:             c.Cents,
+				Cents:             ptrFromFloat8(c.Cents),
 				Requirements:      types.NonNilStrings(c.Requirements),
 				AllowedUsers:      types.NonNilStrings(c.AllowedUsers),
 				Usable:            c.Usable,
@@ -144,11 +154,21 @@ func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoup
 			return *resp, nil
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"INSERT INTO shop_coupons (id, code, public, max_uses, created_by, updated_by, reuse_wait_duration, expiry, applicable_items, cents, requirements, allowed_users, usable, target_types) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
-			action.ID, action.Code, action.Public, action.MaxUses, authData.UserID,
-			action.ReuseWaitDuration, action.Expiry, action.ApplicableItems, action.Cents,
-			action.Requirements, action.AllowedUsers, action.Usable, action.TargetTypes)
+		err = db.New(state.Pool).InsertShopCoupon(ctx, db.InsertShopCouponParams{
+			ID:                action.ID,
+			Code:              action.Code,
+			Public:            action.Public,
+			MaxUses:           int4FromPtr(action.MaxUses),
+			CreatedBy:         authData.UserID,
+			ReuseWaitDuration: int4FromPtr(action.ReuseWaitDuration),
+			Expiry:            int4FromPtr(action.Expiry),
+			ApplicableItems:   types.NonNilStrings(action.ApplicableItems),
+			Cents:             float8FromPtr(action.Cents),
+			Requirements:      types.NonNilStrings(action.Requirements),
+			AllowedUsers:      types.NonNilStrings(action.AllowedUsers),
+			Usable:            action.Usable,
+			TargetTypes:       types.NonNilStrings(action.TargetTypes),
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -176,17 +196,33 @@ func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoup
 			return *resp, nil
 		}
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM shop_coupons WHERE id = $1", action.ID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountShopCouponByID(ctx, action.ID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE shop_coupons SET code = $1, public = $2, max_uses = $3, reuse_wait_duration = $4, expiry = $5, applicable_items = $6, cents = $7, requirements = $8, updated_by = $9, last_updated = NOW(), allowed_users = $10, usable = $11, target_types = $12 WHERE id = $13",
-			action.Code, action.Public, action.MaxUses, action.ReuseWaitDuration, action.Expiry,
-			action.ApplicableItems, action.Cents, action.Requirements, authData.UserID,
-			action.AllowedUsers, action.Usable, action.TargetTypes, action.ID)
+		err = queries.UpdateShopCoupon(ctx, db.UpdateShopCouponParams{
+			Code:              action.Code,
+			Public:            action.Public,
+			MaxUses:           int4FromPtr(action.MaxUses),
+			ReuseWaitDuration: int4FromPtr(action.ReuseWaitDuration),
+			Expiry:            int4FromPtr(action.Expiry),
+			ApplicableItems:   types.NonNilStrings(action.ApplicableItems),
+			Cents:             float8FromPtr(action.Cents),
+			Requirements:      types.NonNilStrings(action.Requirements),
+			UpdatedBy:         authData.UserID,
+			AllowedUsers:      types.NonNilStrings(action.AllowedUsers),
+			Usable:            action.Usable,
+			TargetTypes:       types.NonNilStrings(action.TargetTypes),
+			ID:                action.ID,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -200,13 +236,19 @@ func (s *Server) updateShopCoupons(ctx context.Context, q *types.QUpdateShopCoup
 
 		id := q.Action.Delete.ID
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM shop_coupons WHERE id = $1", id); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountShopCouponByID(ctx, id)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM shop_coupons WHERE id = $1", id); err != nil {
+		if err := queries.DeleteShopCoupon(ctx, id); err != nil {
 			return response{}, newError(err)
 		}
 

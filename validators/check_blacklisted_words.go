@@ -5,16 +5,23 @@ import (
 	"errors"
 	"fmt"
 
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/jackc/pgx/v5"
 )
 
-// Returns the system for which this word is blacklisted
-func GetWordBlacklistSystems(ctx context.Context, word string) ([]string, error) {
-	var systems []string
+// BlacklistedWordRow describes blacklisted_words's columns actually relied
+// on by Popplio (it's otherwise queried via sqlc, not scanned into this
+// struct in practice) -- exists so cmd/migrate's schema validation has
+// something to check this table's columns against.
+type BlacklistedWordRow struct {
+	Word    string   `db:"word"`
+	Systems []string `db:"systems"`
+}
 
-	err := state.Pool.QueryRow(ctx, "SELECT systems FROM blacklisted_words WHERE word = $1", word).Scan(&systems)
+func GetWordBlacklistSystems(ctx context.Context, word string) ([]string, error) {
+	systems, err := db.New(state.Pool).GetWordBlacklistSystems(ctx, word)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

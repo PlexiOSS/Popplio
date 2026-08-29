@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
@@ -28,32 +29,27 @@ import (
 // member of its owning team otherwise — a bot is always one or the other,
 // never both (see the owner_team_oneof check constraint).
 func certBotOwnerIDs(ctx context.Context, botID string) ([]string, error) {
-	var owner pgtype.Text
-	var teamOwner pgtype.UUID
-
-	err := state.Pool.QueryRow(ctx, "SELECT owner, team_owner FROM bots WHERE bot_id = $1", botID).Scan(&owner, &teamOwner)
+	row, err := db.New(state.Pool).GetBotTeamAndOwner(ctx, botID)
 
 	if err != nil {
 		return nil, fmt.Errorf("error fetching bot owner info: %w", err)
 	}
 
-	if owner.Valid && owner.String != "" {
-		return []string{owner.String}, nil
+	if row.Owner.Valid && row.Owner.String != "" {
+		return []string{row.Owner.String}, nil
 	}
 
-	if !teamOwner.Valid {
+	if !row.TeamOwner.Valid {
 		return nil, nil
 	}
 
-	return teamMemberIDs(ctx, teamOwner)
+	return teamMemberIDs(ctx, row.TeamOwner)
 }
 
 // certServerOwnerIDs returns every member of a server's owning team —
 // servers are always team-owned, there's no direct-owner equivalent.
 func certServerOwnerIDs(ctx context.Context, serverID string) ([]string, error) {
-	var teamOwner pgtype.UUID
-
-	err := state.Pool.QueryRow(ctx, "SELECT team_owner FROM servers WHERE server_id = $1", serverID).Scan(&teamOwner)
+	teamOwner, err := db.New(state.Pool).GetServerTeamOwner(ctx, serverID)
 
 	if err != nil {
 		return nil, fmt.Errorf("error fetching server owner info: %w", err)
@@ -67,27 +63,13 @@ func certServerOwnerIDs(ctx context.Context, serverID string) ([]string, error) 
 }
 
 func teamMemberIDs(ctx context.Context, teamID pgtype.UUID) ([]string, error) {
-	rows, err := state.Pool.Query(ctx, "SELECT user_id FROM team_members WHERE team_id = $1", teamID)
+	ids, err := db.New(state.Pool).GetTeamMemberUserIDs(ctx, teamID)
 
 	if err != nil {
 		return nil, fmt.Errorf("error fetching team members: %w", err)
 	}
 
-	defer rows.Close()
-
-	var ids []string
-
-	for rows.Next() {
-		var id string
-
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("error scanning team member id: %w", err)
-		}
-
-		ids = append(ids, id)
-	}
-
-	return ids, rows.Err()
+	return ids, nil
 }
 
 // grantCertOwnerRoles gives BotDeveloper/CertifiedDeveloper to every owner
@@ -163,8 +145,7 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 	}
 
 	// Get the bot
-	var botType string
-	err := state.Pool.QueryRow(d.Context, "SELECT type FROM bots WHERE bot_id = $1", botID).Scan(&botType)
+	botType, err := db.New(state.Pool).GetBotType(d.Context, botID)
 
 	if err != nil {
 		return fmt.Errorf("error getting bot type, does the bot exist?: %w", err)
@@ -186,7 +167,7 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 	}
 
 	// Set the bot type to pending
-	_, err = state.Pool.Exec(d.Context, "UPDATE bots SET type = 'pending', claimed_by = NULL WHERE bot_id = $1", botID)
+	err = db.New(state.Pool).ResubmitBot(d.Context, botID)
 
 	if err != nil {
 		return fmt.Errorf("error setting bot type to pending: %w", err)
@@ -242,14 +223,15 @@ func extraLogicCert(d uapi.RouteData, p types.Position, answers map[string]strin
 	}
 
 	// Get the bot
-	var botType string
-	var serverCount, uniqueClicks, approxVotes int64
-	var createdAt time.Time
-	err := state.Pool.QueryRow(d.Context, "SELECT type, servers, cardinality(unique_clicks), approximate_votes, created_at FROM bots WHERE bot_id = $1", botID).Scan(&botType, &serverCount, &uniqueClicks, &approxVotes, &createdAt)
+	row, err := db.New(state.Pool).GetBotCertStats(d.Context, botID)
 
 	if err != nil {
 		return fmt.Errorf("error getting bot info, does the bot exist?: %w", err)
 	}
+
+	botType := row.Type
+	serverCount, uniqueClicks, approxVotes := int64(row.Servers), int64(row.UniqueClicks), int64(row.ApproximateVotes)
+	createdAt := row.CreatedAt.Time
 
 	entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "bot", botID)
 
@@ -282,14 +264,15 @@ func extraLogicCertServer(d uapi.RouteData, p types.Position, answers map[string
 	}
 
 	// Get the server
-	var serverType string
-	var memberCount, uniqueClicks, approxVotes int64
-	var createdAt time.Time
-	err := state.Pool.QueryRow(d.Context, "SELECT type, total_members, cardinality(unique_clicks), approximate_votes, created_at FROM servers WHERE server_id = $1", serverID).Scan(&serverType, &memberCount, &uniqueClicks, &approxVotes, &createdAt)
+	row, err := db.New(state.Pool).GetServerCertStats(d.Context, serverID)
 
 	if err != nil {
 		return fmt.Errorf("error getting server info, does the server exist?: %w", err)
 	}
+
+	serverType := row.Type
+	memberCount, uniqueClicks, approxVotes := int64(row.TotalMembers), int64(row.UniqueClicks), int64(row.ApproximateVotes)
+	createdAt := row.CreatedAt.Time
 
 	entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "server", serverID)
 
@@ -359,8 +342,7 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 		}
 
 		// Get the bot
-		var botType string
-		err = state.Pool.QueryRow(d.Context, "SELECT type FROM bots WHERE bot_id = $1", botID).Scan(&botType)
+		botType, err := db.New(state.Pool).GetBotType(d.Context, botID)
 
 		if err != nil {
 			return fmt.Errorf("error getting bot type, does the bot exist?: %w", err)
@@ -375,7 +357,7 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 		}
 
 		// Set the bot type to certified
-		_, err = state.Pool.Exec(d.Context, "UPDATE bots SET type = 'certified' WHERE bot_id = $1", botID)
+		err = db.New(state.Pool).CertifyBot(d.Context, botID)
 
 		if err != nil {
 			return fmt.Errorf("error setting bot type to certified: %w", err)
@@ -447,8 +429,7 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 		}
 
 		// Get the server
-		var serverType string
-		err := state.Pool.QueryRow(d.Context, "SELECT type FROM servers WHERE server_id = $1", serverID).Scan(&serverType)
+		serverType, err := db.New(state.Pool).GetServerType(d.Context, serverID)
 
 		if err != nil {
 			return fmt.Errorf("error getting server type, does the server exist?: %w", err)
@@ -463,7 +444,7 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 		}
 
 		// Set the server type to certified
-		_, err = state.Pool.Exec(d.Context, "UPDATE servers SET type = 'certified' WHERE server_id = $1", serverID)
+		err = db.New(state.Pool).CertifyServer(d.Context, serverID)
 
 		if err != nil {
 			return fmt.Errorf("error setting server type to certified: %w", err)

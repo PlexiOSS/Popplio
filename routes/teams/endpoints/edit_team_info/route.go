@@ -1,12 +1,12 @@
-// Package edit_team_info implements PATCH /teams/{tid} — "Edit Team Info".
-//
-// Edits a team. Returns a 204 on success.
 package edit_team_info
 
 import (
 	"net/http"
 
+	"encoding/json"
+
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -59,7 +59,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -75,34 +74,38 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Get current name and avatar
-	var oldName string
-	var oldShort pgtype.Text
-	var oldTags []string
-	var oldExtraLinks []types.Link
-	var oldNsfw bool
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT name, short, tags, extra_links, nsfw FROM teams WHERE id = $1", teamId).Scan(&oldName, &oldShort, &oldTags, &oldExtraLinks, &oldNsfw)
+	oldInfo, err := q.GetTeamInfoForEdit(d.Context, teamId)
 
 	if err != nil {
 		return resp.Err("Error getting team info [db queryrow]", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
 	}
 
-	// Update the team
-	_, err = tx.Exec(d.Context, "UPDATE teams SET updated_at = NOW() WHERE id = $1", teamId)
+	oldName, oldShort, oldTags, oldNsfw := oldInfo.Name, oldInfo.Short, oldInfo.Tags, oldInfo.Nsfw
+
+	var oldExtraLinks []types.Link
+	if err := json.Unmarshal(oldInfo.ExtraLinks, &oldExtraLinks); err != nil {
+		return resp.Err("Error parsing team extra_links [json]", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
+	}
+
+	err = q.TouchTeamUpdatedAt(d.Context, teamId)
 
 	if err != nil {
 		return resp.Err("Error updating team updated_at", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
 	}
 
-	_, err = tx.Exec(d.Context, "UPDATE teams SET name = $1 WHERE id = $2", payload.Name, teamId)
+	err = q.UpdateTeamName(d.Context, db.UpdateTeamNameParams{Name: payload.Name, ID: teamId})
 
 	if err != nil {
 		return resp.Err("Error updating team info", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
 	}
 
 	if payload.Short != nil {
-		_, err = tx.Exec(d.Context, "UPDATE teams SET short = $1 WHERE id = $2", payload.Short, teamId)
+		err = q.UpdateTeamShort(d.Context, db.UpdateTeamShortParams{
+			Short: pgtype.Text{String: *payload.Short, Valid: true},
+			ID:    teamId,
+		})
 
 		if err != nil {
 			return resp.Err("Error updating team info", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
@@ -110,7 +113,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if payload.Tags != nil {
-		_, err = tx.Exec(d.Context, "UPDATE teams SET tags = $1 WHERE id = $2", payload.Tags, teamId)
+		err = q.UpdateTeamTags(d.Context, db.UpdateTeamTagsParams{Tags: *payload.Tags, ID: teamId})
 
 		if err != nil {
 			return resp.Err("Error updating team info", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
@@ -124,7 +127,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest(err.Error())
 		}
 
-		_, err = tx.Exec(d.Context, "UPDATE teams SET extra_links = $1 WHERE id = $2", payload.ExtraLinks, teamId)
+		extraLinksJSON, err := json.Marshal(*payload.ExtraLinks)
+
+		if err != nil {
+			return resp.Err("Error marshaling extra links", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
+		}
+
+		err = q.UpdateTeamExtraLinks(d.Context, db.UpdateTeamExtraLinksParams{ExtraLinks: extraLinksJSON, ID: teamId})
 
 		if err != nil {
 			return resp.Err("Error updating team info", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
@@ -147,7 +156,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if isTeamNsfw != oldNsfw {
-		_, err = tx.Exec(d.Context, "UPDATE teams SET nsfw = $1 WHERE id = $2", isTeamNsfw, teamId)
+		err = q.UpdateTeamNsfw(d.Context, db.UpdateTeamNsfwParams{Nsfw: isTeamNsfw, ID: teamId})
 
 		if err != nil {
 			return resp.Err("Error updating team info", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))

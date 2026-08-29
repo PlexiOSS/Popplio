@@ -5,10 +5,10 @@ import (
 	"sort"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
@@ -25,44 +25,22 @@ func Docs() *docs.Doc {
 	}
 }
 
-type staffMemberRow struct {
-	UserID    string        `db:"user_id"`
-	Positions []pgtype.UUID `db:"positions"`
-}
-
-type staffPositionRow struct {
-	ID    pgtype.UUID `db:"id"`
-	Name  string      `db:"name"`
-	Icon  string      `db:"icon"`
-	Index int32       `db:"index"`
-}
-
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	memberRows, err := state.Pool.Query(d.Context, "SELECT user_id, positions FROM staff_members")
+	q := db.New(state.Pool)
+
+	members, err := q.GetStaffMembersRoster(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while fetching staff members [db fetch]", err)
 	}
 
-	members, err := pgx.CollectRows(memberRows, pgx.RowToStructByName[staffMemberRow])
-
-	if err != nil {
-		return resp.Err("Error while fetching staff members [collect]", err)
-	}
-
-	positionRows, err := state.Pool.Query(d.Context, "SELECT id, name, icon, index FROM staff_positions")
+	positionList, err := q.GetStaffPositionsRoster(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while fetching staff positions [db fetch]", err)
 	}
 
-	positionList, err := pgx.CollectRows(positionRows, pgx.RowToStructByName[staffPositionRow])
-
-	if err != nil {
-		return resp.Err("Error while fetching staff positions [collect]", err)
-	}
-
-	positionsByID := make(map[pgtype.UUID]staffPositionRow, len(positionList))
+	positionsByID := make(map[pgtype.UUID]db.GetStaffPositionsRosterRow, len(positionList))
 	for _, p := range positionList {
 		positionsByID[p.ID] = p
 	}

@@ -6,13 +6,12 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 )
 
 func featureAdd(ctx context.Context, m *types.RPCFeatureAdd, h Handle) (Success, error) {
-	table, idCol, err := entityTable(h.TargetType)
-
-	if err != nil {
+	if _, _, err := entityTable(h.TargetType); err != nil {
 		return Success{}, err
 	}
 
@@ -20,10 +19,21 @@ func featureAdd(ctx context.Context, m *types.RPCFeatureAdd, h Handle) (Success,
 		return Success{}, err
 	}
 
-	_, err = state.Pool.Exec(ctx,
-		"UPDATE "+table+" SET featured_until = GREATEST(COALESCE(featured_until, NOW()), NOW()) + make_interval(hours => $1) WHERE "+idCol+" = $2",
-		m.TimePeriodHours, m.TargetID,
-	)
+	q := db.New(state.Pool)
+
+	var err error
+	switch h.TargetType {
+	case types.TargetTypeBot:
+		err = q.ApplyBotFeaturedSlot(ctx, db.ApplyBotFeaturedSlotParams{
+			Hours: int32(m.TimePeriodHours),
+			BotID: m.TargetID,
+		})
+	case types.TargetTypeServer:
+		err = q.ApplyServerFeaturedSlot(ctx, db.ApplyServerFeaturedSlotParams{
+			Hours:    int32(m.TimePeriodHours),
+			ServerID: m.TargetID,
+		})
+	}
 
 	if err != nil {
 		return Success{}, err
@@ -42,9 +52,7 @@ func featureAdd(ctx context.Context, m *types.RPCFeatureAdd, h Handle) (Success,
 }
 
 func featureRemove(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, error) {
-	table, idCol, err := entityTable(h.TargetType)
-
-	if err != nil {
+	if _, _, err := entityTable(h.TargetType); err != nil {
 		return Success{}, err
 	}
 
@@ -52,7 +60,17 @@ func featureRemove(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE "+table+" SET featured_until = NULL WHERE "+idCol+" = $1", m.TargetID); err != nil {
+	q := db.New(state.Pool)
+
+	var err error
+	switch h.TargetType {
+	case types.TargetTypeBot:
+		err = q.ClearBotFeaturedUntil(ctx, m.TargetID)
+	case types.TargetTypeServer:
+		err = q.ClearServerFeaturedUntil(ctx, m.TargetID)
+	}
+
+	if err != nil {
 		return Success{}, err
 	}
 

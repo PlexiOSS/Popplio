@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -25,9 +26,10 @@ func EnsurePanelAuth(ctx context.Context, r *http.Request) (uid string, err erro
 		return "", errors.New("missing user id header")
 	}
 
-	var count int64
-
-	err = state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM staffpanel__authchain WHERE popplio_token = $1 AND user_id = $2", ssToken, userId).Scan(&count)
+	count, err := db.New(state.Pool).CountAuthChainToken(ctx, db.CountAuthChainTokenParams{
+		PopplioToken: ssToken,
+		UserID:       userId,
+	})
 
 	if err != nil {
 		return "", err

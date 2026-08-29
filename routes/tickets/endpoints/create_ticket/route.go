@@ -1,14 +1,12 @@
-// Package create_ticket implements POST /users/{user_id}/tickets — "Create
-// Ticket".
-//
-// Opens a new standalone support ticket. Returns the new ticket's ID.
 package create_ticket
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/tickets"
 	"popplio/types"
@@ -85,10 +83,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		AuthorID: d.Auth.ID,
 	}
 
-	_, err = state.Pool.Exec(d.Context,
-		"INSERT INTO tickets (id, channel_id, topic_id, issue, messages, user_id) VALUES ($1, $2, $3, $4, $5, $6)",
-		ticketID, "", payload.Topic, payload.Issue, []types.Message{firstMessage}, d.Auth.ID,
-	)
+	messagesJSON, err := json.Marshal([]types.Message{firstMessage})
+
+	if err != nil {
+		return resp.Err("Failed to marshal ticket message", err)
+	}
+
+	err = db.New(state.Pool).InsertTicket(d.Context, db.InsertTicketParams{
+		ID:        ticketID,
+		ChannelID: "",
+		TopicID:   payload.Topic,
+		Issue:     payload.Issue,
+		Messages:  messagesJSON,
+		UserID:    d.Auth.ID,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to create ticket", err)

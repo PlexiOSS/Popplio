@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
 	ptypes "popplio/types"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -63,45 +65,35 @@ func (e EntityManagers) MentionUsers() string {
 // GetEntityManagers resolves who manages a given entity. Error strings are
 // user-visible in Discord and the panel, so they are reproduced verbatim.
 func GetEntityManagers(ctx context.Context, targetType types.TargetType, targetID string) (EntityManagers, error) {
+	q := db.New(state.Pool)
+
 	var teamID uuid.UUID
 
 	switch targetType {
 	case types.TargetTypeBot:
-		var owner *string
-
-		err := state.Pool.QueryRow(ctx, "SELECT owner FROM bots WHERE bot_id = $1", targetID).Scan(&owner)
+		row, err := q.GetBotTeamAndOwner(ctx, targetID)
 
 		if err != nil {
 			return EntityManagers{}, fmt.Errorf("Error while checking for owner of bot %s: %s", targetID, err)
 		}
 
-		if owner != nil {
-			return EntityManagers{users: []manager{{mentionable: true, user: *owner}}}, nil
+		if row.Owner.Valid {
+			return EntityManagers{users: []manager{{mentionable: true, user: row.Owner.String}}}, nil
 		}
 
-		var teamOwner *uuid.UUID
-
-		err = state.Pool.QueryRow(ctx, "SELECT team_owner FROM bots WHERE bot_id = $1", targetID).Scan(&teamOwner)
-
-		if err != nil {
-			return EntityManagers{}, fmt.Errorf("Error while checking for team owner of bot %s: %s", targetID, err)
-		}
-
-		if teamOwner == nil {
+		if !row.TeamOwner.Valid {
 			return EntityManagers{}, fmt.Errorf("Bot %s is not owned by a team or a user. Please contact a dev right now!", targetID)
 		}
 
-		teamID = *teamOwner
+		teamID = uuid.UUID(row.TeamOwner.Bytes)
 	case types.TargetTypeServer:
-		var teamOwner uuid.UUID
-
-		err := state.Pool.QueryRow(ctx, "SELECT team_owner FROM servers WHERE server_id = $1", targetID).Scan(&teamOwner)
+		teamOwner, err := q.GetServerTeamOwner(ctx, targetID)
 
 		if err != nil {
 			return EntityManagers{}, fmt.Errorf("Error while checking for team owner of server %s: %s", targetID, err)
 		}
 
-		teamID = teamOwner
+		teamID = uuid.UUID(teamOwner.Bytes)
 	case types.TargetTypeTeam:
 		parsed, err := uuid.Parse(targetID)
 
@@ -111,13 +103,13 @@ func GetEntityManagers(ctx context.Context, targetType types.TargetType, targetI
 
 		teamID = parsed
 	case types.TargetTypeUser:
-		var userID string
-
-		err := state.Pool.QueryRow(ctx, "SELECT user_id FROM users WHERE user_id = $1", targetID).Scan(&userID)
+		exists, err := q.UserExists(ctx, targetID)
 
 		switch {
+		case err == nil && exists:
+			return EntityManagers{users: []manager{{mentionable: true, user: targetID}}}, nil
 		case err == nil:
-			return EntityManagers{users: []manager{{mentionable: true, user: userID}}}, nil
+			return EntityManagers{}, fmt.Errorf("User %s not found.", targetID)
 		case errors.Is(err, pgx.ErrNoRows):
 			return EntityManagers{}, fmt.Errorf("User %s not found.", targetID)
 		default:
@@ -129,29 +121,18 @@ func GetEntityManagers(ctx context.Context, targetType types.TargetType, targetI
 		return EntityManagers{}, errors.New("Packs are not supported yet!")
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT user_id, mentionable FROM team_members WHERE team_id = $1", teamID)
+	rows, err := q.GetTeamMembersMentionable(ctx, pgtype.UUID{Bytes: teamID, Valid: true})
 
 	if err != nil {
 		return EntityManagers{}, fmt.Errorf("Error while getting team members of team %s: %s", teamID, err)
 	}
 
-	type teamMember struct {
-		UserID      string `db:"user_id"`
-		Mentionable bool   `db:"mentionable"`
-	}
-
-	members, err := pgx.CollectRows(rows, pgx.RowToStructByName[teamMember])
-
-	if err != nil {
-		return EntityManagers{}, fmt.Errorf("Error while getting team members of team %s: %s", teamID, err)
-	}
-
-	if len(members) == 0 {
+	if len(rows) == 0 {
 		return EntityManagers{}, fmt.Errorf("Entity %s is on a team with no members. Please contact a dev right now!", targetID)
 	}
 
-	users := make([]manager, 0, len(members))
-	for _, m := range members {
+	users := make([]manager, 0, len(rows))
+	for _, m := range rows {
 		users = append(users, manager{mentionable: m.Mentionable, user: m.UserID})
 	}
 
@@ -173,32 +154,20 @@ func GetBotManagers(ctx context.Context, botIDs []string) (map[string]EntityMana
 		return out, nil
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT bot_id, owner, team_owner FROM bots WHERE bot_id = ANY($1)", botIDs)
+	owners, err := db.New(state.Pool).GetBotsOwnersByIDs(ctx, botIDs)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while checking for owner of bots: %s", err)
 	}
 
-	type ownerRow struct {
-		BotID     string     `db:"bot_id"`
-		Owner     *string    `db:"owner"`
-		TeamOwner *uuid.UUID `db:"team_owner"`
-	}
-
-	owners, err := pgx.CollectRows(rows, pgx.RowToStructByName[ownerRow])
-
-	if err != nil {
-		return nil, fmt.Errorf("Error while checking for owner of bots: %s", err)
-	}
-
-	byBot := make(map[string]ownerRow, len(owners))
+	byBot := make(map[string]db.GetBotsOwnersByIDsRow, len(owners))
 	teamIDs := make([]uuid.UUID, 0, len(owners))
 
 	for _, row := range owners {
 		byBot[row.BotID] = row
 
-		if row.Owner == nil && row.TeamOwner != nil {
-			teamIDs = append(teamIDs, *row.TeamOwner)
+		if !row.Owner.Valid && row.TeamOwner.Valid {
+			teamIDs = append(teamIDs, uuid.UUID(row.TeamOwner.Bytes))
 		}
 	}
 
@@ -215,16 +184,16 @@ func GetBotManagers(ctx context.Context, botIDs []string) (map[string]EntityMana
 			return nil, fmt.Errorf("Error while checking for owner of bot %s: %s", botID, pgx.ErrNoRows)
 		}
 
-		if row.Owner != nil {
-			out[botID] = EntityManagers{users: []manager{{mentionable: true, user: *row.Owner}}}
+		if row.Owner.Valid {
+			out[botID] = EntityManagers{users: []manager{{mentionable: true, user: row.Owner.String}}}
 			continue
 		}
 
-		if row.TeamOwner == nil {
+		if !row.TeamOwner.Valid {
 			return nil, fmt.Errorf("Bot %s is not owned by a team or a user. Please contact a dev right now!", botID)
 		}
 
-		members := teams[*row.TeamOwner]
+		members := teams[uuid.UUID(row.TeamOwner.Bytes)]
 
 		if len(members) == 0 {
 			return nil, fmt.Errorf("Entity %s is on a team with no members. Please contact a dev right now!", botID)
@@ -244,18 +213,7 @@ func GetServerManagers(ctx context.Context, serverIDs []string) (map[string]Enti
 		return out, nil
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT server_id, team_owner FROM servers WHERE server_id = ANY($1)", serverIDs)
-
-	if err != nil {
-		return nil, fmt.Errorf("Error while checking for team owner of servers: %s", err)
-	}
-
-	type ownerRow struct {
-		ServerID  string    `db:"server_id"`
-		TeamOwner uuid.UUID `db:"team_owner"`
-	}
-
-	owners, err := pgx.CollectRows(rows, pgx.RowToStructByName[ownerRow])
+	owners, err := db.New(state.Pool).GetServersTeamOwnersByIDs(ctx, serverIDs)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while checking for team owner of servers: %s", err)
@@ -265,8 +223,9 @@ func GetServerManagers(ctx context.Context, serverIDs []string) (map[string]Enti
 	teamIDs := make([]uuid.UUID, 0, len(owners))
 
 	for _, row := range owners {
-		byServer[row.ServerID] = row.TeamOwner
-		teamIDs = append(teamIDs, row.TeamOwner)
+		teamOwner := uuid.UUID(row.TeamOwner.Bytes)
+		byServer[row.ServerID] = teamOwner
+		teamIDs = append(teamIDs, teamOwner)
 	}
 
 	teams, err := teamMembers(ctx, teamIDs)
@@ -302,26 +261,20 @@ func teamMembers(ctx context.Context, teamIDs []uuid.UUID) (map[uuid.UUID][]mana
 		return out, nil
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT team_id, user_id, mentionable FROM team_members WHERE team_id = ANY($1)", teamIDs)
-
-	if err != nil {
-		return nil, fmt.Errorf("Error while getting team members of teams: %s", err)
+	pgTeamIDs := make([]pgtype.UUID, len(teamIDs))
+	for i, id := range teamIDs {
+		pgTeamIDs[i] = pgtype.UUID{Bytes: id, Valid: true}
 	}
 
-	type memberRow struct {
-		TeamID      uuid.UUID `db:"team_id"`
-		UserID      string    `db:"user_id"`
-		Mentionable bool      `db:"mentionable"`
-	}
-
-	members, err := pgx.CollectRows(rows, pgx.RowToStructByName[memberRow])
+	members, err := db.New(state.Pool).GetTeamMembersByTeamIDs(ctx, pgTeamIDs)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while getting team members of teams: %s", err)
 	}
 
 	for _, m := range members {
-		out[m.TeamID] = append(out[m.TeamID], manager{mentionable: m.Mentionable, user: m.UserID})
+		teamID := uuid.UUID(m.TeamID.Bytes)
+		out[teamID] = append(out[teamID], manager{mentionable: m.Mentionable, user: m.UserID})
 	}
 
 	return out, nil
@@ -338,39 +291,16 @@ type OwnedBy struct {
 // owned directly (not team-owned), and the packs they own outright. Unknown
 // entity strings are logged and skipped.
 func GetOwnedBy(ctx context.Context, userID string) ([]OwnedBy, error) {
-	rows, err := state.Pool.Query(ctx, `
-        SELECT bot_id as id, type, 'bot' as entity
-        FROM bots
-        WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1)
-           OR owner = $1
-
-        UNION
-
-        SELECT server_id as id, type, 'server' as entity
-        FROM servers
-        WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1)
-
-        UNION
-
-        SELECT url as id, 'pack' as type, 'pack' as entity
-        FROM packs
-        WHERE owner = $1
-        `, userID)
+	rows, err := db.New(state.Pool).GetUserOwnedEntities(ctx, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while executing query for user %s: %s", userID, err)
 	}
 
-	defer rows.Close()
-
 	var ownedBy []OwnedBy
 
-	for rows.Next() {
-		var id, entityState, entity string
-
-		if err := rows.Scan(&id, &entityState, &entity); err != nil {
-			return nil, fmt.Errorf("Error while executing query for user %s: %s", userID, err)
-		}
+	for _, row := range rows {
+		id, entityState, entity := row.ID, row.Type, row.Entity
 
 		var targetType types.TargetType
 
@@ -391,10 +321,6 @@ func GetOwnedBy(ctx context.Context, userID string) ([]OwnedBy, error) {
 			TargetID:    id,
 			EntityState: entityState,
 		})
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Error while executing query for user %s: %s", userID, err)
 	}
 
 	return ownedBy, nil

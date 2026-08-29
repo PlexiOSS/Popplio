@@ -9,11 +9,13 @@ import (
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
 	"popplio/arcadia/tasks"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // /staffroles: what a staff role means.
@@ -244,11 +246,12 @@ func runRolesCreate(c *Ctx) error {
 
 	defer tx.Rollback(c.Context)
 
-	var taken bool
+	q := db.New(tx)
 
-	err = tx.QueryRow(c.Context,
-		"SELECT EXISTS(SELECT 1 FROM staff_positions WHERE name = $1 OR role_id = $2)",
-		name, roleID.String()).Scan(&taken)
+	taken, err := q.CountStaffPositionByNameOrRoleID(c.Context, db.CountStaffPositionByNameOrRoleIDParams{
+		Name:   name,
+		RoleID: roleID.String(),
+	})
 
 	if err != nil {
 		return err
@@ -260,9 +263,9 @@ func runRolesCreate(c *Ctx) error {
 
 	// New roles go to the bottom of the hierarchy. Moving them up is a separate,
 	// deliberate act through the panel, which handles the reshuffle.
-	var index int32
+	index, err := q.GetNextStaffPositionIndex(c.Context)
 
-	if err := tx.QueryRow(c.Context, "SELECT COALESCE(MAX(index), 0) + 1 FROM staff_positions").Scan(&index); err != nil {
+	if err != nil {
 		return err
 	}
 
@@ -270,9 +273,11 @@ func runRolesCreate(c *Ctx) error {
 		return fmt.Errorf("you cannot create a role at rank #%d, which is at or above your own (#%d)", index, manager.rank)
 	}
 
-	_, err = tx.Exec(c.Context,
-		"INSERT INTO staff_positions (name, role_id, perms, index) VALUES ($1, $2, '{}', $3)",
-		name, roleID.String(), index)
+	err = q.InsertStaffPosition(c.Context, db.InsertStaffPositionParams{
+		Name:   name,
+		RoleID: roleID.String(),
+		Index:  index,
+	})
 
 	if err != nil {
 		return err
@@ -343,7 +348,15 @@ func editRolePerms(c *Ctx, granting bool) error {
 		return fmt.Errorf("you do not hold %s yourself, so you cannot change it on a role", perms.Staff.Label(perm))
 	}
 
-	_, err = state.Pool.Exec(c.Context, "UPDATE staff_positions SET perms = $1 WHERE id = $2", next.Strings(), role.ID)
+	var roleUUID pgtype.UUID
+	if err := roleUUID.Scan(role.ID); err != nil {
+		return err
+	}
+
+	_, err = db.New(state.Pool).UpdateStaffPositionPerms(c.Context, db.UpdateStaffPositionPermsParams{
+		Perms: next.Strings(),
+		ID:    roleUUID,
+	})
 
 	if err != nil {
 		return err
@@ -391,7 +404,15 @@ func runRolesRename(c *Ctx) error {
 		return errors.New("A name is required")
 	}
 
-	_, err = state.Pool.Exec(c.Context, "UPDATE staff_positions SET name = $1 WHERE id = $2", name, role.ID)
+	var roleUUID pgtype.UUID
+	if err := roleUUID.Scan(role.ID); err != nil {
+		return err
+	}
+
+	err = db.New(state.Pool).RenameStaffPosition(c.Context, db.RenameStaffPositionParams{
+		Name: name,
+		ID:   roleUUID,
+	})
 
 	if err != nil {
 		return err
@@ -433,7 +454,12 @@ func runRolesDelete(c *Ctx) error {
 		return err
 	}
 
-	if _, err := state.Pool.Exec(c.Context, "DELETE FROM staff_positions WHERE id = $1", role.ID); err != nil {
+	var roleUUID pgtype.UUID
+	if err := roleUUID.Scan(role.ID); err != nil {
+		return err
+	}
+
+	if err := db.New(state.Pool).DeleteStaffPosition(c.Context, roleUUID); err != nil {
 		return err
 	}
 

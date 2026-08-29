@@ -4,30 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	db "popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/PlexiOSS/Keel/dovewing"
 )
 
-var (
-	entityVoteColsArr = dbutil.GetCols(types.EntityVote{})
-	entityVoteCols    = strings.Join(entityVoteColsArr, ",")
-)
-
-type DbConn interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
+// DbConn is an alias for db.DBTX (Query/QueryRow/Exec) -- kept as a name in
+// this package since every function here already took a DbConn parameter
+// before the sqlc conversion, and callers pass state.Pool/a tx either way.
+type DbConn = db.DBTX
 
 func GetDoubleVote() bool {
 	weekday := time.Now().UTC().Weekday()
@@ -42,13 +34,11 @@ type EntityInfo struct {
 }
 
 func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (*EntityInfo, error) {
+	q := db.New(c)
 
 	switch targetType {
 	case "bot":
-		var botType string
-		var voteBanned bool
-
-		err := c.QueryRow(ctx, "SELECT type, vote_banned FROM bots WHERE bot_id = $1", targetId).Scan(&botType, &voteBanned)
+		row, err := q.GetBotVoteStatus(ctx, targetId)
 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("bot not found")
@@ -58,11 +48,11 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, fmt.Errorf("failed to fetch bot data for this vote: %w", err)
 		}
 
-		if voteBanned {
+		if row.VoteBanned {
 			return nil, errors.New("bot is vote banned and cannot be voted for right now")
 		}
 
-		if botType != "approved" && botType != "certified" {
+		if row.Type != "approved" && row.Type != "certified" {
 			return nil, errors.New("bot is not approved or certified and cannot be voted for right now")
 		}
 
@@ -79,9 +69,7 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			Avatar:  botObj.Avatar,
 		}, nil
 	case "pack":
-		var voteBanned bool
-
-		err := c.QueryRow(ctx, "SELECT vote_banned FROM packs WHERE url = $1", targetId).Scan(&voteBanned)
+		voteBanned, err := q.GetPackVoteBanned(ctx, targetId)
 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("pack not found")
@@ -101,10 +89,7 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			Name:    targetId,
 		}, nil
 	case "team":
-		var name string
-		var voteBanned bool
-
-		err := c.QueryRow(ctx, "SELECT name, vote_banned FROM teams WHERE id = $1", targetId).Scan(&name, &voteBanned)
+		row, err := q.GetTeamVoteStatus(ctx, targetId)
 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("team not found")
@@ -114,20 +99,17 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, fmt.Errorf("failed to fetch team data for this vote: %w", err)
 		}
 
-		if voteBanned {
+		if row.VoteBanned {
 			return nil, errors.New("team is vote banned and cannot be voted for right now")
 		}
 
 		return &EntityInfo{
 			URL:     state.Config.Sites.Frontend + "/teams/" + targetId,
 			VoteURL: state.Config.Sites.Frontend + "/teams/" + targetId,
-			Name:    name,
+			Name:    row.Name,
 		}, nil
 	case "server":
-		var name string
-		var voteBanned bool
-
-		err := c.QueryRow(ctx, "SELECT name, vote_banned FROM servers WHERE server_id = $1", targetId).Scan(&name, &voteBanned)
+		row, err := q.GetServerVoteStatus(ctx, targetId)
 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("server not found")
@@ -137,14 +119,14 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, fmt.Errorf("failed to fetch server data for this vote: %w", err)
 		}
 
-		if voteBanned {
+		if row.VoteBanned {
 			return nil, errors.New("server is vote banned and cannot be voted for right now")
 		}
 
 		return &EntityInfo{
 			URL:     state.Config.Sites.Frontend + "/servers/" + targetId,
 			VoteURL: state.Config.Sites.Frontend + "/servers/" + targetId,
-			Name:    name,
+			Name:    row.Name,
 		}, nil
 	case "blog":
 		return &EntityInfo{
@@ -167,17 +149,19 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		SupportsDownvotes: true,
 	}
 
+	q := db.New(c)
+
 	switch targetType {
 	case "bot":
 		voteEntity.VoteCredits = true
 
-		var premium bool
-		var voteBlitzUntil pgtype.Timestamptz
-		err := c.QueryRow(ctx, "SELECT premium, vote_blitz_until FROM bots WHERE bot_id = $1", targetId).Scan(&premium, &voteBlitzUntil)
+		row, err := q.GetBotVoteInfo(ctx, targetId)
 
 		if err != nil {
 			return nil, err
 		}
+
+		premium, voteBlitzUntil := row.Premium, row.VoteBlitzUntil
 
 		if premium {
 			voteEntity.VoteTime = 4
@@ -195,13 +179,13 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 	case "server":
 		voteEntity.VoteCredits = true
 
-		var premium bool
-		var voteBlitzUntil pgtype.Timestamptz
-		err := c.QueryRow(ctx, "SELECT premium, vote_blitz_until FROM servers WHERE server_id = $1", targetId).Scan(&premium, &voteBlitzUntil)
+		row, err := q.GetServerVoteInfo(ctx, targetId)
 
 		if err != nil {
 			return nil, err
 		}
+
+		premium, voteBlitzUntil := row.Premium, row.VoteBlitzUntil
 
 		if premium {
 			voteEntity.VoteTime = 4
@@ -244,26 +228,35 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 		return nil, err
 	}
 
-	var rows pgx.Rows
-
-	rows, err = c.Query(
-		ctx,
-		"SELECT "+entityVoteCols+" FROM entity_votes WHERE author = $1 AND target_id = $2 AND target_type = $3 AND void = false ORDER BY created_at DESC",
-		userId,
-		targetId,
-		targetType,
-	)
+	rows, err := db.New(c).GetEntityVotes(ctx, db.GetEntityVotesParams{
+		Author:     userId,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	validVotes, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.EntityVote])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		validVotes = []types.EntityVote{}
-	} else if err != nil {
-		return nil, err
+	validVotes := make([]types.EntityVote, len(rows))
+	for i, row := range rows {
+		validVotes[i] = types.EntityVote{
+			ITag:       row.Itag,
+			TargetType: row.TargetType,
+			TargetID:   row.TargetID,
+			AuthorID:   row.Author,
+			Upvote:     row.Upvote,
+			Void:       row.Void,
+			VoidReason: row.VoidReason,
+			// types.EntityVote.VoidedAt is pgtype.Timestamp (no tz), but the
+			// real column is `timestamp with time zone` -- pre-existing
+			// mismatch, left as-is here rather than widening scope.
+			VoidedAt:  pgtype.Timestamp{Time: row.VoidedAt.Time, Valid: row.VoidedAt.Valid},
+			CreatedAt: row.CreatedAt.Time,
+			VoteNum:   int(row.VoteNum),
+			Credit:    row.CreditRedeem,
+			Immutable: row.Immutable,
+		}
 	}
 
 	var vw *types.VoteWait
@@ -305,25 +298,29 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 }
 
 func EntityGetVoteCount(ctx context.Context, c DbConn, targetId, targetType string) (int, error) {
-	var upvotes int
-	var downvotes int
-
-	err := c.QueryRow(
-		ctx,
-		"SELECT COUNT(*) FILTER (WHERE upvote), COUNT(*) FILTER (WHERE NOT upvote) FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false",
-		targetId, targetType,
-	).Scan(&upvotes, &downvotes)
+	row, err := db.New(c).CountEntityVotes(ctx, db.CountEntityVotesParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return 0, err
 	}
 
-	return upvotes - downvotes, nil
+	return int(row.Upvotes - row.Downvotes), nil
 }
 
 func EntityGiveVotes(ctx context.Context, c DbConn, upvote bool, author, targetType, targetId string, vi *types.VoteInfo) error {
+	q := db.New(c)
+
 	for i := 0; i < vi.PerUser; i++ {
-		_, err := c.Exec(ctx, "INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num) VALUES ($1, $2, $3, $4, $5)", author, targetId, targetType, upvote, i)
+		err := q.InsertEntityVote(ctx, db.InsertEntityVoteParams{
+			Author:     author,
+			TargetID:   targetId,
+			TargetType: targetType,
+			Upvote:     upvote,
+			VoteNum:    int32(i),
+		})
 
 		if err != nil {
 			return fmt.Errorf("failed to insert vote: %w", err)
@@ -339,13 +336,15 @@ func EntityPostVote(ctx context.Context, c DbConn, targetType, targetId string) 
 		return fmt.Errorf("failed to get vote count: %w", err)
 	}
 
+	q := db.New(c)
+
 	switch targetType {
 	case "bot":
-		_, err = c.Exec(ctx, "UPDATE bots SET approximate_votes = $1 WHERE bot_id = $2", nvc, targetId)
+		err = q.UpdateBotApproximateVotes(ctx, db.UpdateBotApproximateVotesParams{ApproximateVotes: int32(nvc), BotID: targetId})
 	case "server":
-		_, err = c.Exec(ctx, "UPDATE servers SET approximate_votes = $1 WHERE server_id = $2", nvc, targetId)
+		err = q.UpdateServerApproximateVotes(ctx, db.UpdateServerApproximateVotesParams{ApproximateVotes: int32(nvc), ServerID: targetId})
 	case "team":
-		_, err = c.Exec(ctx, "UPDATE teams SET approximate_votes = $1 WHERE id = $2", nvc, targetId)
+		err = q.UpdateTeamApproximateVotes(ctx, db.UpdateTeamApproximateVotesParams{ApproximateVotes: int32(nvc), ID: targetId})
 	}
 
 	if err != nil {
@@ -353,16 +352,6 @@ func EntityPostVote(ctx context.Context, c DbConn, targetType, targetId string) 
 	}
 
 	return nil
-}
-
-// approximateVotesTargets maps a target type to the table/id-column its
-// cached approximate_votes column lives on. Packs aren't included --
-// EntityPostVote doesn't track them either, so there's nothing to keep in
-// sync for that type.
-var approximateVotesTargets = map[string]struct{ table, idCol string }{
-	"bot":    {"bots", "bot_id"},
-	"server": {"servers", "server_id"},
-	"team":   {"teams", "id"},
 }
 
 // RecomputeApproximateVotes recalculates every entity of targetType's
@@ -373,27 +362,38 @@ var approximateVotesTargets = map[string]struct{ table, idCol string }{
 // bulk here since this is meant for "every entity of a type at once"
 // operations (a full vote reset), not a single entity (use EntityPostVote
 // for that).
+//
+// The team variant casts teams.id (uuid) to text to compare against
+// entity_votes.target_id (text) -- the original raw-SQL version compared
+// them directly with no cast (`t.id = v.target_id`), which Postgres has no
+// "uuid = text" operator for and would have failed outright every time this
+// ran for targetType "team". Found via the schema-diff work this session,
+// not something this conversion itself introduced.
 func RecomputeApproximateVotes(ctx context.Context, c DbConn, targetType string) error {
-	target, ok := approximateVotesTargets[targetType]
+	q := db.New(c)
 
-	if !ok {
-		return nil
-	}
-
-	if _, err := c.Exec(ctx, "UPDATE "+target.table+" SET approximate_votes = 0"); err != nil {
-		return fmt.Errorf("failed to zero approximate_votes on %s: %w", target.table, err)
-	}
-
-	_, err := c.Exec(ctx,
-		"UPDATE "+target.table+" t SET approximate_votes = v.count FROM "+
-			"(SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS count "+
-			"FROM entity_votes WHERE target_type = $1 AND void = false GROUP BY target_id) v "+
-			"WHERE t."+target.idCol+" = v.target_id",
-		targetType,
-	)
-
-	if err != nil {
-		return fmt.Errorf("failed to recompute approximate_votes on %s: %w", target.table, err)
+	switch targetType {
+	case "bot":
+		if err := q.ZeroBotApproximateVotes(ctx); err != nil {
+			return fmt.Errorf("failed to zero approximate_votes on bots: %w", err)
+		}
+		if err := q.RecomputeBotApproximateVotes(ctx, targetType); err != nil {
+			return fmt.Errorf("failed to recompute approximate_votes on bots: %w", err)
+		}
+	case "server":
+		if err := q.ZeroServerApproximateVotes(ctx); err != nil {
+			return fmt.Errorf("failed to zero approximate_votes on servers: %w", err)
+		}
+		if err := q.RecomputeServerApproximateVotes(ctx, targetType); err != nil {
+			return fmt.Errorf("failed to recompute approximate_votes on servers: %w", err)
+		}
+	case "team":
+		if err := q.ZeroTeamApproximateVotes(ctx); err != nil {
+			return fmt.Errorf("failed to zero approximate_votes on teams: %w", err)
+		}
+		if err := q.RecomputeTeamApproximateVotes(ctx, targetType); err != nil {
+			return fmt.Errorf("failed to recompute approximate_votes on teams: %w", err)
+		}
 	}
 
 	return nil

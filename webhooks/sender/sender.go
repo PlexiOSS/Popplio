@@ -27,14 +27,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/webhooks/core/events"
 	"popplio/webhooks/core/utils"
 
 	"github.com/disgoorg/disgo/discord"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/PlexiOSS/Keel/jsonimpl"
@@ -42,20 +42,17 @@ import (
 
 // Represents a internal webhook to fanout
 type webhookData struct {
-	ID             string   `db:"id"`
-	Secret         string   `db:"secret"`
-	Url            string   `db:"url"`
-	Broken         bool     `db:"broken"`
-	FailedRequests int      `db:"failed_requests"`
-	SimpleAuth     bool     `db:"simple_auth"`
-	HmacAuth       bool     `db:"hmac_auth"`
-	EventWhitelist []string `db:"event_whitelist"`
+	ID             string
+	Secret         string
+	Url            string
+	Broken         bool
+	FailedRequests int
+	SimpleAuth     bool
+	HmacAuth       bool
+	EventWhitelist []string
 }
 
 var (
-	wdColsArr = dbutil.GetCols(webhookData{})
-	wdCols    = strings.Join(wdColsArr, ",")
-
 	ErrNoWebhooks                = errors.New("no webhooks found")
 	WebhookMaximumFailedRequests = 20 // Be very lenient
 )
@@ -112,26 +109,48 @@ func Send(d *WebhookData) (*WebhookSendResult, error) {
 		return nil, errors.New("no event set in webhook data")
 	}
 
-	rows, err := state.Pool.Query(state.Context, "SELECT "+wdCols+" FROM webhooks WHERE target_id = $1 AND target_type = $2", d.Entity.EntityID, d.Entity.EntityType)
+	q := db.New(state.Pool)
+
+	rawWebhooks, err := q.GetWebhooksForTarget(state.Context, db.GetWebhooksForTargetParams{
+		TargetID:   d.Entity.EntityID,
+		TargetType: d.Entity.EntityType,
+	})
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch webhooks: %w", err)
 	}
 
-	webhooks, err := pgx.CollectRows(rows, pgx.RowToStructByName[webhookData])
-
-	if errors.Is(err, pgx.ErrNoRows) {
+	if len(rawWebhooks) == 0 {
 		return nil, ErrNoWebhooks
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect webhooks: %w", err)
+	webhooks := make([]webhookData, len(rawWebhooks))
+	for i, row := range rawWebhooks {
+		webhooks[i] = webhookData{
+			ID:             row.ID,
+			Secret:         row.Secret,
+			Url:            row.Url,
+			Broken:         row.Broken,
+			FailedRequests: int(row.FailedRequests),
+			SimpleAuth:     row.SimpleAuth,
+			HmacAuth:       row.HmacAuth,
+			EventWhitelist: row.EventWhitelist,
+		}
 	}
 
 	dataBytes, err := jsonimpl.Marshal(d.Event)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal webhook payload: %w", err)
+	}
+
+	// sqlc's generic jsonb override wants a map[string]any param, not raw
+	// bytes -- round-trip through it once here rather than at every insert
+	// call site below.
+	var dataMap map[string]any
+
+	if err := jsonimpl.Unmarshal(dataBytes, &dataMap); err != nil {
+		return nil, fmt.Errorf("failed to prepare webhook payload for storage: %w", err)
 	}
 
 	// Send to each webhook
@@ -150,7 +169,26 @@ func Send(d *WebhookData) (*WebhookSendResult, error) {
 
 		var logID string
 		if d.LogID == "" {
-			err := state.Pool.QueryRow(state.Context, "INSERT INTO webhook_logs (target_id, target_type, user_id, url, data, bad_intent, webhook_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id", d.Entity.EntityID, d.Entity.EntityType, d.UserID, webhook.Url, dataBytes, d.BadIntent, webhook.ID).Scan(&logID)
+			var webhookUUID pgtype.UUID
+			if scanErr := webhookUUID.Scan(webhook.ID); scanErr != nil {
+				if webhErrors == nil {
+					webhErrors = make(map[string]error)
+				}
+
+				webhErrors[webhook.ID] = scanErr
+
+				continue
+			}
+
+			logID, err = q.InsertWebhookLogReturningID(state.Context, db.InsertWebhookLogReturningIDParams{
+				TargetID:   d.Entity.EntityID,
+				TargetType: d.Entity.EntityType,
+				UserID:     d.UserID,
+				Url:        webhook.Url,
+				Data:       dataMap,
+				BadIntent:  d.BadIntent,
+				WebhookID:  webhookUUID,
+			})
 
 			if err != nil {
 				if webhErrors == nil {
@@ -259,8 +297,27 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 					}
 				}()
 
-				var logID string
-				err := state.Pool.QueryRow(state.Context, "INSERT INTO webhook_logs (target_id, target_type, user_id, url, data, bad_intent, webhook_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id", d.Entity.EntityID, d.Entity.EntityType, d.UserID, webhook.Url, data, true, webhook.ID).Scan(&logID)
+				var dataMap map[string]any
+				if err := jsonimpl.Unmarshal(data, &dataMap); err != nil {
+					state.Logger.Error("Failed to prepare bad-intent webhook payload for storage", d.logFields(zap.Error(err))...)
+					return
+				}
+
+				var webhookUUID pgtype.UUID
+				if err := webhookUUID.Scan(webhook.ID); err != nil {
+					state.Logger.Error("Failed to parse webhook id for bad-intent probe", d.logFields(zap.Error(err))...)
+					return
+				}
+
+				logID, err := db.New(state.Pool).InsertWebhookLogReturningID(state.Context, db.InsertWebhookLogReturningIDParams{
+					TargetID:   d.Entity.EntityID,
+					TargetType: d.Entity.EntityType,
+					UserID:     d.UserID,
+					Url:        webhook.Url,
+					Data:       dataMap,
+					BadIntent:  true,
+					WebhookID:  webhookUUID,
+				})
 
 				if err != nil {
 					state.Logger.Error("Failed to insert webhook log", d.logFields(zap.Error(err))...)
@@ -325,7 +382,29 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 		respHeaders[k] = strings.Join(v, ",")
 	}
 
-	_, err = state.Pool.Exec(state.Context, "UPDATE webhook_logs SET response = $1, status_code = $2, request_headers = $3, response_headers = $4 WHERE id = $5", body, resp.StatusCode, reqHeaders, respHeaders, d.LogID)
+	reqHeadersAny := make(map[string]any, len(reqHeaders))
+	for k, v := range reqHeaders {
+		reqHeadersAny[k] = v
+	}
+
+	respHeadersAny := make(map[string]any, len(respHeaders))
+	for k, v := range respHeaders {
+		respHeadersAny[k] = v
+	}
+
+	var logUUID pgtype.UUID
+	if err := logUUID.Scan(d.LogID); err != nil {
+		state.Logger.Error("Failed to parse webhook log id", d.logFields(zap.Error(err))...)
+		return fmt.Errorf("failed to parse webhook log id: %w", err)
+	}
+
+	err = db.New(state.Pool).UpdateWebhookLogResponse(state.Context, db.UpdateWebhookLogResponseParams{
+		Response:        pgtype.Text{String: string(body), Valid: true},
+		StatusCode:      int32(resp.StatusCode),
+		RequestHeaders:  reqHeadersAny,
+		ResponseHeaders: respHeadersAny,
+		ID:              logUUID,
+	})
 
 	if err != nil {
 		state.Logger.Error("Failed to update webhook logs with response", d.logFields(zap.Error(err))...)
@@ -417,7 +496,10 @@ func SendDiscord(url, prefix string, entity WebhookEntity, params *discord.Embed
 	for _, code := range []int{404, 401, 403, 410} {
 		if resp.StatusCode == code {
 			// This webhook is broken
-			_, err := state.Pool.Exec(state.Context, "UPDATE webhooks SET broken = true WHERE target_id = $1 AND target_type = $2", entity.EntityID, entity.EntityType)
+			err := db.New(state.Pool).MarkWebhookBrokenForTarget(state.Context, db.MarkWebhookBrokenForTargetParams{
+				TargetID:   entity.EntityID,
+				TargetType: entity.EntityType,
+			})
 
 			if err != nil {
 				state.Logger.Error("Failed to update webhook logs with response", zap.Error(err), zap.String("entityID", entity.EntityID), zap.String("entityType", entity.EntityType), zap.Int("status", resp.StatusCode))

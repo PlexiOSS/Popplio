@@ -1,6 +1,7 @@
 package add_server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -10,8 +11,7 @@ import (
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
-	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/db"
 	"popplio/moderation"
 	"popplio/perms"
 	"popplio/routes/servers/assets"
@@ -19,6 +19,8 @@ import (
 	"popplio/teams"
 	"popplio/types"
 	"popplio/validators"
+
+	"github.com/PlexiOSS/Keel/ptr"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/google/uuid"
@@ -33,40 +35,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func createServerArgs(server types.CreateServer) []any {
-	return []any{
-		server.Invite,
-		server.Short,
-		server.Long,
-		server.ExtraLinks,
-		server.Tags,
-		server.NSFW,
-		server.TeamOwner,
-		server.ServerID,
-		server.Name,
-		server.Avatar,
-		server.TotalMembers,
-		server.OnlineMembers,
-		server.VanityRef,
-	}
-}
-
-var (
-	compiledMessages = uapi.CompileValidationErrors(types.CreateServer{})
-
-	createServerColsArr = dbutil.GetCols(types.CreateServer{})
-	createServerCols    = strings.Join(createServerColsArr, ", ")
-
-	createServerParams string
-)
-
-func Setup() {
-	var paramsList = make([]string, len(createServerColsArr))
-	for i := range createServerColsArr {
-		paramsList[i] = fmt.Sprintf("$%d", i+1)
-	}
-	createServerParams = strings.Join(paramsList, ",")
-}
+var compiledMessages = uapi.CompileValidationErrors(types.CreateServer{})
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -125,9 +94,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	payload.TotalMembers = invite.ApproximateMemberCount
 	payload.OnlineMembers = invite.ApproximatePresenceCount
 
-	var count int64
+	q := db.New(state.Pool)
 
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE server_id = $1", payload.ServerID).Scan(&count)
+	count, err := q.CountServerByID(d.Context, payload.ServerID)
 
 	if err != nil {
 		return resp.Err("Error while checking if server is already in database", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
@@ -141,9 +110,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	vanity = regexp.MustCompile("[^a-zA-Z0-9-]").ReplaceAllString(vanity, "")
 	vanity = strings.TrimSuffix(vanity, "-")
 
-	var vanityCount int64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM vanity WHERE code = $1", vanity).Scan(&vanityCount)
+	vanityCount, err := q.CountVanityByCode(d.Context, vanity)
 
 	if err != nil {
 		return resp.Err("Error while checking if calculated vanity is already taken", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID), zap.String("vanity", vanity))
@@ -172,6 +139,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
+	txq := db.New(tx)
+
 	if payload.TeamOwner != "" {
 		entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", payload.TeamOwner)
 
@@ -186,20 +155,31 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	} else {
 		var teamId = uuid.New()
 
-		var vanityRef string
-		err = tx.QueryRow(d.Context, "INSERT INTO vanity (target_id, target_type, code) VALUES ($1, 'team', $2) RETURNING itag", teamId, payload.Name+crypto.RandString(16)).Scan(&vanityRef)
+		vanityRef, err := txq.InsertVanityReturningItag(d.Context, db.InsertVanityReturningItagParams{
+			Code:       payload.Name + crypto.RandString(16),
+			TargetID:   teamId.String(),
+			TargetType: "team",
+		})
 
 		if err != nil {
 			return resp.BadRequest("Error while creating vanity: " + err.Error())
 		}
 
-		_, err = tx.Exec(d.Context, "INSERT INTO teams (id, name, vanity_ref, service) VALUES ($1, $2, $3, 'api/add_server')", teamId, payload.Name, vanityRef)
+		err = txq.InsertTeamForAddServer(d.Context, db.InsertTeamForAddServerParams{
+			ID:        teamId.String(),
+			Name:      payload.Name,
+			VanityRef: vanityRef,
+		})
 
 		if err != nil {
 			return resp.BadRequest("Error while creating team: " + err.Error())
 		}
 
-		_, err = tx.Exec(d.Context, "INSERT INTO team_members (team_id, user_id, flags, service) VALUES ($1, $2, $3, 'api/add_server')", teamId, d.Auth.ID, []string{string(perms.EntityOwner)})
+		err = txq.InsertTeamMemberForAddServer(d.Context, db.InsertTeamMemberForAddServerParams{
+			TeamID: pgtype.UUID{Bytes: teamId, Valid: true},
+			UserID: d.Auth.ID,
+			Flags:  []string{string(perms.EntityOwner)},
+		})
 
 		if err != nil {
 			return resp.BadRequest("Error while adding team member: " + err.Error())
@@ -208,8 +188,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		payload.TeamOwner = teamId.String()
 	}
 
-	var itag pgtype.UUID
-	err = tx.QueryRow(d.Context, "INSERT INTO vanity (code, target_id, target_type) VALUES ($1, $2, $3) RETURNING itag", vanity, payload.ServerID, "server").Scan(&itag)
+	itag, err := txq.InsertVanityReturningItag(d.Context, db.InsertVanityReturningItagParams{
+		Code:       vanity,
+		TargetID:   payload.ServerID,
+		TargetType: "server",
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting vanity", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID), zap.String("vanity", vanity))
@@ -217,13 +200,32 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	payload.VanityRef = itag
 
-	serverArgs := createServerArgs(payload)
+	extraLinksJSON, err := json.Marshal(payload.ExtraLinks)
 
-	if len(createServerColsArr) != len(serverArgs) {
-		return resp.ErrBody("createServerColsArr and serverArgs do not match in length", "Internal Error: The number of columns and arguments do not match", nil, zap.Any("createServerColsArr", createServerColsArr), zap.Any("serverArgs", serverArgs))
+	if err != nil {
+		return resp.Err("Error marshaling extra links", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
 	}
 
-	_, err = tx.Exec(d.Context, "INSERT INTO servers ("+createServerCols+") VALUES ("+createServerParams+")", serverArgs...)
+	var teamOwnerUUID pgtype.UUID
+	if err := teamOwnerUUID.Scan(payload.TeamOwner); err != nil {
+		return resp.BadRequest("Invalid team ID: " + err.Error())
+	}
+
+	err = txq.InsertServer(d.Context, db.InsertServerParams{
+		Invite:        payload.Invite,
+		Short:         payload.Short,
+		Long:          payload.Long,
+		ExtraLinks:    extraLinksJSON,
+		Tags:          payload.Tags,
+		Nsfw:          payload.NSFW,
+		TeamOwner:     teamOwnerUUID,
+		ServerID:      payload.ServerID,
+		Name:          payload.Name,
+		Avatar:        payload.Avatar,
+		TotalMembers:  int32(payload.TotalMembers),
+		OnlineMembers: int32(payload.OnlineMembers),
+		VanityRef:     payload.VanityRef,
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting server", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
@@ -235,14 +237,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while committing transaction", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
 	}
 
-	// Best-effort: a reviewer signal, not a gate. Never fails the submission.
 	if result, err := moderation.CheckText(d.Context, payload.Short, payload.Long); err != nil {
 		state.Logger.Error("Failed to run moderation check on new server", zap.Error(err), zap.String("serverID", payload.ServerID))
 	} else if result.Flagged {
-		if _, err := state.Pool.Exec(d.Context,
-			"UPDATE servers SET moderation_flagged = $2, moderation_categories = $3 WHERE server_id = $1",
-			payload.ServerID, result.Flagged, result.Categories,
-		); err != nil {
+		if err := q.UpdateServerModerationResult(d.Context, db.UpdateServerModerationResultParams{
+			ServerID:             payload.ServerID,
+			ModerationFlagged:    result.Flagged,
+			ModerationCategories: result.Categories,
+		}); err != nil {
 			state.Logger.Error("Failed to store moderation result for new server", zap.Error(err), zap.String("serverID", payload.ServerID))
 		}
 

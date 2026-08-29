@@ -6,17 +6,15 @@ package get_webhook_logs
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -25,11 +23,6 @@ import (
 )
 
 const perPage = 10
-
-var (
-	webhookLogColsArr = dbutil.GetCols(types.WebhookLogEntry{})
-	webhookLogCols    = strings.Join(webhookLogColsArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -76,17 +69,40 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (pageNum - 1) * perPage
 
+	q := db.New(state.Pool)
+
 	// Fetch the logs
-	rows, err := state.Pool.Query(d.Context, "SELECT "+webhookLogCols+" FROM webhook_logs WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4", targetId, targetType, limit, offset)
+	rows, err := q.GetWebhookLogsPage(d.Context, db.GetWebhookLogsPageParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		Limit:      int32(limit),
+		Offset:     int32(offset),
+	})
 
 	if err != nil {
 		return resp.Err("Error while querying webhook logs [db fetch]", err, zap.String("userID", d.Auth.ID))
 	}
 
-	webhooks, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.WebhookLogEntry])
-
-	if err != nil {
-		return resp.Err("Error while querying webhook logs [collect]", err, zap.String("userID", d.Auth.ID))
+	webhooks := make([]types.WebhookLogEntry, len(rows))
+	for i, row := range rows {
+		webhooks[i] = types.WebhookLogEntry{
+			ID:              row.ID,
+			WebhookID:       row.WebhookID,
+			TargetID:        row.TargetID,
+			TargetType:      row.TargetType,
+			UserID:          row.UserID,
+			URL:             row.Url,
+			Data:            row.Data,
+			Response:        row.Response,
+			CreatedAt:       row.CreatedAt.Time,
+			State:           row.State,
+			Tries:           int(row.Tries),
+			LastTry:         row.LastTry.Time,
+			BadIntent:       row.BadIntent,
+			StatusCode:      int(row.StatusCode),
+			RequestHeaders:  row.RequestHeaders,
+			ResponseHeaders: row.ResponseHeaders,
+		}
 	}
 
 	for i, webhook := range webhooks {
@@ -97,16 +113,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	var count uint64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM webhook_logs WHERE target_id = $1 AND target_type = $2", targetId, targetType).Scan(&count)
+	count, err := q.CountWebhookLogs(d.Context, db.CountWebhookLogsParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.Err("Error while querying webhook logs [db count]", err, zap.String("userID", d.Auth.ID))
 	}
 
 	data := types.PagedResult[[]types.WebhookLogEntry]{
-		Count:   count,
+		Count:   uint64(count),
 		Results: webhooks,
 		PerPage: perPage,
 	}

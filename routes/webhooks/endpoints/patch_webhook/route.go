@@ -11,12 +11,14 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 	"popplio/webhooks/core/utils"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -109,15 +111,24 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(fmt.Sprintf("A secret must be specified for new webhooks: %s", payload.Name))
 	}
 
+	var webhookUUID pgtype.UUID
+	if err := webhookUUID.Scan(webhookId); err != nil {
+		return resp.NotFound("Webhook not found")
+	}
+
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while starting transaction", err, zap.String("userID", d.Auth.ID))
 	}
 
-	var count int64
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM webhooks WHERE target_id = $1 AND target_type = $2 AND id = $3", targetId, targetType, webhookId).Scan(&count)
+	count, err := q.CountWebhookByID(d.Context, db.CountWebhookByIDParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		ID:         webhookUUID,
+	})
 
 	if err != nil {
 		return resp.Err("Error while checking webhook", err, zap.String("userID", d.Auth.ID))
@@ -127,7 +138,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.NotFound("Webhook not found")
 	}
 
-	_, err = tx.Exec(d.Context, "UPDATE webhooks SET name = $1, url = $2, secret = $3, event_whitelist = $4, simple_auth = $5, hmac_auth = $6, broken = false, failed_requests = 0 WHERE target_id = $7 AND target_type = $8 AND id = $9", payload.Name, payload.Url, payload.Secret, payload.EventWhitelist, payload.SimpleAuth, payload.HmacAuth, targetId, targetType, webhookId)
+	err = q.UpdateWebhook(d.Context, db.UpdateWebhookParams{
+		Name:           payload.Name,
+		Url:            payload.Url,
+		Secret:         payload.Secret,
+		EventWhitelist: payload.EventWhitelist,
+		SimpleAuth:     payload.SimpleAuth,
+		HmacAuth:       payload.HmacAuth,
+		TargetID:       targetId,
+		TargetType:     targetType,
+		ID:             webhookUUID,
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting webhook", err, zap.String("userID", d.Auth.ID))

@@ -1,8 +1,3 @@
-// Package discord_dovewing adapts Popplio's disgo session to dovewing.
-//
-// Dovewing is what every user lookup in Popplio goes through, layering
-// in-memory, Redis and gateway caches over the Discord API; this package
-// supplies the platform implementation it calls when nothing is cached.
 package discord_dovewing
 
 import (
@@ -48,14 +43,14 @@ func disgoPlatformStatus(status discord.OnlineStatus) dovetypes.PlatformStatus {
 }
 
 type DisgoState struct {
-	config      *DisgoStateConfig // Config for the discord state
-	initialized bool              // Whether the platform has been initted or not
+	config      *DisgoStateConfig
+	initialized bool
 }
 
 type DisgoStateConfig struct {
-	Client         bot.Client          // Discord session
-	PreferredGuild *snowflake.ID       // Which guilds should be checked first for users, good if theres one guild with the majority of users
-	BaseState      *dovewing.BaseState // Base state
+	Client         bot.Client
+	PreferredGuild *snowflake.ID
+	BaseState      *dovewing.BaseState
 }
 
 func (c DisgoStateConfig) New() (*DisgoState, error) {
@@ -90,12 +85,10 @@ func (d *DisgoState) GetState() *dovewing.BaseState {
 }
 
 func (d *DisgoState) ValidateId(id string) (string, error) {
-	// Before wasting time searching state, ensure the ID is actually a valid snowflake
 	if _, err := strconv.ParseUint(id, 10, 64); err != nil {
 		return "", err
 	}
 
-	// For all practical purposes, a simple length check can handle a lot of illegal IDs
 	if len(id) <= 16 || len(id) > 20 {
 		return "", errors.New("invalid snowflake")
 	}
@@ -110,7 +103,6 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 		return nil, err
 	}
 
-	// First try for main server
 	if d.config.PreferredGuild != nil {
 		member, ok := d.config.Client.Caches().Member(*d.config.PreferredGuild, id)
 
@@ -181,7 +173,6 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 }
 
 func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.PlatformUser, error) {
-	// Get from discord
 	id, err := snowflake.Parse(idStr)
 
 	if err != nil {

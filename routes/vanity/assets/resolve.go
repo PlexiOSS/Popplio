@@ -4,28 +4,27 @@ package assets
 import (
 	"context"
 	"errors"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var (
-	vanityColsArr = dbutil.GetCols(types.Vanity{})
-	vanityCols    = strings.Join(vanityColsArr, ",")
-)
-
-func resolveImpl(ctx context.Context, code string, src string) (*types.Vanity, error) {
-	row, err := state.Pool.Query(ctx, "SELECT "+vanityCols+" FROM vanity WHERE "+src+" = $1", code)
-
-	if err != nil {
-		return nil, err
+func toVanity(v db.Vanity) *types.Vanity {
+	return &types.Vanity{
+		ITag:       v.Itag,
+		TargetID:   v.TargetID,
+		TargetType: v.TargetType,
+		Code:       v.Code,
+		CreatedAt:  v.CreatedAt.Time,
 	}
+}
 
-	v, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Vanity])
+func resolveByTargetID(ctx context.Context, targetID string) (*types.Vanity, error) {
+	v, err := db.New(state.Pool).ResolveVanityByTargetID(ctx, targetID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -35,54 +34,74 @@ func resolveImpl(ctx context.Context, code string, src string) (*types.Vanity, e
 		return nil, err
 	}
 
-	return &v, nil
+	return toVanity(v), nil
+}
+
+func resolveByCode(ctx context.Context, code string) (*types.Vanity, error) {
+	v, err := db.New(state.Pool).ResolveVanityByCode(ctx, code)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return toVanity(v), nil
 }
 
 func ResolveVanity(ctx context.Context, code string) (*types.Vanity, error) {
-	// First check bot_id and client_id to avoid vanity stealing
-	var botId string
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(ctx, "SELECT bot_id FROM bots WHERE client_id = $1", code).Scan(&botId)
+	botId, err := q.GetBotIDByClientID(ctx, code)
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 
 	if botId != "" {
-		return resolveImpl(ctx, botId, "target_id")
+		return resolveByTargetID(ctx, botId)
 	}
 
-	// Then check server id
-	var serverId string
-
-	err = state.Pool.QueryRow(ctx, "SELECT server_id FROM servers WHERE server_id = $1", code).Scan(&serverId)
+	serverId, err := q.GetServerIDByServerID(ctx, code)
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
 
 	if serverId != "" {
-		return resolveImpl(ctx, serverId, "target_id")
+		return resolveByTargetID(ctx, serverId)
 	}
 
-	var v *types.Vanity
-	for _, src := range []string{"code", "target_id"} {
-		v, err = resolveImpl(ctx, code, src)
+	v, err := resolveByCode(ctx, code)
 
-		if err != nil {
-			return nil, err
-		}
-
-		if v == nil {
-			continue
-		}
-
-		break
+	if err != nil {
+		return nil, err
 	}
 
-	return v, nil
+	if v != nil {
+		return v, nil
+	}
+
+	return resolveByTargetID(ctx, code)
 }
 
 func ResolveVanityByItag(ctx context.Context, itag string) (*types.Vanity, error) {
-	return resolveImpl(ctx, itag, "itag")
+	var itagUUID pgtype.UUID
+	if err := itagUUID.Scan(itag); err != nil {
+		return nil, nil
+	}
+
+	v, err := db.New(state.Pool).ResolveVanityByItag(ctx, itagUUID)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return toVanity(v), nil
 }

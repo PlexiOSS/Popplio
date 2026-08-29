@@ -1,23 +1,16 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5"
 )
-
-type botWhitelistRow struct {
-	BotID     string    `db:"bot_id"`
-	UserID    string    `db:"user_id"`
-	Reason    string    `db:"reason"`
-	CreatedAt time.Time `db:"created_at"`
-}
 
 func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhitelist) (response, error) {
 	authData, userPerms, err := authorize(ctx, q.LoginToken)
@@ -28,13 +21,7 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 
 	switch {
 	case q.Action.List != nil:
-		rows, err := state.Pool.Query(ctx, "SELECT bot_id, user_id, reason, created_at FROM bot_whitelist ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		whitelistRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[botWhitelistRow])
+		whitelistRows, err := db.New(state.Pool).ListBotWhitelist(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -47,7 +34,7 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 				BotID:     w.BotID,
 				UserID:    w.UserID,
 				Reason:    w.Reason,
-				CreatedAt: types.NewTimestamp(w.CreatedAt),
+				CreatedAt: types.NewTimestamp(w.CreatedAt.Time),
 			})
 		}
 
@@ -59,9 +46,11 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 			return writeText(http.StatusForbidden, "You do not have permission to add to the bot whitelist [bot_whitelist.create]"), nil
 		}
 
-		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO bot_whitelist (user_id, bot_id, reason) VALUES ($1, $2, $3)",
-			authData.UserID, action.BotID, action.Reason)
+		err := db.New(state.Pool).InsertBotWhitelist(ctx, db.InsertBotWhitelistParams{
+			UserID: authData.UserID,
+			BotID:  action.BotID,
+			Reason: action.Reason,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -75,13 +64,22 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 			return writeText(http.StatusForbidden, "You do not have permission to update bot whitelist [bot_whitelist.update]"), nil
 		}
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM bot_whitelist WHERE bot_id = $1", action.BotID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountBotWhitelistByBotID(ctx, action.BotID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "UPDATE bot_whitelist SET reason = $1 WHERE bot_id = $2", action.Reason, action.BotID); err != nil {
+		if err := queries.UpdateBotWhitelistReason(ctx, db.UpdateBotWhitelistReasonParams{
+			Reason: action.Reason,
+			BotID:  action.BotID,
+		}); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -93,13 +91,19 @@ func (s *Server) updateBotWhitelist(ctx context.Context, q *types.QUpdateBotWhit
 
 		botID := q.Action.Delete.BotID
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM bot_whitelist WHERE bot_id = $1", botID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountBotWhitelistByBotID(ctx, botID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM bot_whitelist WHERE bot_id = $1", botID); err != nil {
+		if err := queries.DeleteBotWhitelist(ctx, botID); err != nil {
 			return response{}, newError(err)
 		}
 

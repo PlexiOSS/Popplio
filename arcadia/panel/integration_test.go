@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -293,7 +295,7 @@ func TestPermissionGates(t *testing.T) {
 			body: func(tok string) string {
 				return fmt.Sprintf(`{"UpdateBotWhitelist":{"login_token":%q,"action":{"Delete":{"bot_id":"nope"}}}}`, tok)
 			},
-			wantDenied: "You do not have permission to delete bot whitelist entries (bot_whitelist.delete)",
+			wantDenied: "You do not have permission to delete bot whitelist entries [bot_whitelist.delete]",
 		},
 		{
 			name: "UpdateBlog/DeleteEntry",
@@ -332,10 +334,6 @@ func TestPermissionGates(t *testing.T) {
 	}
 }
 
-// A third tier landing on an already-doubly-occupied position used to 500
-// with a raw Postgres constraint violation (CONFORMANCE.md #16). All three
-// creates must now succeed, each existing tier pushed down by exactly one
-// per insert, ending with every id at a distinct position.
 func TestVoteCreditTierDedupLoop(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
 
@@ -410,9 +408,6 @@ func tierPositions(t *testing.T, ids []string) map[string]int32 {
 	return out
 }
 
-// A nil max_uses/reuse_wait_duration/expiry means "unlimited"/"never
-// expires" per the DTO's own doc comments, and must be accepted — see
-// CONFORMANCE.md #2. A present-but-non-positive value is still rejected.
 func TestShopCouponNullMeansUnconstrained(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
 
@@ -420,8 +415,8 @@ func TestShopCouponNullMeansUnconstrained(t *testing.T) {
 
 	rec := post(t, body)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body: %s)", rec.Code, rec.Body.String())
 	}
 }
 

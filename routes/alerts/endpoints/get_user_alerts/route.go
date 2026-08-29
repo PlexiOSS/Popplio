@@ -6,24 +6,17 @@ package get_user_alerts
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
 	"popplio/pagination"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	alertCols    = dbutil.GetCols(types.Alert{})
-	alertColsStr = strings.Join(alertCols, ",")
 )
 
 func Docs() *docs.Doc {
@@ -63,38 +56,51 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (pageNum - 1) * perPage
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+alertColsStr+" FROM alerts WHERE user_id = $1 ORDER BY created_at DESC, priority ASC LIMIT $2 OFFSET $3", d.Auth.ID, limit, offset)
+	q := db.New(state.Pool)
+
+	rows, err := q.GetUserAlertsPage(d.Context, db.GetUserAlertsPageParams{
+		UserID: d.Auth.ID,
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 
 	if err != nil {
 		return resp.Err("Error getting alerts [db]", err, zap.String("userID", d.Auth.ID), zap.Int("limit", limit), zap.Uint64("offset", offset))
 	}
 
-	alerts, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.Alert])
-
-	if err != nil {
-		return resp.Err("Error getting alerts [collect]", err, zap.String("userID", d.Auth.ID), zap.Int("limit", limit), zap.Uint64("offset", offset))
+	alerts := make([]types.Alert, len(rows))
+	for i, row := range rows {
+		alerts[i] = types.Alert{
+			ITag:      row.Itag,
+			URL:       row.Url,
+			Message:   row.Message,
+			Type:      row.Type,
+			Title:     row.Title,
+			CreatedAt: row.CreatedAt,
+			Acked:     row.Acked,
+			AlertData: row.AlertData,
+			Icon:      row.Icon.String,
+			Priority:  row.Priority,
+			Category:  row.Category,
+		}
 	}
 
-	var count uint64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM alerts WHERE user_id = $1", d.Auth.ID).Scan(&count)
+	count, err := q.CountUserAlerts(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Error getting total alert count", err, zap.String("userID", d.Auth.ID), zap.Int("limit", limit), zap.Uint64("offset", offset))
 	}
 
-	var unackedCount uint64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM alerts WHERE user_id = $1 AND acked = false", d.Auth.ID).Scan(&unackedCount)
+	unackedCount, err := q.CountUnackedUserAlerts(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Error getting total unacked alert count", err, zap.String("userID", d.Auth.ID), zap.Int("limit", limit), zap.Uint64("offset", offset))
 	}
 
 	data := types.PagedResult[types.AlertList]{
-		Count: count,
+		Count: uint64(count),
 		Results: types.AlertList{
-			UnackedCount: unackedCount,
+			UnackedCount: uint64(unackedCount),
 			Alerts:       alerts,
 		},
 		PerPage: perPage,

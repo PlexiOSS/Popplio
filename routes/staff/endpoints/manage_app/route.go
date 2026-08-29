@@ -5,15 +5,15 @@
 package manage_app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
 	"popplio/apps"
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
@@ -40,8 +40,6 @@ type ManageApp struct {
 
 var (
 	compiledMessages = uapi.CompileValidationErrors(ManageApp{})
-	appColsArr       = dbutil.GetCols(types.AppResponse{})
-	appCols          = strings.Join(appColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -100,13 +98,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// Fetch app info such as the position from database
 	appId := chi.URLParam(r, "app_id")
 
-	row, err := state.Pool.Query(d.Context, "SELECT "+appCols+" FROM apps WHERE app_id = $1", appId)
+	q := db.New(state.Pool)
 
-	if err != nil {
-		return resp.Err("Failed to fetch application info", err, zap.String("appId", appId))
-	}
-
-	app, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.AppResponse])
+	row, err := q.GetAppByID(d.Context, appId)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -114,6 +108,27 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Failed to fetch application info", err, zap.String("appId", appId))
+	}
+
+	var questions []types.Question
+	if err := json.Unmarshal(row.Questions, &questions); err != nil {
+		return resp.Err("Failed to parse application questions [json]", err, zap.String("appId", appId))
+	}
+
+	var reviewFeedback *string
+	if row.ReviewFeedback.Valid {
+		reviewFeedback = &row.ReviewFeedback.String
+	}
+
+	app := types.AppResponse{
+		AppID:          row.AppID,
+		UserID:         row.UserID,
+		Questions:      questions,
+		Answers:        row.Answers,
+		State:          row.State,
+		CreatedAt:      row.CreatedAt.Time,
+		Position:       row.Position,
+		ReviewFeedback: reviewFeedback,
 	}
 
 	if app.State != "pending" {
@@ -124,7 +139,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if position == nil {
 		// Delete the app from the database
-		_, err = state.Pool.Exec(d.Context, "DELETE FROM apps WHERE app_id = $1", appId)
+		err = q.DeleteApp(d.Context, appId)
 
 		if err != nil {
 			return resp.Err("Failed to delete app", err, zap.String("appId", appId))
@@ -145,7 +160,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 		}
 
-		_, err = state.Pool.Exec(d.Context, "UPDATE apps SET state = 'approved', review_feedback = $2 WHERE app_id = $1", appId, payload.Reason)
+		err = q.ApproveApp(d.Context, db.ApproveAppParams{
+			AppID:          appId,
+			ReviewFeedback: pgtype.Text{String: payload.Reason, Valid: true},
+		})
 
 		if err != nil {
 			return resp.Err("Failed to update app", err, zap.String("appId", appId))
@@ -198,7 +216,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 		}
 
-		_, err = state.Pool.Exec(d.Context, "UPDATE apps SET state = 'denied', review_feedback = $2 WHERE app_id = $1", appId, payload.Reason)
+		err = q.DenyApp(d.Context, db.DenyAppParams{
+			AppID:          appId,
+			ReviewFeedback: pgtype.Text{String: payload.Reason, Valid: true},
+		})
 
 		if err != nil {
 			return resp.Err("Failed to update app", err, zap.String("appId", appId))

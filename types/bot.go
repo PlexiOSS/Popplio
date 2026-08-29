@@ -168,7 +168,7 @@ type DiscordBotMeta struct {
 	Flags       []string          `json:"flags" description:"The bot's flags"`
 	Description string            `json:"description" description:"The suggested description for the bot"`
 	Tags        []string          `json:"tags" description:"The suggested tags for the bot"`
-	Fallback    bool              `json:"fallback" description:"Whether or not we had to fallback to RPC from JAPI.rest"`
+	Fallback    bool              `json:"fallback" description:"Whether or not we had to fall back to JAPI.rest from Discord's own RPC endpoint"`
 	FetchErrors map[string]string `json:"fetch_errors" description:"The errors that occurred when fetching the bot"`
 }
 

@@ -11,12 +11,9 @@ import (
 )
 
 type RssFeed struct {
-	XMLName xml.Name `xml:"rss"`
-	// NS
-	NS string `xml:"xmlns:atom,attr"`
-	// Version
-	Version string `xml:"version,attr"`
-	// Channel
+	XMLName xml.Name    `xml:"rss"`
+	NS      string      `xml:"xmlns:atom,attr"`
+	Version string      `xml:"version,attr"`
 	Channel *RssChannel `xml:"channel"`
 }
 
@@ -52,12 +49,9 @@ type RssAtomLink struct {
 
 type RssImage struct {
 	XMLName xml.Name `xml:"image"`
-	// URL
-	URL string `xml:"url"`
-	// Title
-	Title string `xml:"title"`
-	// Link
-	Link string `xml:"link"`
+	URL     string   `xml:"url"`
+	Title   string   `xml:"title"`
+	Link    string   `xml:"link"`
 }
 
 type RssItem struct {
@@ -77,7 +71,6 @@ type RssLink struct {
 	Href    string   `xml:"href,attr"`
 }
 
-// Adds a RSS Item to a feed
 func (m *MapGenerator) AddToRss(ctx context.Context, f Fetcher, feed *RssFeed, category, id string) error {
 	e, err := m.Add(ctx, f, id)
 

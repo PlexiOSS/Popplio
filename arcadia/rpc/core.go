@@ -35,9 +35,8 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Handle carries the caller identity and target type for one RPC execution.
@@ -101,30 +100,32 @@ func Execute(ctx context.Context, method types.RPCMethod, h Handle) (Success, er
 		return Success{}, err
 	}
 
-	var logID pgtype.UUID
+	var dataMap map[string]any
 
-	err = state.Pool.QueryRow(ctx,
-		"INSERT INTO rpc_logs (method, user_id, data) VALUES ($1, $2, $3) RETURNING id",
-		method.Name(), h.UserID, data,
-	).Scan(&logID)
+	if err := json.Unmarshal(data, &dataMap); err != nil {
+		return Success{}, err
+	}
+
+	q := db.New(state.Pool)
+
+	logID, err := q.InsertRPCLog(ctx, db.InsertRPCLogParams{
+		Method: method.Name(),
+		UserID: h.UserID,
+		Data:   dataMap,
+	})
 
 	if err != nil {
 		return Success{}, err
 	}
 
-	var count int64
-
-	err = state.Pool.QueryRow(ctx,
-		"SELECT COUNT(*) FROM rpc_logs WHERE user_id = $1 AND NOW() - created_at < INTERVAL '7 minutes'",
-		h.UserID,
-	).Scan(&count)
+	count, err := q.CountRecentRPCLogs(ctx, h.UserID)
 
 	if err != nil {
 		return Success{}, errors.New("Failed to get ratelimit count")
 	}
 
 	if count > 5 {
-		_, err = state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE user_id = $1", h.UserID)
+		err = q.DeleteAuthChainByUserID(ctx, h.UserID)
 
 		if err != nil {
 			return Success{}, errors.New("Failed to reset user token")
@@ -140,7 +141,7 @@ func Execute(ctx context.Context, method types.RPCMethod, h Handle) (Success, er
 		logState = handlerErr.Error()
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE rpc_logs SET state = $1 WHERE id = $2", logState, logID); err != nil {
+	if err := q.UpdateRPCLogState(ctx, db.UpdateRPCLogStateParams{State: logState, ID: logID}); err != nil {
 		return Success{}, err
 	}
 
@@ -167,10 +168,8 @@ func checkReason(reason string) error {
 }
 
 // entityExists is the "SELECT COUNT(*)" existence guard several methods run.
-func entityExists(ctx context.Context, query string, targetID string) error {
-	var count int64
-
-	if err := state.Pool.QueryRow(ctx, query, targetID).Scan(&count); err != nil {
+func entityExists(count int64, err error, targetID string) error {
+	if err != nil {
 		return err
 	}
 
@@ -182,23 +181,37 @@ func entityExists(ctx context.Context, query string, targetID string) error {
 }
 
 func botExists(ctx context.Context, targetID string) error {
-	return entityExists(ctx, "SELECT COUNT(*) FROM bots WHERE bot_id = $1", targetID)
+	count, err := db.New(state.Pool).CountBotByID(ctx, targetID)
+	return entityExists(count, err, targetID)
 }
 
 func userExists(ctx context.Context, targetID string) error {
-	return entityExists(ctx, "SELECT COUNT(*) FROM users WHERE user_id = $1", targetID)
+	exists, err := db.New(state.Pool).UserExists(ctx, targetID)
+
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return fmt.Errorf("%q does not exist", targetID)
+	}
+
+	return nil
 }
 
 func serverExists(ctx context.Context, targetID string) error {
-	return entityExists(ctx, "SELECT COUNT(*) FROM servers WHERE server_id = $1", targetID)
+	count, err := db.New(state.Pool).CountServerByID(ctx, targetID)
+	return entityExists(count, err, targetID)
 }
 
 func teamExists(ctx context.Context, targetID string) error {
-	return entityExists(ctx, "SELECT COUNT(*) FROM teams WHERE id = $1", targetID)
+	count, err := db.New(state.Pool).CountTeamByID(ctx, targetID)
+	return entityExists(count, err, targetID)
 }
 
 func packExists(ctx context.Context, targetID string) error {
-	return entityExists(ctx, "SELECT COUNT(*) FROM packs WHERE url = $1", targetID)
+	count, err := db.New(state.Pool).CountPackByURL(ctx, targetID)
+	return entityExists(count, err, targetID)
 }
 
 // guardEntity is guardBot/guardUser generalized across every target type a

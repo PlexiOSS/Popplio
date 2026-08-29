@@ -6,6 +6,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 	ptypes "popplio/types"
 	"popplio/votes"
@@ -21,40 +22,28 @@ import (
 // Nothing here deletes a vote. Votes are voided in place with a reason and a
 // timestamp, so the record of what was reset survives the reset.
 
-// voteBanTable and its id column, per target type. Bots, servers, teams and
-// packs all carry an identical vote_banned column for exactly this purpose.
-func voteBanTable(targetType types.TargetType) (table, idCol string, ok bool) {
-	switch targetType {
-	case types.TargetTypeBot:
-		return "bots", "bot_id", true
-	case types.TargetTypeServer:
-		return "servers", "server_id", true
-	case types.TargetTypeTeam:
-		return "teams", "id", true
-	case types.TargetTypePack:
-		return "packs", "url", true
-	default:
-		return "", "", false
-	}
-}
-
 func voteBanSet(ctx context.Context, m *types.RPCTargetReason, h Handle, banned bool) (Success, error) {
 	if err := guardEntity(ctx, h.TargetType, m.TargetID, m.Reason); err != nil {
 		return Success{}, err
 	}
 
-	table, idCol, ok := voteBanTable(h.TargetType)
+	q := db.New(state.Pool)
 
-	if !ok {
+	var err error
+	switch h.TargetType {
+	case types.TargetTypeBot:
+		err = q.SetBotVoteBanned(ctx, db.SetBotVoteBannedParams{BotID: m.TargetID, VoteBanned: banned})
+	case types.TargetTypeServer:
+		err = q.SetServerVoteBanned(ctx, db.SetServerVoteBannedParams{ServerID: m.TargetID, VoteBanned: banned})
+	case types.TargetTypeTeam:
+		err = q.SetTeamVoteBanned(ctx, db.SetTeamVoteBannedParams{ID: m.TargetID, VoteBanned: banned})
+	case types.TargetTypePack:
+		err = q.SetPackVoteBanned(ctx, db.SetPackVoteBannedParams{Url: m.TargetID, VoteBanned: banned})
+	default:
 		return Success{}, fmt.Errorf("vote banning does not support target type %s", h.TargetType)
 	}
 
-	query := "UPDATE " + table + " SET vote_banned = false WHERE " + idCol + " = $1"
-	if banned {
-		query = "UPDATE " + table + " SET vote_banned = true WHERE " + idCol + " = $1"
-	}
-
-	if _, err := state.Pool.Exec(ctx, query, m.TargetID); err != nil {
+	if err != nil {
 		return Success{}, err
 	}
 
@@ -66,7 +55,7 @@ func voteBanSet(ctx context.Context, m *types.RPCTargetReason, h Handle, banned 
 		description = fmt.Sprintf("<@%s> has set the vote ban on <@%s>", h.UserID, m.TargetID)
 	}
 
-	err := modLogReason(
+	err = modLogReason(
 		title,
 		description,
 		"Remember: don't abuse our services!", impls.ColourRed, m.Reason)
@@ -101,10 +90,10 @@ func voteReset(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success
 		return Success{}, err
 	}
 
-	_, err := state.Pool.Exec(ctx,
-		"UPDATE entity_votes SET void = TRUE, void_reason = 'Votes (single entity) reset', voided_at = NOW() WHERE target_type = $1 AND target_id = $2 AND void = FALSE",
-		h.TargetType.String(), m.TargetID,
-	)
+	err := db.New(state.Pool).VoidEntityVotesForTarget(ctx, db.VoidEntityVotesForTargetParams{
+		TargetType: h.TargetType.String(),
+		TargetID:   m.TargetID,
+	})
 
 	if err != nil {
 		return Success{}, err
@@ -160,10 +149,7 @@ func voteResetAll(ctx context.Context, m *types.RPCVoteResetAll, h Handle) (Succ
 	defer tx.Rollback(ctx)
 
 	// Note: unlike VoteReset this has no void = FALSE filter.
-	_, err = tx.Exec(ctx,
-		"UPDATE entity_votes SET void = TRUE, void_reason = 'Votes (all entities) reset', voided_at = NOW() WHERE target_type = $1 AND immutable = false",
-		h.TargetType.String(),
-	)
+	err = db.New(tx).VoidAllEntityVotesForType(ctx, h.TargetType.String())
 
 	if err != nil {
 		return Success{}, err

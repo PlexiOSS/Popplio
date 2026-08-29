@@ -3,54 +3,25 @@ package tasks
 import (
 	"context"
 
+	"popplio/db"
 	"popplio/infernoplex/dclient"
 	"popplio/state"
+	"popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 )
-
-type syncedEmoji struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Animated bool   `json:"animated"`
-	URL      string `json:"url"`
-}
-
-type syncedSticker struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Format string `json:"format"`
-	URL    string `json:"url"`
-}
 
 func ServerSync(ctx context.Context) error {
 	if err := syncServerMeta(ctx); err != nil {
 		return err
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT server_id FROM servers WHERE show_emojis = true")
+	q := db.New(state.Pool)
+
+	serverIDs, err := q.GetServersWithEmojisShown(ctx)
 
 	if err != nil {
-		return err
-	}
-
-	var serverIDs []string
-
-	for rows.Next() {
-		var id string
-
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-
-		serverIDs = append(serverIDs, id)
-	}
-
-	rows.Close()
-
-	if err := rows.Err(); err != nil {
 		return err
 	}
 
@@ -73,7 +44,7 @@ func ServerSync(ctx context.Context) error {
 			continue
 		}
 
-		syncedEmojis := make([]syncedEmoji, 0, len(emojis))
+		syncedEmojis := make([]types.Emoji, 0, len(emojis))
 
 		for _, e := range emojis {
 			url := e.URL()
@@ -81,7 +52,7 @@ func ServerSync(ctx context.Context) error {
 				url = e.URL(discord.WithFormat(discord.FileFormatGIF))
 			}
 
-			syncedEmojis = append(syncedEmojis, syncedEmoji{
+			syncedEmojis = append(syncedEmojis, types.Emoji{
 				ID:       e.ID.String(),
 				Name:     e.Name,
 				Animated: e.Animated,
@@ -89,10 +60,10 @@ func ServerSync(ctx context.Context) error {
 			})
 		}
 
-		syncedStickers := make([]syncedSticker, 0, len(stickers))
+		syncedStickers := make([]types.Sticker, 0, len(stickers))
 
 		for _, s := range stickers {
-			syncedStickers = append(syncedStickers, syncedSticker{
+			syncedStickers = append(syncedStickers, types.Sticker{
 				ID:     s.ID.String(),
 				Name:   s.Name,
 				Format: stickerFormatName(s.FormatType),
@@ -100,10 +71,11 @@ func ServerSync(ctx context.Context) error {
 			})
 		}
 
-		if _, err := state.Pool.Exec(ctx,
-			"UPDATE servers SET emojis = $2, stickers = $3, emojis_synced_at = NOW() WHERE server_id = $1",
-			serverID, syncedEmojis, syncedStickers,
-		); err != nil {
+		if err := q.UpdateServerEmojisStickers(ctx, db.UpdateServerEmojisStickersParams{
+			ServerID: serverID,
+			Emojis:   syncedEmojis,
+			Stickers: syncedStickers,
+		}); err != nil {
 			return err
 		}
 	}
@@ -132,29 +104,17 @@ type syncTarget struct {
 }
 
 func syncServerMeta(ctx context.Context) error {
-	rows, err := state.Pool.Query(ctx, "SELECT server_id, stats_self_managed FROM servers")
+	q := db.New(state.Pool)
+
+	rows, err := q.GetServerIDsAndStatsSelfManaged(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	var targets []syncTarget
-
-	for rows.Next() {
-		var t syncTarget
-
-		if err := rows.Scan(&t.serverID, &t.statsSelfManaged); err != nil {
-			rows.Close()
-			return err
-		}
-
-		targets = append(targets, t)
-	}
-
-	rows.Close()
-
-	if err := rows.Err(); err != nil {
-		return err
+	targets := make([]syncTarget, len(rows))
+	for i, row := range rows {
+		targets[i] = syncTarget{serverID: row.ServerID, statsSelfManaged: row.StatsSelfManaged}
 	}
 
 	for _, target := range targets {
@@ -184,19 +144,25 @@ func syncServerMeta(ctx context.Context) error {
 		}
 
 		if target.statsSelfManaged {
-			if _, err := state.Pool.Exec(ctx,
-				"UPDATE servers SET avatar = $2, discord_nsfw_level = $3, nsfw_channel_count = $4 WHERE server_id = $1",
-				serverID, avatar, int(guild.NSFWLevel), nsfwChannelCount,
-			); err != nil {
+			if err := q.UpdateServerAvatarAndNsfwStats(ctx, db.UpdateServerAvatarAndNsfwStatsParams{
+				ServerID:         serverID,
+				Avatar:           avatar,
+				DiscordNsfwLevel: int16(guild.NSFWLevel),
+				NsfwChannelCount: int32(nsfwChannelCount),
+			}); err != nil {
 				return err
 			}
 			continue
 		}
 
-		if _, err := state.Pool.Exec(ctx,
-			"UPDATE servers SET avatar = $2, total_members = $3, online_members = $4, discord_nsfw_level = $5, nsfw_channel_count = $6 WHERE server_id = $1",
-			serverID, avatar, guild.ApproximateMemberCount, guild.ApproximatePresenceCount, int(guild.NSFWLevel), nsfwChannelCount,
-		); err != nil {
+		if err := q.UpdateServerAvatarMembersAndNsfw(ctx, db.UpdateServerAvatarMembersAndNsfwParams{
+			ServerID:         serverID,
+			Avatar:           avatar,
+			TotalMembers:     int32(guild.ApproximateMemberCount),
+			OnlineMembers:    int32(guild.ApproximatePresenceCount),
+			DiscordNsfwLevel: int16(guild.NSFWLevel),
+			NsfwChannelCount: int32(nsfwChannelCount),
+		}); err != nil {
 			return err
 		}
 	}

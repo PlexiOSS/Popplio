@@ -10,6 +10,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -61,9 +62,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.DefaultResponse(http.StatusBadRequest)
 	}
 
+	q := db.New(state.Pool)
+
 	// Check count of deleted rows
-	var count int64
-	err := state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM user_reminders WHERE user_id = $1 AND target_id = $2 AND target_type = $3", d.Auth.ID, targetId, targetType).Scan(&count)
+	count, err := q.CountUserReminder(d.Context, db.CountUserReminderParams{
+		UserID:     d.Auth.ID,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.ErrBody("Error querying reminders [db count]", "Error while checking user reminder count.", err, zap.String("target_id", targetId), zap.String("target_type", targetType))
@@ -73,7 +79,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.NotFound("Reminder not found")
 	}
 
-	_, err = state.Pool.Exec(d.Context, "DELETE FROM user_reminders WHERE user_id = $1 AND target_id = $2 AND target_type = $3", d.Auth.ID, targetId, targetType)
+	err = q.DeleteUserReminder(d.Context, db.DeleteUserReminderParams{
+		UserID:     d.Auth.ID,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.ErrBody("Error deleting reminders", "Error while deleting user reminder.", err, zap.String("target_id", targetId), zap.String("target_type", targetType))

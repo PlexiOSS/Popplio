@@ -7,6 +7,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/disgoorg/snowflake/v2"
@@ -37,7 +38,7 @@ func forceRemove(ctx context.Context, m *types.RPCForceRemove, h Handle) (Succes
 			return Success{}, errors.New("You can't force delete this bot with 'kick' enabled!")
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM bots WHERE bot_id = $1", m.TargetID); err != nil {
+		if err := db.New(state.Pool).DeleteBotByID(ctx, m.TargetID); err != nil {
 			return Success{}, err
 		}
 
@@ -57,13 +58,19 @@ func forceRemove(ctx context.Context, m *types.RPCForceRemove, h Handle) (Succes
 		return NoContent(), nil
 	}
 
-	table, idCol, ok := forceRemoveTable(h.TargetType)
+	q := db.New(state.Pool)
 
-	if !ok {
+	var err error
+	switch h.TargetType {
+	case types.TargetTypeServer:
+		err = q.DeleteServerByID(ctx, m.TargetID)
+	case types.TargetTypePack:
+		err = q.DeletePack(ctx, m.TargetID)
+	default:
 		return Success{}, fmt.Errorf("force removal does not support target type %s", h.TargetType)
 	}
 
-	if _, err := state.Pool.Exec(ctx, "DELETE FROM "+table+" WHERE "+idCol+" = $1", m.TargetID); err != nil {
+	if err != nil {
 		return Success{}, err
 	}
 
@@ -75,17 +82,6 @@ func forceRemove(ctx context.Context, m *types.RPCForceRemove, h Handle) (Succes
 	}
 
 	return NoContent(), nil
-}
-
-func forceRemoveTable(targetType types.TargetType) (table, idCol string, ok bool) {
-	switch targetType {
-	case types.TargetTypeServer:
-		return "servers", "server_id", true
-	case types.TargetTypePack:
-		return "packs", "url", true
-	default:
-		return "", "", false
-	}
 }
 
 func isProtectedBot(id snowflake.ID) bool {

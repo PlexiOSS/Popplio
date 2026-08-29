@@ -1,11 +1,12 @@
 package assets
 
 import (
+	"slices"
+
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/disgoorg/snowflake/v2"
-	"golang.org/x/exp/slices"
 )
 
 func CheckUserBoosterStatus(id snowflake.ID) types.BoosterStatus {

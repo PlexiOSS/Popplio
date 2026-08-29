@@ -9,6 +9,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
@@ -73,18 +74,32 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	tx.Exec(d.Context, "DELETE FROM user_notifications WHERE user_id = $1 AND endpoint = $2", id, subscription.Endpoint)
+	q := db.New(tx)
 
-	tx.Exec(
-		d.Context,
-		"INSERT INTO user_notifications (user_id, notif_id, auth, p256dh, endpoint, ua) VALUES ($1, $2, $3, $4, $5, $6)",
-		id,
-		notifId,
-		subscription.Auth,
-		subscription.P256dh,
-		subscription.Endpoint,
-		ua,
-	)
+	// NOTE: previously these two errors were silently discarded (bare
+	// tx.Exec calls with no err check) -- a failed delete/insert would
+	// still Commit as if it succeeded. Now checked like everywhere else.
+	err = q.DeleteUserNotificationByEndpoint(d.Context, db.DeleteUserNotificationByEndpointParams{
+		UserID:   id,
+		Endpoint: subscription.Endpoint,
+	})
+
+	if err != nil {
+		return resp.Err("Error while removing existing subscription", err, zap.String("userID", d.Auth.ID))
+	}
+
+	err = q.InsertUserNotification(d.Context, db.InsertUserNotificationParams{
+		UserID:   id,
+		NotifID:  notifId,
+		Auth:     subscription.Auth,
+		P256dh:   subscription.P256dh,
+		Endpoint: subscription.Endpoint,
+		Ua:       ua,
+	})
+
+	if err != nil {
+		return resp.Err("Error while inserting subscription", err, zap.String("userID", d.Auth.ID))
+	}
 
 	err = tx.Commit(d.Context)
 

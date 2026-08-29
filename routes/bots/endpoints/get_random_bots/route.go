@@ -5,23 +5,15 @@ package get_random_bots
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/routes/bots/assets"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
-
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
-	indexBotCols    = strings.Join(indexBotColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -35,16 +27,37 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+indexBotCols+" FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY RANDOM() LIMIT 6")
+	rows, err := db.New(state.Pool).GetRandomIndexBots(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while getting random bots [db fetch]", err)
 	}
 
-	bots, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexBot])
-
-	if err != nil {
-		return resp.Err("Error while getting random bots [collect]", err)
+	bots := make([]types.IndexBot, len(rows))
+	for i, row := range rows {
+		bots[i] = types.IndexBot{
+			BotID:            row.BotID,
+			Short:            row.Short,
+			Type:             row.Type,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			Shards:           int(row.Shards),
+			Library:          row.Library,
+			InviteClick:      int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			Servers:          int(row.Servers),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			CreatedAt:        row.CreatedAt,
+			SelfStatus:       row.SelfStatus,
+			LastStatsPost:    row.LastStatsPost,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+			VoteBlitzUntil:   row.VoteBlitzUntil,
+		}
 	}
 
 	// Resolve all bots concurrently, since each bot's resolution is independent

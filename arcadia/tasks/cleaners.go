@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +35,11 @@ var genericEntities = []struct {
 // that actually carry a target_id column and then quoted with
 // pgx.Identifier.Sanitize before use, so a hostile or unexpected table name
 // cannot become SQL. The set of tables acted on is unchanged.
+//
+// This (and cleanTable below) stays raw pgx, not sqlc, deliberately: the
+// table it queries is discovered at runtime from information_schema.columns,
+// not a fixed set sqlc's static query analysis can represent -- same
+// reasoning as list.search_list and routes/users/.../tableops.go.
 func GenericCleaner(ctx context.Context) error {
 	rows, err := state.Pool.Query(ctx, "select table_name from information_schema.columns where column_name = 'target_id' and table_schema = 'public'")
 
@@ -142,13 +147,9 @@ func TeamCleaner(ctx context.Context) error {
 
 	defer tx.Rollback(ctx)
 
-	rows, err := tx.Query(ctx, "SELECT id FROM teams")
+	q := db.New(tx)
 
-	if err != nil {
-		return fmt.Errorf("Error while fetching all teams: %s", err)
-	}
-
-	teamIDs, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	teamIDs, err := q.GetAllTeamIDs(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while fetching all teams: %s", err)
@@ -157,54 +158,55 @@ func TeamCleaner(ctx context.Context) error {
 	state.Logger.Info("Found teams", zap.Int("count", len(teamIDs)))
 
 	for _, teamID := range teamIDs {
-		var memberCount int64
+		var teamUUID pgtype.UUID
+		if err := teamUUID.Scan(teamID); err != nil {
+			return fmt.Errorf("Error while parsing team id %s: %s", teamID, err)
+		}
 
-		err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM team_members WHERE team_id = $1", teamID).Scan(&memberCount)
+		memberCount, err := q.CountTeamMembers(ctx, teamUUID)
 
 		if err != nil {
 			return fmt.Errorf("Error while checking if team %s has members: %s", teamID, err)
 		}
 
 		if memberCount == 0 {
-			if _, err := tx.Exec(ctx, "DELETE FROM teams WHERE id = $1", teamID); err != nil {
+			if err := q.DeleteTeam(ctx, teamID); err != nil {
 				return fmt.Errorf("Error while deleting team %s: %s", teamID, err)
 			}
 
-			state.Logger.Info("Deleted team", zap.String("teamID", teamID.String()))
+			state.Logger.Info("Deleted team", zap.String("teamID", teamID))
 			continue
 		}
 
-		globalOwnerRows, err := tx.Query(ctx, "SELECT user_id FROM team_members WHERE team_id = $1 AND flags @> ARRAY[$2]", teamID, string(perms.EntityOwner))
-
-		if err != nil {
-			return fmt.Errorf("Error while checking count of team_members with global owner: %s: %s", teamID, err)
-		}
-
-		globalOwners, err := pgx.CollectRows(globalOwnerRows, pgx.RowTo[string])
+		globalOwners, err := q.GetTeamMembersWithFlag(ctx, db.GetTeamMembersWithFlagParams{
+			TeamID: teamUUID,
+			Flag:   string(perms.EntityOwner),
+		})
 
 		if err != nil {
 			return fmt.Errorf("Error while checking count of team_members with global owner: %s: %s", teamID, err)
 		}
 
 		if len(globalOwners) == 0 {
-			userID, err := promotionCandidate(ctx, tx, teamID)
+			userID, err := promotionCandidate(ctx, q, teamUUID, teamID)
 
 			if err != nil {
 				return err
 			}
 
-			_, err = tx.Exec(ctx,
-				"UPDATE team_members SET flags = $1, data_holder = $2 WHERE team_id = $3 AND user_id = $4",
-				[]string{string(perms.EntityOwner)}, true, teamID, userID)
+			err = q.PromoteTeamMemberToOwner(ctx, db.PromoteTeamMemberToOwnerParams{
+				Flags:      []string{string(perms.EntityOwner)},
+				DataHolder: true,
+				TeamID:     teamUUID,
+				UserID:     userID,
+			})
 
 			if err != nil {
 				return fmt.Errorf("Error while updating flags for team %s: %s", teamID, err)
 			}
 		}
 
-		var dataHolders int64
-
-		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND data_holder = true", teamID).Scan(&dataHolders)
+		dataHolders, err := q.CountTeamDataHoldersForTeam(ctx, teamUUID)
 
 		if err != nil {
 			return fmt.Errorf("Error while validating data holders of %s: %s", teamID, err)
@@ -212,13 +214,14 @@ func TeamCleaner(ctx context.Context) error {
 
 		if dataHolders == 0 {
 			if len(globalOwners) == 0 {
-				state.Logger.Warn("Team has no data holders and no global owners", zap.String("teamID", teamID.String()))
+				state.Logger.Warn("Team has no data holders and no global owners", zap.String("teamID", teamID))
 				continue
 			}
 
-			_, err := tx.Exec(ctx,
-				"UPDATE team_members SET data_holder = true WHERE team_id = $1 AND user_id = $2",
-				teamID, globalOwners[0])
+			err := q.SetTeamMemberDataHolder(ctx, db.SetTeamMemberDataHolderParams{
+				TeamID: teamUUID,
+				UserID: globalOwners[0],
+			})
 
 			if err != nil {
 				return fmt.Errorf("Error while updating data_holder for team %s: %s", teamID, err)
@@ -235,10 +238,8 @@ func TeamCleaner(ctx context.Context) error {
 
 // promotionCandidate picks the member to promote to global owner: the existing
 // data holder if there is one, otherwise the first member.
-func promotionCandidate(ctx context.Context, tx pgx.Tx, teamID uuid.UUID) (string, error) {
-	var userID string
-
-	err := tx.QueryRow(ctx, "SELECT user_id FROM team_members WHERE team_id = $1 AND data_holder = true", teamID).Scan(&userID)
+func promotionCandidate(ctx context.Context, q *db.Queries, teamUUID pgtype.UUID, teamID string) (string, error) {
+	userID, err := q.GetTeamDataHolderUserID(ctx, teamUUID)
 
 	if err == nil {
 		return userID, nil
@@ -248,7 +249,7 @@ func promotionCandidate(ctx context.Context, tx pgx.Tx, teamID uuid.UUID) (strin
 		return "", fmt.Errorf("Error while fetching data_holder for team %s: %s", teamID, err)
 	}
 
-	err = tx.QueryRow(ctx, "SELECT user_id FROM team_members WHERE team_id = $1 LIMIT 1", teamID).Scan(&userID)
+	userID, err = q.GetFirstTeamMemberUserID(ctx, teamUUID)
 
 	if err != nil {
 		return "", fmt.Errorf("Error while fetching first team member for team %s: %s", teamID, err)

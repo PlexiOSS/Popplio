@@ -55,8 +55,6 @@ const (
 	StaffViewCDN   Perm = "view_cdn"
 	StaffManageCDN Perm = "manage_cdn"
 
-	// Markers are permissions that don't grant any power on their own,
-	// but are used to mark a staff member as having a certain role or status.
 	StaffMarkerDeveloper      Perm = "marker_developer"
 	StaffMarkerLeadDeveloper  Perm = "marker_lead_developer"
 	StaffMarkerHumanResources Perm = "marker_human_resources"
@@ -65,8 +63,6 @@ const (
 	StaffMarkerDisciplinary   Perm = "marker_disciplinary"
 )
 
-// Staff is what a staff member may do on the platform. Its roles are the
-// `staff_positions` rows, each bound to a Discord role in the staff server.
 var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	{
 		ID:          StaffAdministrator,

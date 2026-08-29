@@ -13,8 +13,6 @@ import (
 	"popplio/state"
 )
 
-// Draft is a not-yet-saved changelog entry body -- everything CreateEntry
-// needs except project/version/prerelease/published, which the admin sets.
 type Draft struct {
 	Added            []string `json:"added"`
 	Updated          []string `json:"updated"`
@@ -25,18 +23,10 @@ type Draft struct {
 
 var summarizeHTTPClient = &http.Client{Timeout: 45 * time.Second}
 
-// maxBodyChars bounds how much of a PR's body gets sent to the model --
-// long bodies (design docs, screenshots-as-markdown) cost tokens without
-// adding much signal for a one-line changelog bullet.
 const maxBodyChars = 500
 
-// maxPatchChars bounds how much of one file's diff gets sent to the model
-// in the no-PRs fallback -- large generated/vendored files would otherwise
-// dominate the prompt budget for no summarization value.
 const maxPatchChars = 1500
 
-// maxTotalDiffChars caps the combined diff content sent across all files,
-// so a release touching hundreds of files still fits a reasonable prompt.
 const maxTotalDiffChars = 12000
 
 type chatRequest struct {
@@ -68,10 +58,6 @@ const diffSystemPrompt = `You are writing a changelog entry for end users of a s
 Respond with ONLY a JSON object of this exact shape:
 {"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "extra_description": "..."}`
 
-// Summarize turns a GitHub compare result into a Draft. When
-// Meta.OpenAIAPIKey is unset it falls back to a title/commit-bucketing
-// heuristic -- rougher output, but the feature still works rather than
-// erroring out, same contract as moderation.CheckText.
 func Summarize(ctx context.Context, cmp CompareResult) (Draft, error) {
 	apiKey := state.Config.Meta.OpenAIAPIKey
 
@@ -88,8 +74,6 @@ func Summarize(ctx context.Context, cmp CompareResult) (Draft, error) {
 	}
 
 	if apiKey == "" {
-		// No LLM available to actually read the diff -- bucket the raw
-		// commit subjects instead, same as the PR-title heuristic.
 		return heuristicDraftFromTitles(cmp.CommitMessages), nil
 	}
 
@@ -211,9 +195,6 @@ func callChat(ctx context.Context, apiKey, systemPrompt, userContent string) (Dr
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Same reasoning as githubRequest: a bare status code can't tell a
-		// per-minute rate limit apart from an exhausted billing quota, and
-		// those need different fixes.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
 		return Draft{}, fmt.Errorf("summarize endpoint returned status %d: %s", resp.StatusCode, string(body))
 	}
@@ -237,9 +218,6 @@ func callChat(ctx context.Context, apiKey, systemPrompt, userContent string) (Dr
 	return draft, nil
 }
 
-// heuristicDraftFromTitles buckets plain title/subject strings (PR titles or
-// commit subjects) by a simple prefix match when no OpenAI key is
-// configured. Used verbatim -- no rewriting.
 func heuristicDraftFromTitles(titles []string) Draft {
 	var draft Draft
 

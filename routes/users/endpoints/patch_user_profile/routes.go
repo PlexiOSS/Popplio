@@ -5,14 +5,17 @@
 package patch_user_profile
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -65,27 +68,43 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("About me contains markup that isn't allowed (scripts, event handlers, or similar)")
 	}
 
+	extraLinksJSON, err := json.Marshal(profile.ExtraLinks)
+
+	if err != nil {
+		return resp.Err("Error marshaling extra links", err, zap.String("userID", d.Auth.ID))
+	}
+
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while starting transaction", err, zap.String("userID", d.Auth.ID))
 	}
 
-	_, err = tx.Exec(d.Context, "UPDATE users SET updated_at = NOW() WHERE user_id = $1", id)
+	defer tx.Rollback(d.Context)
+
+	q := db.New(tx)
+
+	err = q.UpdateUsersUpdatedAt(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Error while updating updated_at", err, zap.String("userID", d.Auth.ID))
 	}
 
 	// Update extra links
-	_, err = tx.Exec(d.Context, "UPDATE users SET extra_links = $1 WHERE user_id = $2", profile.ExtraLinks, id)
+	err = q.UpdateUserExtraLinks(d.Context, db.UpdateUserExtraLinksParams{
+		ExtraLinks: extraLinksJSON,
+		UserID:     id,
+	})
 
 	if err != nil {
 		return resp.Err("Error while updating extra links", err, zap.String("userID", d.Auth.ID))
 	}
 
 	if profile.About != "" {
-		_, err = tx.Exec(d.Context, "UPDATE users SET about = $1 WHERE user_id = $2", profile.About, id)
+		err = q.UpdateUserAbout(d.Context, db.UpdateUserAboutParams{
+			About:  pgtype.Text{String: profile.About, Valid: true},
+			UserID: id,
+		})
 
 		if err != nil {
 			return resp.Err("Error while updating about", err, zap.String("userID", d.Auth.ID))
@@ -93,7 +112,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if profile.CaptchaSponsorEnabled != nil {
-		_, err = tx.Exec(d.Context, "UPDATE users SET captcha_sponsor_enabled = $1 WHERE user_id = $2", *profile.CaptchaSponsorEnabled, id)
+		err = q.UpdateUserCaptchaSponsorEnabled(d.Context, db.UpdateUserCaptchaSponsorEnabledParams{
+			CaptchaSponsorEnabled: *profile.CaptchaSponsorEnabled,
+			UserID:                id,
+		})
 
 		if err != nil {
 			return resp.Err("Error while updating captcha sponsor enabled", err, zap.String("userID", d.Auth.ID))

@@ -1,35 +1,18 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5"
 )
 
-// Shop items: what can be bought.
-
-type shopItemRow struct {
-	ID          string    `db:"id"`
-	Name        string    `db:"name"`
-	Cents       float64   `db:"cents"`
-	TargetTypes []string  `db:"target_types"`
-	Benefits    []string  `db:"benefits"`
-	CreatedAt   time.Time `db:"created_at"`
-	LastUpdated time.Time `db:"last_updated"`
-	CreatedBy   string    `db:"created_by"`
-	UpdatedBy   string    `db:"updated_by"`
-	Duration    int32     `db:"duration"`
-	Description string    `db:"description"`
-}
-
-// validateShopItem applies the shared checks and confirms every benefit exists.
 func validateShopItem(ctx context.Context, action *types.ShopItemUpsert) (*response, error) {
 	if action.Cents < 0 {
 		resp := writeText(http.StatusBadRequest, "Cents cannot be lower than 0")
@@ -41,8 +24,10 @@ func validateShopItem(ctx context.Context, action *types.ShopItemUpsert) (*respo
 		return &resp, nil
 	}
 
+	q := db.New(state.Pool)
+
 	for _, benefit := range action.Benefits {
-		exists, err := countExists(ctx, "SELECT COUNT(*) FROM shop_item_benefits WHERE id = $1", benefit)
+		exists, err := q.CountShopItemBenefitByID(ctx, benefit)
 
 		if err != nil {
 			return nil, err
@@ -66,15 +51,7 @@ func (s *Server) updateShopItems(ctx context.Context, q *types.QUpdateShopItems)
 
 	switch {
 	case q.Action.List != nil:
-		// No permission check.
-		rows, err := state.Pool.Query(ctx,
-			"SELECT id, name, cents, target_types, benefits, created_at, last_updated, created_by, updated_by, duration, description FROM shop_items ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		itemRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[shopItemRow])
+		itemRows, err := db.New(state.Pool).GetShopItems(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -90,9 +67,9 @@ func (s *Server) updateShopItems(ctx context.Context, q *types.QUpdateShopItems)
 				Cents:       i.Cents,
 				TargetTypes: types.NonNilStrings(i.TargetTypes),
 				Benefits:    types.NonNilStrings(i.Benefits),
-				Duration:    i.Duration,
-				CreatedAt:   types.NewTimestamp(i.CreatedAt),
-				LastUpdated: types.NewTimestamp(i.LastUpdated),
+				Duration:    int32(i.Duration),
+				CreatedAt:   types.NewTimestamp(i.CreatedAt.Time),
+				LastUpdated: types.NewTimestamp(i.LastUpdated.Time),
 				CreatedBy:   i.CreatedBy,
 				UpdatedBy:   i.UpdatedBy,
 			})
@@ -116,9 +93,16 @@ func (s *Server) updateShopItems(ctx context.Context, q *types.QUpdateShopItems)
 			return *resp, nil
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"INSERT INTO shop_items (id, name, cents, target_types, benefits, created_by, updated_by, duration, description) VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8)",
-			action.ID, action.Name, action.Cents, action.TargetTypes, action.Benefits, authData.UserID, action.Duration, action.Description)
+		err = db.New(state.Pool).InsertShopItem(ctx, db.InsertShopItemParams{
+			ID:          action.ID,
+			Name:        action.Name,
+			Cents:       action.Cents,
+			TargetTypes: types.NonNilStrings(action.TargetTypes),
+			Benefits:    types.NonNilStrings(action.Benefits),
+			CreatedBy:   authData.UserID,
+			Duration:    int64(action.Duration),
+			Description: action.Description,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -142,15 +126,26 @@ func (s *Server) updateShopItems(ctx context.Context, q *types.QUpdateShopItems)
 			return *resp, nil
 		}
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM shop_items WHERE id = $1", action.ID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		exists, err := db.New(state.Pool).CountShopItemByID(ctx, action.ID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE shop_items SET name = $1, cents = $2, target_types = $3, benefits = $4, last_updated = NOW(), updated_by = $5, duration = $6, description = $7 WHERE id = $8",
-			action.Name, action.Cents, action.TargetTypes, action.Benefits, authData.UserID, action.Duration, action.Description, action.ID)
+		err = db.New(state.Pool).UpdateShopItem(ctx, db.UpdateShopItemParams{
+			Name:        action.Name,
+			Cents:       action.Cents,
+			TargetTypes: types.NonNilStrings(action.TargetTypes),
+			Benefits:    types.NonNilStrings(action.Benefits),
+			UpdatedBy:   authData.UserID,
+			Duration:    int64(action.Duration),
+			Description: action.Description,
+			ID:          action.ID,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -164,13 +159,17 @@ func (s *Server) updateShopItems(ctx context.Context, q *types.QUpdateShopItems)
 
 		id := q.Action.Delete.ID
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM shop_items WHERE id = $1", id); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		exists, err := db.New(state.Pool).CountShopItemByID(ctx, id)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM shop_items WHERE id = $1", id); err != nil {
+		if err := db.New(state.Pool).DeleteShopItem(ctx, id); err != nil {
 			return response{}, newError(err)
 		}
 

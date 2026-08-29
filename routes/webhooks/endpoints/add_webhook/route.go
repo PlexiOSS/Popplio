@@ -11,6 +11,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -115,9 +116,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while starting transaction", err, zap.String("userID", d.Auth.ID))
 	}
 
-	var count int64
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM webhooks WHERE target_id = $1 AND target_type = $2", targetId, targetType).Scan(&count)
+	count, err := q.CountWebhooksForTarget(d.Context, db.CountWebhooksForTargetParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.Err("Error while checking webhook", err, zap.String("userID", d.Auth.ID))
@@ -127,7 +131,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(fmt.Sprintf("An entity may only have a maximum of %d webhooks", MaximumWebhookCount))
 	}
 
-	_, err = tx.Exec(d.Context, "INSERT INTO webhooks (target_id, target_type, url, secret, simple_auth, hmac_auth, name, event_whitelist) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", targetId, targetType, payload.Url, payload.Secret, payload.SimpleAuth, payload.HmacAuth, payload.Name, payload.EventWhitelist)
+	err = q.InsertWebhook(d.Context, db.InsertWebhookParams{
+		TargetID:       targetId,
+		TargetType:     targetType,
+		Url:            payload.Url,
+		Secret:         payload.Secret,
+		SimpleAuth:     payload.SimpleAuth,
+		HmacAuth:       payload.HmacAuth,
+		Name:           payload.Name,
+		EventWhitelist: payload.EventWhitelist,
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting webhook", err, zap.String("userID", d.Auth.ID))

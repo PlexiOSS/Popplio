@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
@@ -23,10 +24,6 @@ import (
 
 var inviteCodeRegex = regexp.MustCompile(`(?:discord(?:\.gg|\.com/invite|app\.com/invite)/)?([a-zA-Z0-9-]+)/?$`)
 
-// ResolveInvite extracts the invite code from a raw invite link/code and
-// resolves it against Discord, returning the guild the invite points to.
-// Shared by Add Server and Get Server Meta so the two never drift on what
-// counts as a valid invite.
 func ResolveInvite(ctx context.Context, rawInvite string) (*discord.Invite, error) {
 	match := inviteCodeRegex.FindStringSubmatch(strings.TrimSpace(rawInvite))
 
@@ -47,7 +44,6 @@ func ResolveInvite(ctx context.Context, rawInvite string) (*discord.Invite, erro
 	return invite, nil
 }
 
-// GuildIconURL returns the guild's icon CDN URL, or "" if it has none set.
 func GuildIconURL(guild *discord.InviteGuild) string {
 	if guild.Icon == nil {
 		return ""
@@ -55,23 +51,11 @@ func GuildIconURL(guild *discord.InviteGuild) string {
 	return discord.GuildIcon.URL(discord.FileFormatPNG, nil, guild.ID, *guild.Icon)
 }
 
-// BotGuildPresence is the result of asking Infernoplex whether it's
-// currently a member of a guild.
 type BotGuildPresence struct {
 	Present   bool
 	InviteURL string
 }
 
-// CheckBotGuildPresence asks Infernoplex (the tracking bot, a separate
-// service from Popplio's own Discord client) whether it's currently a
-// member of the given guild via its Sorbet API. Several features
-// (emoji/sticker sync, real invite creation, live member counts) silently
-// never work for a server unless the tracking bot is actually in it, so
-// this is used to nudge owners to invite it during Add Server.
-//
-// Best-effort: any failure to reach Infernoplex is treated as "not present,
-// no invite URL available" rather than failing the caller — this only
-// drives a UI hint, nothing load-bearing depends on it.
 func CheckBotGuildPresence(ctx context.Context, guildID string) BotGuildPresence {
 	reqBody, err := json.Marshal(map[string]any{
 		"IsInGuild": map[string]any{
@@ -124,9 +108,7 @@ func CheckBotGuildPresence(ctx context.Context, guildID string) BotGuildPresence
 }
 
 func ResolveIndexServer(ctx context.Context, server *types.IndexServer) error {
-	var code string
-
-	err := state.Pool.QueryRow(ctx, "SELECT code FROM vanity WHERE itag = $1", server.VanityRef).Scan(&code)
+	code, err := db.New(state.Pool).GetVanityCodeByItag(ctx, server.VanityRef)
 
 	if err != nil {
 		return fmt.Errorf("error querying vanity table: %w", err)
@@ -143,9 +125,6 @@ func ResolveIndexServer(ctx context.Context, server *types.IndexServer) error {
 	return nil
 }
 
-// ResolveIndexServers resolves every server in the slice concurrently, since
-// each server's resolution (vanity lookup, vote count) is independent of
-// every other server's. Returns the first error encountered, if any.
 func ResolveIndexServers(ctx context.Context, servers []types.IndexServer) error {
 	g, ctx := errgroup.WithContext(ctx)
 

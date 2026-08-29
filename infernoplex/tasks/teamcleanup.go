@@ -3,21 +3,18 @@ package tasks
 import (
 	"context"
 
+	"popplio/db"
 	"popplio/infernoplex/dclient"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TeamCleanup(ctx context.Context) error {
-	rows, err := state.Pool.Query(ctx, `
-		SELECT tm.team_id, tm.user_id, s.server_id
-		FROM team_members tm
-		JOIN servers s ON s.team_owner = tm.team_id
-		WHERE tm.service = 'infernoplex'
-	`)
+	rows, err := db.New(state.Pool).GetInfernoplexTeamServerMembers(ctx)
 
 	if err != nil {
 		return err
@@ -29,23 +26,13 @@ func TeamCleanup(ctx context.Context) error {
 		serverID string
 	}
 
-	var memberRows []memberRow
-
-	for rows.Next() {
-		var r memberRow
-
-		if err := rows.Scan(&r.teamID, &r.userID, &r.serverID); err != nil {
-			rows.Close()
-			return err
+	memberRows := make([]memberRow, len(rows))
+	for i, row := range rows {
+		memberRows[i] = memberRow{
+			teamID:   uuid.UUID(row.TeamID.Bytes),
+			userID:   row.UserID,
+			serverID: row.ServerID,
 		}
-
-		memberRows = append(memberRows, r)
-	}
-
-	rows.Close()
-
-	if err := rows.Err(); err != nil {
-		return err
 	}
 
 	for _, r := range memberRows {
@@ -107,10 +94,8 @@ func hasAdministratorRole(roleIDs []snowflake.ID, roles []discord.Role) bool {
 }
 
 func removeTeamMember(ctx context.Context, teamID uuid.UUID, userID string) error {
-	_, err := state.Pool.Exec(ctx,
-		"DELETE FROM team_members WHERE team_id = $1 AND user_id = $2 AND service = 'infernoplex'",
-		teamID, userID,
-	)
-
-	return err
+	return db.New(state.Pool).DeleteInfernoplexTeamMember(ctx, db.DeleteInfernoplexTeamMemberParams{
+		TeamID: pgtype.UUID{Bytes: teamID, Valid: true},
+		UserID: userID,
+	})
 }

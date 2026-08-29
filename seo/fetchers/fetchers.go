@@ -1,8 +1,3 @@
-// Package fetchers resolves each entity type Popplio publishes for SEO.
-//
-// There is one fetcher per entity type (team, bot, server, user, pack); the
-// sitemap and RSS generators walk them rather than knowing about entity
-// types themselves, so a new listable entity only has to be added here.
 package fetchers
 
 import (
@@ -10,15 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/PlexiOSS/Keel/uuidutil"
+	"popplio/db"
 	"popplio/seo"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/PlexiOSS/Keel/dovewing"
 )
 
-// Fetcher for a team
 type TeamFetcher struct{}
 
 func (t *TeamFetcher) Type() string {
@@ -26,12 +20,7 @@ func (t *TeamFetcher) Type() string {
 }
 
 func (t *TeamFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string) (*seo.Entity, error) {
-	var name string
-	var short pgtype.Text
-	var createdAt time.Time
-	var updatedAt time.Time
-
-	err := state.Pool.QueryRow(ctx, "SELECT name, short, created_at, updated_at FROM teams WHERE id = $1", id).Scan(&name, &short, &createdAt, &updatedAt)
+	row, err := db.New(state.Pool).GetTeamSEOFields(ctx, id)
 
 	if err != nil {
 		return nil, err
@@ -40,17 +29,17 @@ func (t *TeamFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 	return &seo.Entity{
 		ID:   id,
 		Type: t.Type(),
-		Name: name,
+		Name: row.Name,
 		Description: func() string {
-			if short.Valid {
-				return short.String
+			if row.Short.Valid {
+				return row.Short.String
 			}
 
 			return "This team seems to be a bit mysterious indeed!"
 		}(),
 		URL:       fmt.Sprintf("%s/teams/%s", state.Config.Sites.Frontend, id),
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
+		CreatedAt: row.CreatedAt.Time,
+		UpdatedAt: row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -62,9 +51,9 @@ func (u *UserFetcher) Type() string {
 }
 
 func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string) (*seo.Entity, error) {
-	var count int
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE user_id = $1", id).Scan(&count)
+	exists, err := q.UserExists(ctx, id)
 
 	if err != nil {
 		return nil, err
@@ -76,7 +65,7 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	if count == 0 {
+	if !exists {
 		return &seo.Entity{
 			ID:          id,
 			Type:        u.Type(),
@@ -89,11 +78,7 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 		}, nil
 	}
 
-	var about string
-	var createdAt time.Time
-	var updatedAt time.Time
-
-	err = state.Pool.QueryRow(ctx, "SELECT about, created_at, updated_at FROM users WHERE user_id = $1", id).Scan(&about, &createdAt, &updatedAt)
+	row, err := q.GetUserAboutAndTimestamps(ctx, id)
 
 	if err != nil {
 		return nil, err
@@ -104,14 +89,13 @@ func (u *UserFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string
 		Type:        u.Type(),
 		AvatarURL:   pu.Avatar,
 		Name:        pu.Username,
-		Description: about,
+		Description: row.About.String,
 		URL:         fmt.Sprintf("%s/user/%s", state.Config.Sites.Frontend, id),
-		CreatedAt:   createdAt,
-		UpdatedAt:   updatedAt,
+		CreatedAt:   row.CreatedAt.Time,
+		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
 }
 
-// Fetcher for a bot
 type BotFetcher struct{}
 
 func (b *BotFetcher) Type() string {
@@ -119,13 +103,7 @@ func (b *BotFetcher) Type() string {
 }
 
 func (b *BotFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string) (*seo.Entity, error) {
-	var short string
-	var owner pgtype.Text
-	var teamOwner pgtype.Text
-	var createdAt time.Time
-	var updatedAt time.Time
-
-	err := state.Pool.QueryRow(ctx, "SELECT short, owner, team_owner, created_at, updated_at FROM bots WHERE bot_id = $1 AND (type = 'approved' OR type = 'certified')", id).Scan(&short, &owner, &teamOwner, &createdAt, &updatedAt)
+	row, err := db.New(state.Pool).GetBotSEOFields(ctx, id)
 
 	if err != nil {
 		return nil, err
@@ -139,16 +117,16 @@ func (b *BotFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string)
 
 	var resolvedOwner *seo.Entity
 
-	if teamOwner.Valid {
-		resolvedOwner, err = mg.Add(ctx, &TeamFetcher{}, teamOwner.String)
+	if row.TeamOwner.Valid {
+		resolvedOwner, err = mg.Add(ctx, &TeamFetcher{}, uuidutil.Encode(row.TeamOwner.Bytes))
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve team owner: %w", err)
 		}
 	}
 
-	if owner.Valid {
-		resolvedOwner, err = mg.Add(ctx, &UserFetcher{}, owner.String)
+	if row.Owner.Valid {
+		resolvedOwner, err = mg.Add(ctx, &UserFetcher{}, row.Owner.String)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve owner: %w", err)
@@ -160,10 +138,10 @@ func (b *BotFetcher) Fetch(ctx context.Context, mg *seo.MapGenerator, id string)
 		Type:        b.Type(),
 		Name:        botUser.Username,
 		AvatarURL:   botUser.Avatar,
-		Description: short,
+		Description: row.Short,
 		URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, id),
 		Author:      resolvedOwner,
-		CreatedAt:   createdAt,
-		UpdatedAt:   updatedAt,
+		CreatedAt:   row.CreatedAt.Time,
+		UpdatedAt:   row.UpdatedAt.Time,
 	}, nil
 }

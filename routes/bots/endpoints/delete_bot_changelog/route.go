@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -48,15 +49,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	botId := chi.URLParam(r, "id")
 	changelogId := chi.URLParam(r, "changelog_id")
 
-	tag, err := state.Pool.Exec(d.Context,
-		"DELETE FROM bot_changelogs WHERE id = $1 AND bot_id = $2",
-		changelogId, botId)
+	rowsAffected, err := db.New(state.Pool).DeleteBotChangelog(d.Context, db.DeleteBotChangelogParams{
+		ID:    changelogId,
+		BotID: botId,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to delete bot changelog", err, zap.String("botID", botId), zap.String("changelogID", changelogId))
 	}
 
-	if tag.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return resp.NotFound("Changelog entry not found")
 	}
 

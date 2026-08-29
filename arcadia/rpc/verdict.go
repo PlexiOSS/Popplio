@@ -8,6 +8,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 	ptypes "popplio/types"
 
@@ -26,16 +27,22 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		return Success{}, err
 	}
 
-	var (
-		botType     string
-		claimedBy   *string
-		lastClaimed *time.Time
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, last_claimed FROM bots WHERE bot_id = $1", m.TargetID).Scan(&botType, &claimedBy, &lastClaimed)
+	row, err := db.New(state.Pool).GetBotReviewStatus(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	botType := row.Type
+
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
+	}
+
+	var lastClaimed *time.Time
+	if row.LastClaimed.Valid {
+		lastClaimed = &row.LastClaimed.Time
 	}
 
 	if botType != "pending" {
@@ -60,7 +67,7 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, "UPDATE bots SET type = 'approved', claimed_by = NULL WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(tx).ApproveBot(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -127,9 +134,9 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		}
 	}
 
-	var clientID string
+	clientID, err := db.New(state.Pool).GetBotClientID(ctx, m.TargetID)
 
-	if err := state.Pool.QueryRow(ctx, "SELECT client_id FROM bots WHERE bot_id = $1", m.TargetID).Scan(&clientID); err != nil {
+	if err != nil {
 		return Success{}, err
 	}
 
@@ -144,16 +151,22 @@ func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
-	var (
-		serverType  string
-		claimedBy   *string
-		lastClaimed *time.Time
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, last_claimed FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType, &claimedBy, &lastClaimed)
+	row, err := db.New(state.Pool).GetServerReviewStatus(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	serverType := row.Type
+
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
+	}
+
+	var lastClaimed *time.Time
+	if row.LastClaimed.Valid {
+		lastClaimed = &row.LastClaimed.Time
 	}
 
 	if serverType != "pending" {
@@ -178,7 +191,7 @@ func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, "UPDATE servers SET type = 'approved', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(tx).ApproveServer(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -224,17 +237,22 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		return Success{}, err
 	}
 
-	var (
-		botType     string
-		claimedBy   *string
-		owner       *string
-		lastClaimed *time.Time
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, owner, last_claimed FROM bots WHERE bot_id = $1", m.TargetID).Scan(&botType, &claimedBy, &owner, &lastClaimed)
+	row, err := db.New(state.Pool).GetBotReviewStatusWithOwner(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	botType := row.Type
+
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
+	}
+
+	var lastClaimed *time.Time
+	if row.LastClaimed.Valid {
+		lastClaimed = &row.LastClaimed.Time
 	}
 
 	if botType != "pending" {
@@ -251,7 +269,7 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET type = 'denied', claimed_by = NULL WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).DenyBot(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -290,16 +308,22 @@ func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		return Success{}, err
 	}
 
-	var (
-		serverType  string
-		claimedBy   *string
-		lastClaimed *time.Time
-	)
-
-	err := state.Pool.QueryRow(ctx, "SELECT type, claimed_by, last_claimed FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType, &claimedBy, &lastClaimed)
+	row, err := db.New(state.Pool).GetServerReviewStatus(ctx, m.TargetID)
 
 	if err != nil {
 		return Success{}, err
+	}
+
+	serverType := row.Type
+
+	var claimedBy *string
+	if row.ClaimedBy.Valid {
+		claimedBy = &row.ClaimedBy.String
+	}
+
+	var lastClaimed *time.Time
+	if row.LastClaimed.Valid {
+		lastClaimed = &row.LastClaimed.Time
 	}
 
 	if serverType != "pending" {
@@ -316,7 +340,7 @@ func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'denied', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).DenyServer(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -358,9 +382,9 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 		return Success{}, err
 	}
 
-	var botType string
+	botType, err := db.New(state.Pool).GetBotType(ctx, m.TargetID)
 
-	if err := state.Pool.QueryRow(ctx, "SELECT type FROM bots WHERE bot_id = $1", m.TargetID).Scan(&botType); err != nil {
+	if err != nil {
 		return Success{}, err
 	}
 
@@ -374,7 +398,7 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET type = 'pending', claimed_by = NULL WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).ResubmitBot(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -411,9 +435,9 @@ func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Su
 		return Success{}, err
 	}
 
-	var serverType string
+	serverType, err := db.New(state.Pool).GetServerType(ctx, m.TargetID)
 
-	if err := state.Pool.QueryRow(ctx, "SELECT type FROM servers WHERE server_id = $1", m.TargetID).Scan(&serverType); err != nil {
+	if err != nil {
 		return Success{}, err
 	}
 
@@ -427,7 +451,7 @@ func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Su
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET type = 'pending', claimed_by = NULL WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).UnverifyServer(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 

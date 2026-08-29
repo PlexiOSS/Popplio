@@ -5,23 +5,14 @@ package get_shop_items
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
-
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	// Shop items
-	shopItemsColsArr = dbutil.GetCols(types.ShopItem{})
-	shopItemsCols    = strings.Join(shopItemsColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -33,18 +24,27 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+shopItemsCols+" FROM shop_items ORDER BY created_at DESC")
+	rows, err := db.New(state.Pool).GetShopItems(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to fetch shop items list [db fetch]", err)
 	}
 
-	defer rows.Close()
-
-	items, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.ShopItem])
-
-	if err != nil {
-		return resp.Err("Failed to fetch shop items list [db fetch]", err)
+	items := make([]types.ShopItem, len(rows))
+	for i, row := range rows {
+		items[i] = types.ShopItem{
+			ID:          row.ID,
+			Name:        row.Name,
+			Cents:       row.Cents,
+			TargetTypes: row.TargetTypes,
+			Benefits:    row.Benefits,
+			CreatedAt:   row.CreatedAt.Time,
+			LastUpdated: row.LastUpdated.Time,
+			CreatedByID: row.CreatedBy,
+			UpdatedByID: row.UpdatedBy,
+			Duration:    row.Duration,
+			Description: row.Description,
+		}
 	}
 
 	return uapi.HttpResponse{

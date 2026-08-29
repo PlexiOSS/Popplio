@@ -1,25 +1,16 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5"
 )
-
-type voteCreditTierRow struct {
-	ID         string    `db:"id"`
-	TargetType string    `db:"target_type"`
-	Position   int32     `db:"position"`
-	Cents      float64   `db:"cents"`
-	Votes      int32     `db:"votes"`
-	CreatedAt  time.Time `db:"created_at"`
-}
 
 func validateTier(action *types.VoteCreditTierUpsert) *response {
 	if action.Cents < 0 {
@@ -40,12 +31,11 @@ func validateTier(action *types.VoteCreditTierUpsert) *response {
 	return nil
 }
 
-func dedupTierPositions(ctx context.Context, tx pgx.Tx, position int32, id string) error {
-	_, err := tx.Exec(ctx,
-		"UPDATE vote_credit_tiers SET position = position + 1 WHERE position >= $1 AND id != $2",
-		position, id)
-
-	return err
+func dedupTierPositions(ctx context.Context, q *db.Queries, position int32, id string) error {
+	return q.DedupTierPositions(ctx, db.DedupTierPositionsParams{
+		Position: position,
+		ID:       id,
+	})
 }
 
 func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVoteCreditTiers) (response, error) {
@@ -57,13 +47,7 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 
 	switch {
 	case q.Action.ListTiers != nil:
-		rows, err := state.Pool.Query(ctx, "SELECT id, target_type, position, cents, votes, created_at FROM vote_credit_tiers ORDER BY position ASC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		tierRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[voteCreditTierRow])
+		tierRows, err := db.New(state.Pool).ListVoteCreditTiers(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -76,9 +60,9 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 				ID:         t.ID,
 				TargetType: t.TargetType,
 				Position:   t.Position,
-				Cents:      t.Cents,
+				Cents:      float64(t.Cents),
 				Votes:      t.Votes,
-				CreatedAt:  types.NewTimestamp(t.CreatedAt),
+				CreatedAt:  types.NewTimestamp(t.CreatedAt.Time),
 			})
 		}
 
@@ -102,15 +86,21 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 
 		defer tx.Rollback(ctx)
 
-		_, err = tx.Exec(ctx,
-			"INSERT INTO vote_credit_tiers (id, target_type, position, cents, votes) VALUES ($1, $2, $3, $4, $5)",
-			action.ID, action.TargetType, action.Position, action.Cents, action.Votes)
+		queries := db.New(tx)
+
+		err = queries.InsertVoteCreditTier(ctx, db.InsertVoteCreditTierParams{
+			ID:         action.ID,
+			TargetType: action.TargetType,
+			Position:   action.Position,
+			Cents:      int32(action.Cents),
+			Votes:      action.Votes,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		if err := dedupTierPositions(ctx, tx, action.Position, action.ID); err != nil {
+		if err := dedupTierPositions(ctx, queries, action.Position, action.ID); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -126,9 +116,13 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 			return writeText(http.StatusForbidden, "You do not have permission to update vote credit tiers [manage_shop]"), nil
 		}
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM vote_credit_tiers WHERE id = $1", action.ID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		exists, err := db.New(state.Pool).CountVoteCreditTierByID(ctx, action.ID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
@@ -144,15 +138,21 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 
 		defer tx.Rollback(ctx)
 
-		_, err = tx.Exec(ctx,
-			"UPDATE vote_credit_tiers SET position = $1, target_type = $2, cents = $3, votes = $4 WHERE id = $5",
-			action.Position, action.TargetType, action.Cents, action.Votes, action.ID)
+		queries := db.New(tx)
+
+		err = queries.UpdateVoteCreditTier(ctx, db.UpdateVoteCreditTierParams{
+			Position:   action.Position,
+			TargetType: action.TargetType,
+			Cents:      int32(action.Cents),
+			Votes:      action.Votes,
+			ID:         action.ID,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		if err := dedupTierPositions(ctx, tx, action.Position, action.ID); err != nil {
+		if err := dedupTierPositions(ctx, queries, action.Position, action.ID); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -168,13 +168,19 @@ func (s *Server) updateVoteCreditTiers(ctx context.Context, q *types.QUpdateVote
 
 		id := q.Action.DeleteTier.ID
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM vote_credit_tiers WHERE id = $1", id); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountVoteCreditTierByID(ctx, id)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM vote_credit_tiers WHERE id = $1", id); err != nil {
+		if err := queries.DeleteVoteCreditTier(ctx, id); err != nil {
 			return response{}, newError(err)
 		}
 

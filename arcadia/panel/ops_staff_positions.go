@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -5,17 +7,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -99,14 +100,7 @@ func (s *Server) updateStaffPositions(ctx context.Context, q *types.QUpdateStaff
 	}
 
 	if q.Action.ListPositions != nil {
-		rows, err := state.Pool.Query(ctx,
-			"SELECT id, name, role_id, perms, corresponding_roles, icon, index, created_at FROM staff_positions ORDER BY index ASC")
-
-		if err != nil {
-			return response{}, newError(fmt.Errorf("Error while getting staff positions %s", err))
-		}
-
-		positionRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[positionRow])
+		positionRows, err := db.New(state.Pool).ListStaffPositionsFull(ctx)
 
 		if err != nil {
 			return response{}, newError(fmt.Errorf("Error while getting staff positions %s", err))
@@ -129,7 +123,7 @@ func (s *Server) updateStaffPositions(ctx context.Context, q *types.QUpdateStaff
 				CorrespondingRoles: types.NonNilLinks(links),
 				Icon:               p.Icon,
 				Index:              p.Index,
-				CreatedAt:          types.NewTimestamp(p.CreatedAt),
+				CreatedAt:          types.NewTimestamp(p.CreatedAt.Time),
 			})
 		}
 
@@ -161,20 +155,19 @@ func (s *Server) updateStaffPositions(ctx context.Context, q *types.QUpdateStaff
 	}
 }
 
-type positionRow struct {
-	ID                 pgtype.UUID `db:"id"`
-	Name               string      `db:"name"`
-	RoleID             string      `db:"role_id"`
-	Perms              []string    `db:"perms"`
-	CorrespondingRoles []byte      `db:"corresponding_roles"`
-	Icon               string      `db:"icon"`
-	Index              int32       `db:"index"`
-	CreatedAt          time.Time   `db:"created_at"`
-}
-
 func (s *Server) swapIndex(ctx context.Context, action *types.StaffSwapIndex, smPerms perms.Set, smLowest int32) (response, error) {
 	if !smPerms.Has(perms.StaffManageStaffRoles) {
 		return writeText(http.StatusForbidden, "You do not have permission to swap indexes of staff positions [manage_staff_roles]"), nil
+	}
+
+	var uuidA, uuidB pgtype.UUID
+
+	if err := uuidA.Scan(action.A); err != nil {
+		return response{}, newError(fmt.Errorf("Error while getting lower position %s", err))
+	}
+
+	if err := uuidB.Scan(action.B); err != nil {
+		return response{}, newError(fmt.Errorf("Error while getting higher position %s", err))
 	}
 
 	tx, err := state.Pool.Begin(ctx)
@@ -185,15 +178,17 @@ func (s *Server) swapIndex(ctx context.Context, action *types.StaffSwapIndex, sm
 
 	defer tx.Rollback(ctx)
 
-	var indexA int32
+	queries := db.New(tx)
 
-	if err := tx.QueryRow(ctx, "SELECT index FROM staff_positions WHERE id::text = $1", action.A).Scan(&indexA); err != nil {
+	indexA, err := queries.GetStaffPositionIndexByIDText(ctx, uuidA)
+
+	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while getting lower position %s", err))
 	}
 
-	var indexB int32
+	indexB, err := queries.GetStaffPositionIndexByIDText(ctx, uuidB)
 
-	if err := tx.QueryRow(ctx, "SELECT index FROM staff_positions WHERE id::text = $1", action.B).Scan(&indexB); err != nil {
+	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while getting higher position %s", err))
 	}
 
@@ -205,11 +200,11 @@ func (s *Server) swapIndex(ctx context.Context, action *types.StaffSwapIndex, sm
 		return writeText(http.StatusForbidden, "Either 'a' or 'b' is lower than the lowest index of the member"), nil
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = $1 WHERE id::text = $2", indexB, action.A); err != nil {
+	if err := queries.UpdateStaffPositionIndexByIDText(ctx, db.UpdateStaffPositionIndexByIDTextParams{Index: indexB, ID: uuidA}); err != nil {
 		return response{}, newError(fmt.Errorf("Error while updating lower position %s", err))
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = $1 WHERE id::text = $2", indexA, action.B); err != nil {
+	if err := queries.UpdateStaffPositionIndexByIDText(ctx, db.UpdateStaffPositionIndexByIDTextParams{Index: indexA, ID: uuidB}); err != nil {
 		return response{}, newError(fmt.Errorf("Error while updating higher position %s", err))
 	}
 
@@ -226,6 +221,8 @@ func (s *Server) setIndex(ctx context.Context, action *types.StaffSetIndex, smPe
 	if err != nil {
 		return response{}, newError(err)
 	}
+
+	idUUID := pgtype.UUID{Bytes: id, Valid: true}
 
 	if !smPerms.Has(perms.StaffManageStaffRoles) {
 		return writeText(http.StatusForbidden, "You do not have permission to set the indexes of staff positions [manage_staff_roles]"), nil
@@ -247,9 +244,11 @@ func (s *Server) setIndex(ctx context.Context, action *types.StaffSetIndex, smPe
 
 	defer tx.Rollback(ctx)
 
-	var currIndex int32
+	queries := db.New(tx)
 
-	if err := tx.QueryRow(ctx, "SELECT index FROM staff_positions WHERE id = $1", id).Scan(&currIndex); err != nil {
+	currIndex, err := queries.GetStaffPositionIndexByID(ctx, idUUID)
+
+	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while getting position %s", err))
 	}
 
@@ -257,11 +256,11 @@ func (s *Server) setIndex(ctx context.Context, action *types.StaffSetIndex, smPe
 		return writeText(http.StatusForbidden, "Current index of position is lower than or equal to the lowest index of the staff member"), nil
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = index + 1 WHERE index >= $1", action.Index); err != nil {
+	if err := queries.ShiftStaffPositionIndexesFrom(ctx, action.Index); err != nil {
 		return response{}, newError(fmt.Errorf("Error while shifting indexes %s", err))
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = $1 WHERE id = $2", action.Index, id); err != nil {
+	if err := queries.UpdateStaffPositionIndexByIDText(ctx, db.UpdateStaffPositionIndexByIDTextParams{Index: action.Index, ID: idUUID}); err != nil {
 		return response{}, newError(fmt.Errorf("Error while updating position %s", err))
 	}
 
@@ -297,7 +296,9 @@ func (s *Server) createPosition(ctx context.Context, action *types.StaffCreatePo
 
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = index + 1 WHERE index >= $1", action.Index); err != nil {
+	queries := db.New(tx)
+
+	if err := queries.ShiftStaffPositionIndexesFrom(ctx, action.Index); err != nil {
 		return response{}, newError(fmt.Errorf("Error while shifting indexes %s", err))
 	}
 
@@ -313,9 +314,14 @@ func (s *Server) createPosition(ctx context.Context, action *types.StaffCreatePo
 		return response{}, newError(err)
 	}
 
-	_, err = tx.Exec(ctx,
-		"INSERT INTO staff_positions (name, perms, corresponding_roles, icon, role_id, index) VALUES ($1, $2, $3, $4, $5, $6)",
-		action.Name, action.Perms, correspondingRoles, action.Icon, action.RoleID, action.Index)
+	err = queries.InsertStaffPositionFull(ctx, db.InsertStaffPositionFullParams{
+		Name:               action.Name,
+		Perms:              types.NonNilStrings(action.Perms),
+		CorrespondingRoles: correspondingRoles,
+		Icon:               action.Icon,
+		RoleID:             action.RoleID,
+		Index:              action.Index,
+	})
 
 	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while updating position %s", err))
@@ -335,6 +341,8 @@ func (s *Server) editPosition(ctx context.Context, action *types.StaffEditPositi
 		return response{}, newError(err)
 	}
 
+	idUUID := pgtype.UUID{Bytes: id, Valid: true}
+
 	if !smPerms.Has(perms.StaffManageStaffRoles) {
 		return writeText(http.StatusForbidden, "You do not have permission to edit staff positions [manage_staff_roles]"), nil
 	}
@@ -347,19 +355,15 @@ func (s *Server) editPosition(ctx context.Context, action *types.StaffEditPositi
 
 	defer tx.Rollback(ctx)
 
-	var (
-		oldPerms []string
-		index    int32
-		roleID   string
-	)
+	queries := db.New(tx)
 
-	err = tx.QueryRow(ctx, "SELECT perms, index, role_id FROM staff_positions WHERE id = $1 FOR UPDATE", id).Scan(&oldPerms, &index, &roleID)
+	current, err := queries.GetStaffPositionForUpdate(ctx, idUUID)
 
 	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while getting position %s", err))
 	}
 
-	if index <= smLowest {
+	if current.Index <= smLowest {
 		return writeText(http.StatusForbidden, "Index is lower than the lowest index of the member"), nil
 	}
 
@@ -367,7 +371,7 @@ func (s *Server) editPosition(ctx context.Context, action *types.StaffEditPositi
 		return writeText(http.StatusBadRequest, err.Error()), nil
 	}
 
-	if err := perms.CheckPatch(smPerms, perms.Staff.SetFromStrings(oldPerms), perms.Staff.SetFromStrings(action.Perms)); err != nil {
+	if err := perms.CheckPatch(smPerms, perms.Staff.SetFromStrings(current.Perms), perms.Staff.SetFromStrings(action.Perms)); err != nil {
 		return writeText(http.StatusForbidden, fmt.Sprintf("You do not have permission to edit the following perms: %s", err)), nil
 	}
 
@@ -383,9 +387,14 @@ func (s *Server) editPosition(ctx context.Context, action *types.StaffEditPositi
 		return response{}, newError(err)
 	}
 
-	_, err = tx.Exec(ctx,
-		"UPDATE staff_positions SET name = $1, perms = $2, corresponding_roles = $3, role_id = $4, icon = $5 WHERE id = $6",
-		action.Name, action.Perms, correspondingRoles, action.RoleID, action.Icon, id)
+	err = queries.UpdateStaffPositionFull(ctx, db.UpdateStaffPositionFullParams{
+		Name:               action.Name,
+		Perms:              types.NonNilStrings(action.Perms),
+		CorrespondingRoles: correspondingRoles,
+		RoleID:             action.RoleID,
+		Icon:               action.Icon,
+		ID:                 idUUID,
+	})
 
 	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while updating position %s", err))
@@ -405,6 +414,8 @@ func (s *Server) deletePosition(ctx context.Context, action *types.StaffDeletePo
 		return response{}, newError(err)
 	}
 
+	idUUID := pgtype.UUID{Bytes: id, Valid: true}
+
 	if !smPerms.Has(perms.StaffManageStaffRoles) {
 		return writeText(http.StatusForbidden, "You do not have permission to delete staff positions [manage_staff_roles]"), nil
 	}
@@ -417,31 +428,27 @@ func (s *Server) deletePosition(ctx context.Context, action *types.StaffDeletePo
 
 	defer tx.Rollback(ctx)
 
-	var (
-		oldPerms []string
-		index    int32
-		roleID   string
-	)
+	queries := db.New(tx)
 
-	err = tx.QueryRow(ctx, "SELECT perms, index, role_id FROM staff_positions WHERE id = $1 FOR UPDATE", id).Scan(&oldPerms, &index, &roleID)
+	current, err := queries.GetStaffPositionForUpdate(ctx, idUUID)
 
 	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while getting position %s", err))
 	}
 
-	if index <= smLowest {
+	if current.Index <= smLowest {
 		return writeText(http.StatusForbidden, "Index is lower than the lowest index of the member"), nil
 	}
 
-	if err := perms.CheckPatch(smPerms, perms.Staff.SetFromStrings(oldPerms), perms.Staff.NewSet()); err != nil {
+	if err := perms.CheckPatch(smPerms, perms.Staff.SetFromStrings(current.Perms), perms.Staff.NewSet()); err != nil {
 		return writeText(http.StatusForbidden, fmt.Sprintf("You do not have permission to edit the following perms [need to delete position]: %s", err)), nil
 	}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM staff_positions WHERE id = $1", id); err != nil {
+	if err := queries.DeleteStaffPosition(ctx, idUUID); err != nil {
 		return response{}, newError(fmt.Errorf("Error while deleting position %s", err))
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_positions SET index = index - 1 WHERE index > $1", index); err != nil {
+	if err := queries.ShiftStaffPositionIndexesAfter(ctx, current.Index); err != nil {
 		return response{}, newError(fmt.Errorf("Error while shifting indexes %s", err))
 	}
 

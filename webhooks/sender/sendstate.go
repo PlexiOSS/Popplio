@@ -1,6 +1,7 @@
 package sender
 
 import (
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
@@ -80,7 +81,16 @@ func (st *webhookSendState) cancelSend(saveState string) {
 	st.SendState = saveState
 
 	if st.LogID != "" {
-		_, err := state.Pool.Exec(state.Context, "UPDATE webhook_logs SET state = $1, tries = tries + 1 WHERE id = $2", saveState, st.LogID)
+		var logUUID pgtype.UUID
+		if err := logUUID.Scan(st.LogID); err != nil {
+			state.Logger.Error("Failed to parse webhook log id", st.logFields(zap.Error(err))...)
+			return
+		}
+
+		err := db.New(state.Pool).IncrementWebhookLogTries(state.Context, db.IncrementWebhookLogTriesParams{
+			State: saveState,
+			ID:    logUUID,
+		})
 
 		if err != nil {
 			state.Logger.Error("Failed to update webhook logs with new status", st.logFields(zap.Error(err))...)
@@ -113,11 +123,8 @@ func (st *webhookSendState) notify(alertType types.AlertType, title, message str
 // delivered to, so this is what eventually retires an endpoint that never
 // recovers.
 func (st *webhookSendState) markFailed() error {
-	_, err := state.Pool.Exec(
-		state.Context,
-		"UPDATE webhooks SET failed_requests = failed_requests + 1 WHERE target_id = $1 AND target_type = $2",
-		st.Entity.EntityID, st.Entity.EntityType,
-	)
-
-	return err
+	return db.New(state.Pool).IncrementWebhookFailedRequests(state.Context, db.IncrementWebhookFailedRequestsParams{
+		TargetID:   st.Entity.EntityID,
+		TargetType: st.Entity.EntityType,
+	})
 }

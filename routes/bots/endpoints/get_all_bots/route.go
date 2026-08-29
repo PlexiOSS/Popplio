@@ -5,28 +5,20 @@ package get_all_bots
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/routes/bots/assets"
 	"popplio/state"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const perPage = 12
-
-var (
-	indexBotColsArr = dbutil.GetCols(types.IndexBot{})
-	indexBotCols    = strings.Join(indexBotColsArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -53,8 +45,6 @@ func Docs() *docs.Doc {
 	}
 }
 
-const trendingWindow = "7 days"
-
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	pageNum, err := pagination.Parse(r)
 
@@ -66,32 +56,82 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	offset := (pageNum - 1) * perPage
 	trending := r.URL.Query().Get("sort") == "trending"
 
-	var rows pgx.Rows
+	q := db.New(state.Pool)
+
+	var bots []types.IndexBot
 
 	if trending {
-		rows, err = state.Pool.Query(d.Context, `
-			WITH scored AS (
-				SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS score
-				FROM entity_votes
-				WHERE target_type = 'bot' AND void = false AND created_at > now() - interval '`+trendingWindow+`'
-				GROUP BY target_id
-			)
-			SELECT `+indexBotCols+` FROM bots
-			WHERE (type = 'approved' OR type = 'certified') AND bot_id IN (SELECT target_id FROM scored)
-			ORDER BY (SELECT score FROM scored WHERE scored.target_id = bots.bot_id) DESC
-			LIMIT $1 OFFSET $2`, limit, offset)
+		rows, err := q.GetTrendingIndexBots(d.Context, db.GetTrendingIndexBotsParams{
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
+
+		if err != nil {
+			return resp.Err("Error while getting all bots [db fetch]", err)
+		}
+
+		bots = make([]types.IndexBot, len(rows))
+		for i, row := range rows {
+			bots[i] = types.IndexBot{
+				BotID:            row.BotID,
+				Short:            row.Short,
+				Type:             row.Type,
+				VanityRef:        row.VanityRef,
+				ApproximateVotes: int(row.ApproximateVotes),
+				Shards:           int(row.Shards),
+				Library:          row.Library,
+				InviteClick:      int(row.InviteClicks),
+				Clicks:           int(row.Clicks),
+				Servers:          int(row.Servers),
+				NSFW:             row.Nsfw,
+				Tags:             row.Tags,
+				Premium:          row.Premium,
+				CreatedAt:        row.CreatedAt,
+				SelfStatus:       row.SelfStatus,
+				LastStatsPost:    row.LastStatsPost,
+				SupporterBadge:   row.SupporterBadge,
+				BoostedUntil:     row.BoostedUntil,
+				FeaturedUntil:    row.FeaturedUntil,
+				SpotlightedUntil: row.SpotlightedUntil,
+				VoteBlitzUntil:   row.VoteBlitzUntil,
+			}
+		}
 	} else {
-		rows, err = state.Pool.Query(d.Context, "SELECT "+indexBotCols+" FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC LIMIT $1 OFFSET $2", limit, offset)
-	}
+		rows, err := q.GetIndexBotsPaged(d.Context, db.GetIndexBotsPagedParams{
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
 
-	if err != nil {
-		return resp.Err("Error while getting all bots [db fetch]", err)
-	}
+		if err != nil {
+			return resp.Err("Error while getting all bots [db fetch]", err)
+		}
 
-	bots, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexBot])
-
-	if err != nil {
-		return resp.Err("Error while getting all bots [collect]", err)
+		bots = make([]types.IndexBot, len(rows))
+		for i, row := range rows {
+			bots[i] = types.IndexBot{
+				BotID:            row.BotID,
+				Short:            row.Short,
+				Type:             row.Type,
+				VanityRef:        row.VanityRef,
+				ApproximateVotes: int(row.ApproximateVotes),
+				Shards:           int(row.Shards),
+				Library:          row.Library,
+				InviteClick:      int(row.InviteClicks),
+				Clicks:           int(row.Clicks),
+				Servers:          int(row.Servers),
+				NSFW:             row.Nsfw,
+				Tags:             row.Tags,
+				Premium:          row.Premium,
+				CreatedAt:        row.CreatedAt,
+				SelfStatus:       row.SelfStatus,
+				LastStatsPost:    row.LastStatsPost,
+				SupporterBadge:   row.SupporterBadge,
+				BoostedUntil:     row.BoostedUntil,
+				FeaturedUntil:    row.FeaturedUntil,
+				SpotlightedUntil: row.SpotlightedUntil,
+				VoteBlitzUntil:   row.VoteBlitzUntil,
+			}
+		}
 	}
 
 	// Resolve all bots concurrently, since each bot's resolution is independent
@@ -99,23 +139,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error resolving indexbot", "An error occurred while resolving index bot.", err)
 	}
 
-	var count uint64
+	var countRaw int64
 
 	if trending {
-		err = state.Pool.QueryRow(d.Context, `
-			SELECT COUNT(*) FROM bots
-			WHERE (type = 'approved' OR type = 'certified') AND bot_id IN (
-				SELECT target_id FROM entity_votes
-				WHERE target_type = 'bot' AND void = false AND created_at > now() - interval '`+trendingWindow+`'
-				GROUP BY target_id
-			)`).Scan(&count)
+		countRaw, err = q.CountTrendingBots(d.Context)
 	} else {
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM bots").Scan(&count)
+		countRaw, err = q.CountBots(d.Context)
 	}
 
 	if err != nil {
 		return resp.Err("Error while getting bot count", err)
 	}
+
+	count := uint64(countRaw)
 
 	data := types.PagedResult[[]types.IndexBot]{
 		Count:   count,

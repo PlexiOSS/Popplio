@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/reports"
 	"popplio/state"
 	"popplio/types"
@@ -92,9 +93,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Could not file report: " + err.Error())
 	}
 
-	var dailyCount int64
+	q := db.New(state.Pool)
 
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM reports WHERE reporter_id = $1 AND created_at > NOW() - INTERVAL '24 hours'", d.Auth.ID).Scan(&dailyCount)
+	dailyCount, err := q.CountDailyReports(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.ErrBody("Failed to check daily report count [create_report]", "Failed to file report.", err, zap.String("userId", d.Auth.ID))
@@ -104,15 +105,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("You've filed too many reports today. Please try again tomorrow")
 	}
 
-	_, err = state.Pool.Exec(
-		d.Context,
-		"INSERT INTO reports (target_type, target_id, reporter_id, reason, description) VALUES ($1, $2, $3, $4, $5)",
-		targetType,
-		targetId,
-		d.Auth.ID,
-		payload.Reason,
-		payload.Description,
-	)
+	err = q.InsertReport(d.Context, db.InsertReportParams{
+		TargetType:  targetType,
+		TargetID:    targetId,
+		ReporterID:  d.Auth.ID,
+		Reason:      payload.Reason,
+		Description: payload.Description,
+	})
 
 	if err != nil {
 		// The partial unique index (one open report per reporter per target)

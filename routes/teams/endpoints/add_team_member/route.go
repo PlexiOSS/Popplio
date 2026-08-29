@@ -1,18 +1,16 @@
-// Package add_team_member implements PUT /teams/{tid}/members — "Add Team
-// Member".
-//
-// Adds a member to a team. Returns a 204 on success
 package add_team_member
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -50,7 +48,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Ensure manager has perms to edit member permissions etc.
 	managerPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", teamId)
 
 	if err != nil {
@@ -64,17 +61,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Resolve the permissions
-	//
-	// Teams have no position hierarchy, so a member's flags are a single flat
-	// source of permissions
 	newPermsResolved := perms.Entity.ResolveStrings(payload.Perms)
 
-	// Check if the manager has perms to give all permissions in newPermsResolved
-	//
-	// This is equivalent to going from no perms to the selected permset
 	if err = perms.CheckPatch(managerPerms, perms.Entity.NewSet(), newPermsResolved); err != nil {
 		return resp.Forbidden("You do not have permission to give out permissions: " + err.Error())
+	}
+
+	var teamUUID pgtype.UUID
+	if err := teamUUID.Scan(teamId); err != nil {
+		return resp.BadRequest("Invalid team ID")
 	}
 
 	tx, err := state.Pool.Begin(d.Context)
@@ -85,10 +80,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Check if user exists on IBL
-	var userExists bool
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)", payload.UserID).Scan(&userExists)
+	userExists, err := q.UserExistsCheck(d.Context, payload.UserID)
 
 	if err != nil {
 		return resp.Err("Error checking if user exists", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
@@ -98,10 +92,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("User must login here at least once before you can add them")
 	}
 
-	// Check that they aren't already a member
-	var memberExists bool
-
-	err = tx.QueryRow(d.Context, "SELECT EXISTS(SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2)", teamId, payload.UserID).Scan(&memberExists)
+	memberExists, err := q.TeamMemberExists(d.Context, db.TeamMemberExistsParams{
+		TeamID: teamUUID,
+		UserID: payload.UserID,
+	})
 
 	if err != nil {
 		return resp.Err("Error checking if user is already a member", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))
@@ -111,7 +105,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("User is already a member of this team")
 	}
 
-	_, err = tx.Exec(d.Context, "INSERT INTO team_members (team_id, user_id, flags) VALUES ($1, $2, $3)", teamId, payload.UserID, payload.Perms)
+	err = q.InsertTeamMember(d.Context, db.InsertTeamMemberParams{
+		TeamID: teamUUID,
+		UserID: payload.UserID,
+		Flags:  payload.Perms,
+	})
 
 	if err != nil {
 		return resp.Err("Error adding member", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId))

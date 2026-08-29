@@ -1,19 +1,19 @@
-// Package create_team implements POST /teams — "Create Team".
-//
-// Creates a team. Returns a 201 with the team ID on success.
 package create_team
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -23,7 +23,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -49,7 +48,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -85,7 +83,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Create the team
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
@@ -94,7 +91,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Create vanity
+	q := db.New(tx)
+
 	vanity := strings.ToLower(payload.Name)
 
 	var repl = [][2]string{
@@ -107,8 +105,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		vanity = strings.ReplaceAll(vanity, r[0], r[1])
 	}
 
-	var count int64
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM vanity WHERE code = $1", vanity).Scan(&count)
+	count, err := q.CountVanityByCode(d.Context, vanity)
 
 	if err != nil {
 		return resp.Err("Error while checking vanity", err, zap.String("userID", d.Auth.ID), zap.String("vanity", vanity))
@@ -117,8 +114,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	for count > 0 {
 		newVanity := vanity + "-" + crypto.RandString(8)
 
-		var nc int64
-		err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM vanity WHERE code = $1", newVanity).Scan(&nc)
+		nc, err := q.CountVanityByCode(d.Context, newVanity)
 
 		if err != nil {
 			return resp.Err("Error while checking vanity", err, zap.String("userID", d.Auth.ID), zap.String("vanity", vanity))
@@ -136,21 +132,51 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error generating team ID", err, zap.String("user_id", d.Auth.ID))
 	}
 
-	var itag pgtype.UUID
-	err = tx.QueryRow(d.Context, "INSERT INTO vanity (code, target_id, target_type) VALUES ($1, $2, $3) RETURNING itag", vanity, teamId, "team").Scan(&itag)
+	itag, err := q.InsertVanityReturningItag(d.Context, db.InsertVanityReturningItagParams{
+		Code:       vanity,
+		TargetID:   teamId,
+		TargetType: "team",
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting vanity", err, zap.String("userID", d.Auth.ID), zap.String("teamId", teamId), zap.String("vanity", vanity))
 	}
 
-	_, err = tx.Exec(d.Context, "INSERT INTO teams (id, name, short, tags, extra_links, nsfw, vanity_ref) VALUES ($1, $2, $3, $4, $5, $6, $7)", teamId, payload.Name, payload.Short, payload.Tags, el, isTeamNsfw, itag)
+	extraLinksJSON, err := json.Marshal(el)
+
+	if err != nil {
+		return resp.Err("Error marshaling extra links", err, zap.String("user_id", d.Auth.ID))
+	}
+
+	shortText := pgtype.Text{}
+	if payload.Short != nil {
+		shortText = pgtype.Text{String: *payload.Short, Valid: true}
+	}
+
+	var tags []string
+	if payload.Tags != nil {
+		tags = *payload.Tags
+	}
+
+	err = q.InsertTeam(d.Context, db.InsertTeamParams{
+		ID:         teamId,
+		Name:       payload.Name,
+		Short:      shortText,
+		Tags:       tags,
+		ExtraLinks: extraLinksJSON,
+		Nsfw:       isTeamNsfw,
+		VanityRef:  itag,
+	})
 
 	if err != nil {
 		return resp.Err("Error creating team", err, zap.String("user_id", d.Auth.ID))
 	}
 
-	// Add the user to the team
-	_, err = tx.Exec(d.Context, "INSERT INTO team_members (team_id, user_id, flags, data_holder) VALUES ($1, $2, $3, true)", teamId, d.Auth.ID, []string{perms.EntityOwner.String()})
+	err = q.InsertTeamMemberOwner(d.Context, db.InsertTeamMemberOwnerParams{
+		TeamID: itag,
+		UserID: d.Auth.ID,
+		Flags:  []string{perms.EntityOwner.String()},
+	})
 
 	if err != nil {
 		return resp.Err("Error adding user to team", err, zap.String("user_id", d.Auth.ID))

@@ -8,24 +8,19 @@ package get_user_alert_by_itag
 import (
 	"errors"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	alertCols    = dbutil.GetCols(types.Alert{})
-	alertColsStr = strings.Join(alertCols, ",")
 )
 
 func Docs() *docs.Doc {
@@ -55,13 +50,17 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	itag := chi.URLParam(r, "itag")
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+alertColsStr+" FROM alerts WHERE user_id = $1 AND itag = $2", d.Auth.ID, itag)
-
-	if err != nil {
-		return resp.Err("Error querying for alert [collect]", err, zap.String("itag", itag), zap.String("userID", d.Auth.ID))
+	var itagUUID pgtype.UUID
+	if err := itagUUID.Scan(itag); err != nil {
+		return resp.Err("Invalid itag", err, zap.String("itag", itag), zap.String("userID", d.Auth.ID))
 	}
 
-	alert, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[types.Alert])
+	q := db.New(state.Pool)
+
+	row, err := q.GetUserAlertByItag(d.Context, db.GetUserAlertByItagParams{
+		UserID: d.Auth.ID,
+		Itag:   itagUUID,
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -71,9 +70,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error querying for alert [collect]", err, zap.String("itag", itag), zap.String("userID", d.Auth.ID))
 	}
 
-	var unackedCount uint64
+	alert := types.Alert{
+		ITag:      row.Itag,
+		URL:       row.Url,
+		Message:   row.Message,
+		Type:      row.Type,
+		Title:     row.Title,
+		CreatedAt: row.CreatedAt,
+		Acked:     row.Acked,
+		AlertData: row.AlertData,
+		Icon:      row.Icon.String,
+		Priority:  row.Priority,
+		Category:  row.Category,
+	}
 
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM alerts WHERE user_id = $1 AND acked = false", d.Auth.ID).Scan(&unackedCount)
+	unackedCount, err := q.CountUnackedUserAlerts(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Error querying for unacked count", err, zap.String("itag", itag), zap.String("userID", d.Auth.ID))
@@ -84,7 +95,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			Alerts: []types.Alert{
 				alert,
 			},
-			UnackedCount: unackedCount,
+			UnackedCount: uint64(unackedCount),
 		},
 	}
 }

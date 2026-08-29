@@ -9,6 +9,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
@@ -69,9 +70,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error getting entity info", "Error.", err, zap.String("target_id", targetId), zap.String("target_type", targetType))
 	}
 
+	q := db.New(state.Pool)
+
 	// Get count of old
-	var count int64
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM user_reminders WHERE user_id = $1 AND target_id = $2 AND target_type = $3", d.Auth.ID, targetId, targetType).Scan(&count)
+	count, err := q.CountUserReminder(d.Context, db.CountUserReminderParams{
+		UserID:     d.Auth.ID,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.ErrBody("Error selecting count of user_reminders", "Error getting current user reminder count.", err, zap.String("target_id", targetId), zap.String("target_type", targetType))
@@ -82,7 +88,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Add new
-	_, err = state.Pool.Exec(d.Context, "INSERT INTO user_reminders (user_id, target_id, target_type) VALUES ($1, $2, $3)", d.Auth.ID, targetId, targetType)
+	err = q.InsertUserReminder(d.Context, db.InsertUserReminderParams{
+		UserID:     d.Auth.ID,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.ErrBody("Error inserting new reminder", "Error adding new reminder.", err, zap.String("target_id", targetId), zap.String("target_type", targetType))

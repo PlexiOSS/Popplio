@@ -6,27 +6,19 @@
 package get_webhooks
 
 import (
-	"errors"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	webhookColsArr = dbutil.GetCols(types.Webhook{})
-	webhookCols    = strings.Join(webhookColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -57,22 +49,30 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetId := chi.URLParam(r, "target_id")
 	targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+webhookCols+" FROM webhooks WHERE target_id = $1 AND target_type = $2", targetId, targetType)
-
-	if err != nil {
-		return resp.Err("Error while querying webhooks [db fetch]", err, zap.String("userID", d.Auth.ID))
-	}
-
-	webhook, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.Webhook])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uapi.HttpResponse{
-			Json: []types.Webhook{},
-		}
-	}
+	rows, err := db.New(state.Pool).GetWebhooks(d.Context, db.GetWebhooksParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.Err("Error while querying webhooks [collect]", err, zap.String("userID", d.Auth.ID))
+	}
+
+	webhook := make([]types.Webhook, len(rows))
+	for i, row := range rows {
+		webhook[i] = types.Webhook{
+			ID:             row.ID,
+			Name:           row.Name,
+			TargetID:       row.TargetID,
+			TargetType:     row.TargetType,
+			Url:            row.Url,
+			Broken:         row.Broken,
+			FailedRequests: int(row.FailedRequests),
+			SimpleAuth:     row.SimpleAuth,
+			HmacAuth:       row.HmacAuth,
+			EventWhitelist: row.EventWhitelist,
+			CreatedAt:      row.CreatedAt.Time,
+		}
 	}
 
 	return uapi.HttpResponse{

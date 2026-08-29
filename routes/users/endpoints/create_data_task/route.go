@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/routes/users/endpoints/create_data_task/assets"
 	"popplio/state"
 	"popplio/types"
@@ -81,22 +82,26 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	remoteIp := strings.Split(strings.ReplaceAll(r.Header.Get("X-Forwarded-For"), " ", ""), ",")
 
 	taskKey := crypto.RandString(128)
-	var taskId string
 
 	allowUnauthenticated := (taskName == "data_delete") // Only data deletions need unauthenticated access to task data
 
-	err = state.Pool.QueryRow(d.Context, "INSERT INTO tasks (task_name, task_key, for_user, expiry, output, allow_unauthenticated) VALUES ($1, $2, $3, $4, $5, $6) RETURNING task_id",
-		taskName,
-		taskKey,
-		d.Auth.ID,
-		dataTaskExpiryTime,
-		map[string]any{
+	expiry := pgtype.Interval{
+		Microseconds: int64(dataTaskExpiryTime / time.Microsecond),
+		Valid:        true,
+	}
+
+	taskId, err := db.New(state.Pool).InsertTask(d.Context, db.InsertTaskParams{
+		TaskName: taskName,
+		TaskKey:  pgtype.Text{String: taskKey, Valid: true},
+		ForUser:  pgtype.Text{String: d.Auth.ID, Valid: true},
+		Expiry:   expiry,
+		Output: map[string]any{
 			"meta": map[string]any{
 				"request_ip": remoteIp[0],
 			},
 		},
-		allowUnauthenticated,
-	).Scan(&taskId)
+		AllowUnauthenticated: allowUnauthenticated,
+	})
 
 	if err != nil {
 		return resp.ErrBody("Error creating task", "Error creating task.", err)
@@ -112,7 +117,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				String: taskKey,
 			},
 			TaskName:             taskName,
-			Expiry:               pgtype.Interval{Microseconds: int64(dataTaskExpiryTime / time.Microsecond)},
+			Expiry:               expiry,
 			AllowUnauthenticated: allowUnauthenticated,
 		},
 	}

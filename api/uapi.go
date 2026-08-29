@@ -9,6 +9,7 @@ import (
 
 	"github.com/PlexiOSS/Keel/urlutil"
 	"popplio/constants"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
@@ -113,8 +114,10 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 	authData := uapi.AuthData{}
 
+	q := db.New(state.Pool)
+
 	// Before doing anything else, delete expired/old auths first
-	_, err := state.Pool.Exec(state.Context, "DELETE FROM api_sessions WHERE expiry < NOW()")
+	err := q.DeleteExpiredSessions(state.Context)
 
 	if err != nil {
 		state.Logger.Error("Failed to delete expired web API tokens [db delete]", zap.Error(err))
@@ -133,12 +136,8 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 	}
 
 	// Check if the anything at all exists with said API token
-	var sessId string
-	var targetId string
-	var targetType string
-	var permLimits []string
-
-	err = state.Pool.QueryRow(state.Context, "SELECT id, target_id, target_type, perm_limits FROM api_sessions WHERE token = $1", authHeader).Scan(&sessId, &targetId, &targetType, &permLimits)
+	sess, err := q.GetSessionByToken(state.Context, authHeader)
+	sessId, targetId, targetType, permLimits := sess.ID, sess.TargetID, sess.TargetType, sess.PermLimits
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.AuthData{}, uapi.HttpResponse{
@@ -184,9 +183,8 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 		switch auth.Type {
 		case TargetTypeUser:
-			var banned, bugHunter bool
-
-			err := state.Pool.QueryRow(state.Context, "SELECT banned, bug_hunters FROM users WHERE user_id = $1", targetId).Scan(&banned, &bugHunter)
+			banStatus, err := q.GetUserBanStatus(state.Context, targetId)
+			banned, bugHunter := banStatus.Banned, banStatus.BugHunters
 
 			if err != nil {
 				state.Logger.Error("Failed to fetch user associated with session [db fetch]", zap.Error(err), zap.String("userID", targetId))
@@ -218,8 +216,7 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				Banned:     banned,
 			}
 		case TargetTypeBot:
-			var count int64
-			err := state.Pool.QueryRow(state.Context, "SELECT COUNT(*) FROM bots WHERE bot_id = $1", targetId).Scan(&count)
+			count, err := q.CountBotByID(state.Context, targetId)
 
 			if err != nil {
 				state.Logger.Error("Failed to fetch bot count associated with session [db fetch]", zap.Error(err), zap.String("botID", targetId))
@@ -242,8 +239,7 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				Authorized: true,
 			}
 		case TargetTypeServer:
-			var count int64
-			err := state.Pool.QueryRow(state.Context, "SELECT COUNT(*) FROM servers WHERE server_id = $1", targetId).Scan(&count)
+			count, err := q.CountServerByID(state.Context, targetId)
 
 			if err != nil {
 				state.Logger.Error("Failed to fetch server count associated with session [db fetch]", zap.Error(err), zap.String("serverID", targetId))
@@ -266,8 +262,7 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				Authorized: true,
 			}
 		case TargetTypeTeam:
-			var count int64
-			err := state.Pool.QueryRow(state.Context, "SELECT COUNT(*) FROM teams WHERE id = $1", targetId).Scan(&count)
+			count, err := q.CountTeamByID(state.Context, targetId)
 
 			if err != nil {
 				state.Logger.Error("Failed to fetch team count associated with session [db fetch]", zap.Error(err), zap.String("teamID", targetId))

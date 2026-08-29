@@ -1,0 +1,121 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "db/schema.sql"
+    queries: "db/queries"
+    gen:
+      go:
+        package: "db"
+        out: "db"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_db_tags: true
+        overrides:
+          - db_type: "jsonb"
+            go_type:
+              type: "map[string]any"
+          - db_type: "jsonb"
+            nullable: true
+            go_type:
+              type: "map[string]any"
+              pointer: false
+          - column: "alerts.type"
+            go_type:
+              type: "AlertType"
+              import: "popplio/types"
+          - column: "alerts.priority"
+            go_type:
+              type: "AlertPriority"
+              import: "popplio/types"
+          - column: "alerts.category"
+            go_type:
+              type: "AlertCategory"
+              import: "popplio/types"
+          - column: "changelogs.itag"
+            go_type:
+              type: "string"
+          - column: "tasks.task_id"
+            go_type:
+              type: "string"
+          - column: "apps.questions"
+            go_type:
+              type: "[]byte"
+          - column: "apps.answers"
+            go_type:
+              type: "map[string]string"
+          - column: "vanity.code"
+            go_type:
+              type: "string"
+          - column: "api_sessions.id"
+            go_type:
+              type: "string"
+          - column: "users.extra_links"
+            go_type:
+              type: "[]byte"
+          - column: "user_notification_prefs.category"
+            go_type:
+              type: "AlertCategory"
+              import: "popplio/types"
+          - column: "vote_credit_tiers.cents"
+            go_type:
+              type: "int32"
+          - column: "partners.links"
+            go_type:
+              type: "[]byte"
+          - column: "staff_templates.id"
+            go_type:
+              type: "string"
+          - column: "shop_items.duration"
+            go_type:
+              type: "int64"
+          - column: "tickets.messages"
+            go_type:
+              type: "[]byte"
+          - column: "tickets.ticket_context"
+            go_type:
+              type: "[]byte"
+          - column: "tickets.topic"
+            go_type:
+              type: "[]byte"
+          - column: "pack_emojis.id"
+            go_type:
+              type: "string"
+          - column: "teams.id"
+            go_type:
+              type: "string"
+          - column: "teams.extra_links"
+            go_type:
+              type: "[]byte"
+          - column: "staff_positions.corresponding_roles"
+            go_type:
+              type: "[]byte"
+          - column: "servers.extra_links"
+            go_type:
+              type: "[]byte"
+          - column: "bots.extra_links"
+            go_type:
+              type: "[]byte"
+          - column: "bots.premium_period_length"
+            go_type:
+              type: "Duration"
+              import: "popplio/validators/timex"
+          - column: "bot_changelogs.id"
+            go_type:
+              type: "string"
+          - column: "bot_commands.id"
+            go_type:
+              type: "string"
+          - column: "servers.premium_period_length"
+            go_type:
+              type: "Duration"
+              import: "time"
+          - column: "servers.emojis"
+            go_type:
+              type: "Emoji"
+              import: "popplio/types"
+              slice: true
+          - column: "servers.stickers"
+            go_type:
+              type: "Sticker"
+              import: "popplio/types"
+              slice: true

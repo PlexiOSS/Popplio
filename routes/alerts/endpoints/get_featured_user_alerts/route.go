@@ -7,24 +7,33 @@ package get_featured_user_alerts
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-var (
-	alertCols    = dbutil.GetCols(types.Alert{})
-	alertColsStr = strings.Join(alertCols, ",")
-)
+func toAlert(row db.GetUserAlertsByAckedRow) types.Alert {
+	return types.Alert{
+		ITag:      row.Itag,
+		URL:       row.Url,
+		Message:   row.Message,
+		Type:      row.Type,
+		Title:     row.Title,
+		CreatedAt: row.CreatedAt,
+		Acked:     row.Acked,
+		AlertData: row.AlertData,
+		Icon:      row.Icon.String,
+		Priority:  row.Priority,
+		Category:  row.Category,
+	}
+}
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -78,37 +87,39 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("unacked_count must be less than or equal to 20")
 	}
 
-	ackedRows, err := state.Pool.Query(d.Context, "SELECT "+alertColsStr+" FROM alerts WHERE user_id = $1 AND acked = true ORDER BY created_at DESC, priority ASC LIMIT $2", d.Auth.ID, ackedResCount)
+	q := db.New(state.Pool)
+
+	ackedRows, err := q.GetUserAlertsByAcked(d.Context, db.GetUserAlertsByAckedParams{
+		UserID: d.Auth.ID,
+		Acked:  true,
+		Limit:  int32(ackedResCount),
+	})
 
 	if err != nil {
 		return resp.Err("Error getting acked user alerts [query]", err, zap.String("userID", d.Auth.ID), zap.Int("ackedResCount", ackedResCount), zap.Int("unackedResCount", unackedResCount))
 	}
 
-	ackedAlerts, err := pgx.CollectRows(ackedRows, pgx.RowToStructByName[types.Alert])
-
-	if err != nil {
-		return resp.Err("Error getting acked user alerts [collect]", err, zap.String("userID", d.Auth.ID), zap.Int("ackedResCount", ackedResCount), zap.Int("unackedResCount", unackedResCount))
+	ackedAlerts := make([]types.Alert, len(ackedRows))
+	for i, row := range ackedRows {
+		ackedAlerts[i] = toAlert(row)
 	}
 
-	unackedRows, err := state.Pool.Query(d.Context, "SELECT "+alertColsStr+" FROM alerts WHERE user_id = $1 AND acked = false ORDER BY created_at DESC, priority ASC LIMIT $2", d.Auth.ID, unackedResCount)
+	unackedRows, err := q.GetUserAlertsByAcked(d.Context, db.GetUserAlertsByAckedParams{
+		UserID: d.Auth.ID,
+		Acked:  false,
+		Limit:  int32(unackedResCount),
+	})
 
 	if err != nil {
 		return resp.Err("Error getting unacked user alerts [query]", err, zap.String("userID", d.Auth.ID), zap.Int("ackedResCount", ackedResCount), zap.Int("unackedResCount", unackedResCount))
 	}
 
-	unackedAlerts, err := pgx.CollectRows(unackedRows, pgx.RowToStructByName[types.Alert])
-
-	if err != nil {
-		return resp.Err("Error getting unacked user alerts [collect]", err, zap.String("userID", d.Auth.ID), zap.Int("ackedResCount", ackedResCount), zap.Int("unackedResCount", unackedResCount))
+	unackedAlerts := make([]types.Alert, len(unackedRows))
+	for i, row := range unackedRows {
+		unackedAlerts[i] = toAlert(row)
 	}
 
-	if len(unackedAlerts) == 0 {
-		unackedAlerts = []types.Alert{}
-	}
-
-	var unackedCount uint64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM alerts WHERE user_id = $1 AND acked = false", d.Auth.ID).Scan(&unackedCount)
+	unackedCount, err := q.CountUnackedUserAlerts(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Error getting unacked user alerts count", err, zap.String("userID", d.Auth.ID), zap.Int("ackedResCount", ackedResCount), zap.Int("unackedResCount", unackedResCount))
@@ -116,7 +127,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	return uapi.HttpResponse{
 		Json: types.FeaturedUserAlerts{
-			UnackedCount: unackedCount,
+			UnackedCount: uint64(unackedCount),
 			Unacked:      unackedAlerts,
 			Acked:        ackedAlerts,
 		},

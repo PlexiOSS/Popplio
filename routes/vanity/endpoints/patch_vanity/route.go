@@ -1,7 +1,3 @@
-// Package patch_vanity implements PATCH /{target_type}/{target_id}/vanity —
-// "Update Entity Vanity".
-//
-// Updates an entities vanity. Returns 204 on success
 package patch_vanity
 
 import (
@@ -12,6 +8,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -70,7 +67,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Status(http.StatusNotImplemented, "Target type not implemented")
 	}
 
-	// Read payload from body
 	var payload types.PatchVanity
 
 	hresp, ok := uapi.MarshalReq(r, &payload)
@@ -79,7 +75,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -91,7 +86,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Vanity cannot be empty")
 	}
 
-	// Strip out unicode characters and validate vanity
 	vanity := strings.Map(func(r rune) rune {
 		if r > unicode.MaxASCII {
 			return -1
@@ -130,10 +124,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Ensure vanity doesn't already exist
-	var count int64
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM vanity WHERE code = $1", vanity).Scan(&count)
+	count, err := q.CountVanityByCode(d.Context, vanity)
 
 	if err != nil {
 		return resp.Err("Error while querying vanity", err, zap.String("userID", d.Auth.ID))
@@ -143,23 +136,31 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Vanity is already taken")
 	}
 
-	// Check that a vanity row exists
-	var rowCount int64
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM vanity WHERE target_id = $1 AND target_type = $2", targetId, targetType).Scan(&rowCount)
+	rowCount, err := q.CountVanityByTarget(d.Context, db.CountVanityByTargetParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.Err("Error while querying vanity", err, zap.String("userID", d.Auth.ID))
 	}
 
 	if rowCount == 0 {
-		_, err = tx.Exec(d.Context, "INSERT INTO vanity (target_id, target_type, code) VALUES ($1, $2, $3)", targetId, targetType, vanity)
+		err = q.InsertVanity(d.Context, db.InsertVanityParams{
+			TargetID:   targetId,
+			TargetType: targetType,
+			Code:       vanity,
+		})
 
 		if err != nil {
 			return resp.Err("Error while inserting vanity", err, zap.String("userID", d.Auth.ID))
 		}
 	} else {
-		// Update vanity
-		_, err = tx.Exec(d.Context, "UPDATE vanity SET code = $1 WHERE target_id = $2 AND target_type = $3", vanity, targetId, targetType)
+		err = q.UpdateVanityCode(d.Context, db.UpdateVanityCodeParams{
+			Code:       vanity,
+			TargetID:   targetId,
+			TargetType: targetType,
+		})
 
 		if err != nil {
 			return resp.Err("Error while updating vanity", err, zap.String("userID", d.Auth.ID))

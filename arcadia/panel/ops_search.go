@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -7,96 +9,123 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 	"popplio/votes"
-
-	"github.com/jackc/pgx/v5"
 )
 
-// Entity search, one query shape per target type.
-
 type searchServerRow struct {
-	ServerID             string     `db:"server_id"`
-	Name                 string     `db:"name"`
-	Avatar               string     `db:"avatar"`
-	TotalMembers         int32      `db:"total_members"`
-	OnlineMembers        int32      `db:"online_members"`
-	Short                string     `db:"short"`
-	Type                 string     `db:"type"`
-	ApprovalNote         string     `db:"approval_note"`
-	ApproximateVotes     int32      `db:"approximate_votes"`
-	InviteClicks         int32      `db:"invite_clicks"`
-	Clicks               int32      `db:"clicks"`
-	NSFW                 bool       `db:"nsfw"`
-	DiscordNSFWLevel     int32      `db:"discord_nsfw_level"`
-	NSFWChannelCount     int32      `db:"nsfw_channel_count"`
-	Tags                 []string   `db:"tags"`
-	Premium              bool       `db:"premium"`
-	ClaimedBy            *string    `db:"claimed_by"`
-	LastClaimed          *time.Time `db:"last_claimed"`
-	ModerationFlagged    bool       `db:"moderation_flagged"`
-	ModerationCategories []string   `db:"moderation_categories"`
+	ServerID             string
+	Name                 string
+	Avatar               string
+	TotalMembers         int32
+	OnlineMembers        int32
+	Short                string
+	Type                 string
+	ApprovalNote         string
+	ApproximateVotes     int32
+	InviteClicks         int32
+	Clicks               int32
+	NSFW                 bool
+	DiscordNSFWLevel     int32
+	NSFWChannelCount     int32
+	Tags                 []string
+	Premium              bool
+	ClaimedBy            *string
+	LastClaimed          *time.Time
+	ModerationFlagged    bool
+	ModerationCategories []string
 }
 
 func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (response, error) {
-	// No permission check: open to all staff.
 	if _, err := checkAuth(ctx, q.LoginToken); err != nil {
 		return response{}, err
 	}
 
 	pattern := "%" + q.Query + "%"
+	queries := db.New(state.Pool)
 
 	switch q.TargetType {
 	case types.TargetTypeBot:
-		rows, err := state.Pool.Query(ctx,
-			`SELECT bot_id, client_id, type, approximate_votes, shards, library, invite_clicks, clicks,
-                        servers, last_claimed, claimed_by, approval_note, short, invite,
-                        moderation_flagged, moderation_categories FROM bots
-                        INNER JOIN internal_user_cache__discord discord_users ON bots.bot_id = discord_users.id
-                        WHERE bot_id = $1 OR client_id = $1 OR discord_users.username ILIKE $2 ORDER BY bots.created_at`,
-			q.Query, pattern)
+		rows, err := queries.SearchBotsQueue(ctx, db.SearchBotsQueueParams{Query: q.Query, Pattern: pattern})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[botQueueRow])
+		queue := make([]botQueueRow, len(rows))
 
-		if err != nil {
-			return response{}, newError(err)
+		for i, row := range rows {
+			var claimedBy *string
+
+			if row.ClaimedBy.Valid {
+				claimedBy = &row.ClaimedBy.String
+			}
+
+			queue[i] = botQueueRow{
+				BotID:                row.BotID,
+				ClientID:             row.ClientID,
+				LastClaimed:          timePtr(row.LastClaimed),
+				ClaimedBy:            claimedBy,
+				Type:                 row.Type,
+				ApprovalNote:         row.ApprovalNote,
+				Short:                row.Short,
+				Invite:               row.Invite,
+				ApproximateVotes:     row.ApproximateVotes,
+				Shards:               row.Shards,
+				Library:              row.Library,
+				InviteClicks:         row.InviteClicks,
+				Clicks:               row.Clicks,
+				Servers:              row.Servers,
+				ModerationFlagged:    row.ModerationFlagged,
+				ModerationCategories: row.ModerationCategories,
+			}
 		}
 
 		return s.partialBots(ctx, queue)
 	case types.TargetTypeServer:
-		rows, err := state.Pool.Query(ctx,
-			`SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
-                        approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
-                        tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories
-                        FROM servers WHERE server_id = $1 OR name ILIKE $2 ORDER BY created_at`,
-			q.Query, pattern)
+		rows, err := queries.SearchServersQueue(ctx, db.SearchServersQueueParams{Query: q.Query, Pattern: pattern})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[searchServerRow])
+		queue := make([]searchServerRow, len(rows))
 
-		if err != nil {
-			return response{}, newError(err)
+		for i, row := range rows {
+			var claimedBy *string
+
+			if row.ClaimedBy.Valid {
+				claimedBy = &row.ClaimedBy.String
+			}
+
+			queue[i] = searchServerRow{
+				ServerID:             row.ServerID,
+				Name:                 row.Name,
+				Avatar:               row.Avatar,
+				TotalMembers:         row.TotalMembers,
+				OnlineMembers:        row.OnlineMembers,
+				Short:                row.Short,
+				Type:                 row.Type,
+				ApprovalNote:         row.ApprovalNote,
+				ApproximateVotes:     row.ApproximateVotes,
+				InviteClicks:         row.InviteClicks,
+				Clicks:               row.Clicks,
+				NSFW:                 row.Nsfw,
+				DiscordNSFWLevel:     int32(row.DiscordNsfwLevel),
+				NSFWChannelCount:     row.NsfwChannelCount,
+				Tags:                 row.Tags,
+				Premium:              row.Premium,
+				ClaimedBy:            claimedBy,
+				LastClaimed:          timePtr(row.LastClaimed),
+				ModerationFlagged:    row.ModerationFlagged,
+				ModerationCategories: row.ModerationCategories,
+			}
 		}
 
 		return s.partialServers(ctx, queue)
 	case types.TargetTypePack:
-		rows, err := state.Pool.Query(ctx,
-			`SELECT url, name, short, pack_type, owner, tags, vote_banned FROM packs
-                        WHERE url = $1 OR name ILIKE $2 ORDER BY created_at`,
-			q.Query, pattern)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[searchPackRow])
+		queue, err := queries.SearchPacksQueue(ctx, db.SearchPacksQueueParams{Query: q.Query, Pattern: pattern})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -111,14 +140,14 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 				return response{}, newError(err)
 			}
 
-			voteCount, err := votes.EntityGetVoteCount(ctx, state.Pool, pack.URL, "pack")
+			voteCount, err := votes.EntityGetVoteCount(ctx, state.Pool, pack.Url, "pack")
 
 			if err != nil {
 				return response{}, newError(err)
 			}
 
 			packs = append(packs, types.PartialEntity{Pack: &types.PartialPack{
-				URL:        pack.URL,
+				URL:        pack.Url,
 				Name:       pack.Name,
 				Short:      pack.Short,
 				PackType:   pack.PackType,
@@ -131,16 +160,7 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 
 		return writeJSON(http.StatusOK, packs), nil
 	case types.TargetTypeTeam:
-		rows, err := state.Pool.Query(ctx,
-			`SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned FROM teams
-                        WHERE id = $1 OR name ILIKE $2 ORDER BY created_at`,
-			q.Query, pattern)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[searchTeamRow])
+		queue, err := queries.SearchTeamsQueue(ctx, db.SearchTeamsQueueParams{Query: q.Query, Pattern: pattern})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -161,24 +181,14 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 				Short:      team.Short,
 				Votes:      int32(voteCount),
 				Tags:       types.NonNilStrings(team.Tags),
-				NSFW:       team.NSFW,
+				NSFW:       team.Nsfw,
 				VoteBanned: team.VoteBanned,
 			}})
 		}
 
 		return writeJSON(http.StatusOK, teams), nil
 	case types.TargetTypeUser:
-		rows, err := state.Pool.Query(ctx,
-			`SELECT users.user_id, users.banned, users.vote_banned FROM users
-                        INNER JOIN internal_user_cache__discord discord_users ON users.user_id = discord_users.id
-                        WHERE users.user_id = $1 OR discord_users.username ILIKE $2 ORDER BY users.created_at`,
-			q.Query, pattern)
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[searchUserRow])
+		queue, err := queries.SearchUsersQueue(ctx, db.SearchUsersQueueParams{Query: q.Query, Pattern: pattern})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -193,9 +203,7 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 				return response{}, newError(err)
 			}
 
-			var isStaff bool
-
-			err = state.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM staff_members WHERE user_id = $1)", u.UserID).Scan(&isStaff)
+			staffCount, err := queries.CountStaffMemberByID(ctx, u.UserID)
 
 			if err != nil {
 				return response{}, newError(err)
@@ -203,7 +211,7 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 
 			results = append(results, types.PartialEntity{User: &types.PartialUser{
 				User:       platformUser,
-				Staff:      isStaff,
+				Staff:      staffCount > 0,
 				Banned:     u.Banned,
 				VoteBanned: u.VoteBanned,
 			}})
@@ -213,29 +221,4 @@ func (s *Server) searchEntitys(ctx context.Context, q *types.QSearchEntitys) (re
 	default:
 		return writeText(http.StatusNotImplemented, "Searching this target type is not implemented"), nil
 	}
-}
-
-type searchPackRow struct {
-	URL        string   `db:"url"`
-	Name       string   `db:"name"`
-	Short      string   `db:"short"`
-	PackType   string   `db:"pack_type"`
-	Owner      string   `db:"owner"`
-	Tags       []string `db:"tags"`
-	VoteBanned bool     `db:"vote_banned"`
-}
-
-type searchTeamRow struct {
-	ID         string   `db:"id"`
-	Name       string   `db:"name"`
-	Short      string   `db:"short"`
-	Tags       []string `db:"tags"`
-	NSFW       bool     `db:"nsfw"`
-	VoteBanned bool     `db:"vote_banned"`
-}
-
-type searchUserRow struct {
-	UserID     string `db:"user_id"`
-	Banned     bool   `db:"banned"`
-	VoteBanned bool   `db:"vote_banned"`
 }

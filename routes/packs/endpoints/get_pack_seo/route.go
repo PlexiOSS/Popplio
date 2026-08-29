@@ -1,7 +1,3 @@
-// Package get_pack_seo implements GET /packs/{id}/seo — "Get Pack SEO Info".
-//
-// Gets the minimal SEO information about a pack for embed/search purposes.
-// Used by v4 website for meta tags
 package get_pack_seo
 
 import (
@@ -10,6 +6,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -42,9 +39,7 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	var short string
-	var packName string
-	err := state.Pool.QueryRow(d.Context, "SELECT name, short FROM packs WHERE url = $1", id).Scan(&packName, &short)
+	row, err := db.New(state.Pool).GetPackSEO(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -56,9 +51,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	seoData := types.SEO{
 		ID:     id,
-		Name:   packName,
+		Name:   row.Name,
 		Avatar: "",
-		Short:  short,
+		Short:  row.Short,
 	}
 
 	return uapi.HttpResponse{

@@ -33,7 +33,6 @@ var (
 )
 
 func GetRepoRoot() string {
-	// Use git rev-parse --show-toplevel to get the root of the repo
 	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 
 	if err != nil {

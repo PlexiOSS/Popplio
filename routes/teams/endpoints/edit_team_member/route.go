@@ -1,18 +1,16 @@
-// Package edit_team_member implements PATCH /teams/{tid}/members/{mid} —
-// "Edit Team Member Permissions".
-//
-// Edits a members permissions on a team. Returns a 204 on success
 package edit_team_member
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -52,10 +50,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var teamId = chi.URLParam(r, "tid")
 	var userId = chi.URLParam(r, "mid")
 
-	// Check if user+manager are on the team before doing anything else
-	var count int
+	var teamUUID pgtype.UUID
+	if err := teamUUID.Scan(teamId); err != nil {
+		return resp.BadRequest("Invalid team ID")
+	}
 
-	err := state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND (user_id = $2 OR user_id = $3)", teamId, d.Auth.ID, userId).Scan(&count)
+	count, err := db.New(state.Pool).CountTeamMembership(d.Context, db.CountTeamMembershipParams{
+		TeamID:   teamUUID,
+		UserID:   d.Auth.ID,
+		UserID_2: userId,
+	})
 
 	if err != nil {
 		return resp.ErrDetail("Error checking if user is on team", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
@@ -65,7 +69,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		if count != 2 {
 			return resp.BadRequest("Either the manager or the user is not on this team")
 		}
-		// count == 1 if the user is the manager
 	} else if count != 1 {
 		return resp.BadRequest("User is not on this team")
 	}
@@ -78,7 +81,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Get team permissions for manager
 	managerPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", teamId)
 
 	if err != nil {
@@ -94,37 +96,32 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
+	q := db.New(tx)
+
 	if payload.Perms != nil {
-		// Get the old permissions of the user
 		currentUserPerms, err := teams.GetEntityPerms(d.Context, userId, "team", teamId)
 
 		if err != nil {
 			return resp.ErrDetail("Error getting old perms", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
 		}
 
-		// Perform initial checks
 		for _, perm := range *payload.Perms {
 			if !teams.IsValidPerm(perm) {
 				return resp.BadRequest("Invalid permission: " + perm)
 			}
 		}
 
-		// Resolve the permissions
-		//
-		// Teams have no position hierarchy, so a member's flags are a single
-		// flat source of permissions
 		newPermsResolved := perms.Entity.ResolveStrings(*payload.Perms)
 
-		// First ensure that the manager can set these permissions
 		if err = perms.CheckPatch(managerPerms, currentUserPerms, newPermsResolved); err != nil {
 			return resp.Forbidden("You do not have permission to set these permissions.")
 		}
 
 		if !newPermsResolved.Has(globalOwner) && currentUserPerms.Has(globalOwner) {
-			// Ensure that if perm is owner, then there is another owner
-			var ownerCount int
-
-			err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND flags && $2", teamId, []string{globalOwner.String()}).Scan(&ownerCount)
+			ownerCount, err := q.CountTeamOwnersWithFlag(d.Context, db.CountTeamOwnersWithFlagParams{
+				TeamID: teamUUID,
+				Flags:  []string{globalOwner.String()},
+			})
 
 			if err != nil {
 				return resp.Err("Error getting owner count", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
@@ -135,7 +132,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 		}
 
-		_, err = tx.Exec(d.Context, "UPDATE team_members SET flags = $1 WHERE team_id = $2 AND user_id = $3", payload.Perms, teamId, userId)
+		err = q.UpdateTeamMemberFlags(d.Context, db.UpdateTeamMemberFlagsParams{
+			Flags:  *payload.Perms,
+			TeamID: teamUUID,
+			UserID: userId,
+		})
 
 		if err != nil {
 			return resp.Err("Error updating perms", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
@@ -143,14 +144,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if payload.Mentionable != nil {
-		// All members can update their own mentionable status
 		if d.Auth.ID != userId {
 			if !managerPerms.Has(perms.EntityEditMembers) {
 				return resp.Forbidden("You do not have permission to edit this member")
 			}
 		}
 
-		_, err = tx.Exec(d.Context, "UPDATE team_members SET mentionable = $1 WHERE team_id = $2 AND user_id = $3", *payload.Mentionable, teamId, userId)
+		err = q.UpdateTeamMemberMentionable(d.Context, db.UpdateTeamMemberMentionableParams{
+			Mentionable: *payload.Mentionable,
+			TeamID:      teamUUID,
+			UserID:      userId,
+		})
 
 		if err != nil {
 			return resp.Err("Error updating mentionable", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
@@ -162,11 +166,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.Forbidden("Only global owners can set a data holder")
 		}
 
-		// Ensure that if dataholder is false, there is another dataholder
 		if !*payload.DataHolder {
-			var dataHolderCount int
-
-			err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND data_holder = $2 AND user_id != $3", teamId, true, userId).Scan(&dataHolderCount)
+			dataHolderCount, err := q.CountTeamDataHolders(d.Context, db.CountTeamDataHoldersParams{
+				TeamID:     teamUUID,
+				DataHolder: true,
+				UserID:     userId,
+			})
 
 			if err != nil {
 				return resp.Err("Error getting data holder count", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
@@ -177,8 +182,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 		}
 
-		// Set data holder
-		_, err = tx.Exec(d.Context, "UPDATE team_members SET data_holder = $1 WHERE team_id = $2 AND user_id = $3", *payload.DataHolder, teamId, userId)
+		err = q.UpdateTeamMemberDataHolder(d.Context, db.UpdateTeamMemberDataHolderParams{
+			DataHolder: *payload.DataHolder,
+			TeamID:     teamUUID,
+			UserID:     userId,
+		})
 
 		if err != nil {
 			return resp.Err("Error updating data holder", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))

@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"popplio/arcadia/impls"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -303,27 +305,40 @@ func permEditAllowed(manager managerContext, s *permSession, target permTarget) 
 }
 
 func writePermTarget(ctx context.Context, s *permSession, next perms.Set) error {
+	q := db.New(state.Pool)
+
 	if s.editingMember() {
-		tag, err := state.Pool.Exec(ctx, "UPDATE staff_members SET perm_overrides = $1 WHERE user_id = $2", next.Strings(), s.UserID)
+		rowsAffected, err := q.UpdateStaffMemberPermOverrides(ctx, db.UpdateStaffMemberPermOverridesParams{
+			PermOverrides: next.Strings(),
+			UserID:        s.UserID,
+		})
 
 		if err != nil {
 			return err
 		}
 
-		if tag.RowsAffected() == 0 {
+		if rowsAffected == 0 {
 			return fmt.Errorf("<@%s> is no longer a staff member", s.UserID)
 		}
 
 		return nil
 	}
 
-	tag, err := state.Pool.Exec(ctx, "UPDATE staff_positions SET perms = $1 WHERE id = $2", next.Strings(), s.RoleID)
+	var roleUUID pgtype.UUID
+	if err := roleUUID.Scan(s.RoleID); err != nil {
+		return errRoleGone
+	}
+
+	rowsAffected, err := q.UpdateStaffPositionPerms(ctx, db.UpdateStaffPositionPermsParams{
+		Perms: next.Strings(),
+		ID:    roleUUID,
+	})
 
 	if err != nil {
 		return err
 	}
 
-	if tag.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return errRoleGone
 	}
 

@@ -5,12 +5,11 @@
 package get_apps_list
 
 import (
-	"errors"
+	"encoding/json"
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -18,13 +17,6 @@ import (
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-
-	"github.com/jackc/pgx/v5"
-)
-
-var (
-	appColsArr = dbutil.GetCols(types.AppResponse{})
-	appCols    = strings.Join(appColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -45,30 +37,40 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	row, err := state.Pool.Query(d.Context, "SELECT "+appCols+" FROM apps WHERE user_id = $1", d.Auth.ID)
-
-	if err != nil {
-		return resp.Err("Failed to fetch application list [db fetch]", err, zap.String("userId", d.Auth.ID))
-	}
-
-	app, err := pgx.CollectRows(row, pgx.RowToStructByName[types.AppResponse])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uapi.HttpResponse{
-			Json: types.AppListResponse{
-				Apps: []types.AppResponse{},
-			},
-		}
-	}
+	rows, err := db.New(state.Pool).GetUserApps(d.Context, d.Auth.ID)
 
 	if err != nil {
 		state.Logger.Error("Failed to fetch application list [collection]", zap.String("userId", d.Auth.ID), zap.Error(err))
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
+	apps := make([]types.AppResponse, len(rows))
+	for i, row := range rows {
+		var questions []types.Question
+		if err := json.Unmarshal(row.Questions, &questions); err != nil {
+			return resp.Err("Failed to parse application questions [json]", err, zap.String("userId", d.Auth.ID))
+		}
+
+		var reviewFeedback *string
+		if row.ReviewFeedback.Valid {
+			reviewFeedback = &row.ReviewFeedback.String
+		}
+
+		apps[i] = types.AppResponse{
+			AppID:          row.AppID,
+			UserID:         row.UserID,
+			Questions:      questions,
+			Answers:        row.Answers,
+			State:          row.State,
+			CreatedAt:      row.CreatedAt.Time,
+			Position:       row.Position,
+			ReviewFeedback: reviewFeedback,
+		}
+	}
+
 	return uapi.HttpResponse{
 		Json: types.AppListResponse{
-			Apps: app,
+			Apps: apps,
 		},
 	}
 }

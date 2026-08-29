@@ -1,18 +1,14 @@
-// Package post_bot_stats implements POST /bots/stats — "Post Bot Stats".
-//
-// This endpoint posts the stats of a bot. `status` is optional and
-// self-reports the bot's presence (online/idle/dnd/offline) — post it
-// periodically to keep it fresh, it will otherwise keep showing the last
-// value posted.
 package post_bot_stats
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -29,40 +25,6 @@ func Docs() *docs.Doc {
 		Description: "This endpoint posts the stats of a bot. `status` is optional and self-reports the bot's presence (online/idle/dnd/offline) — post it periodically to keep it fresh, it will otherwise keep showing the last value posted.",
 		Req:         types.BotStats{},
 		Resp:        types.ApiError{},
-	}
-}
-
-// statUpdate is one optional column of the bots row that a stats post may carry.
-//
-// Every field of types.BotStats is optional, and a bot that omits one must keep
-// whatever value it last reported rather than have it reset to zero. present
-// records whether the payload actually carried the field, so omitted fields are
-// skipped instead of written.
-type statUpdate struct {
-	// column is the bots column to write. It is interpolated into the UPDATE
-	// statement, so it must only ever be a constant from statUpdates.
-	column string
-	// value is the new value, bound as a query parameter.
-	value any
-	// present is whether the payload carried this field at all.
-	present bool
-}
-
-// statUpdates lists the columns a stats post can touch, in the order they are
-// applied. Adding a stat means adding a line here rather than another
-// near-identical block of update-and-check.
-func statUpdates(payload types.BotStats) []statUpdate {
-	return []statUpdate{
-		{"servers", payload.Servers, payload.Servers > 0},
-		{"shards", payload.Shards, payload.Shards > 0},
-		{"users", payload.Users, payload.Users > 0},
-		{"shard_list", payload.ShardList, len(payload.ShardList) > 0},
-
-		// Self-reported presence. Supplements the JAPI-based metadata refresh,
-		// which doesn't cover presence, and the gateway-cache-derived status
-		// dovewing normally returns (only populated when the bot shares a
-		// guild with our own Discord client, which most listed bots don't).
-		{"self_status", payload.Status, payload.Status != ""},
 	}
 }
 
@@ -90,23 +52,71 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Always bumped, even when the payload carries no stats at all: the
-	// timestamp is what marks the bot as still reporting.
-	_, err = tx.Exec(d.Context, "UPDATE bots SET last_stats_post = NOW() WHERE bot_id = $1", d.Auth.ID)
+	q := db.New(tx)
+
+	err = q.UpdateBotLastStatsPost(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Error while updating last_stats_post", err, zap.String("botID", d.Auth.ID))
 	}
 
-	for _, update := range statUpdates(payload) {
-		if !update.present {
-			continue
-		}
-
-		_, err := tx.Exec(d.Context, "UPDATE bots SET "+update.column+" = $1 WHERE bot_id = $2", update.value, d.Auth.ID)
+	if payload.Servers > 0 {
+		err := q.UpdateBotServers(d.Context, db.UpdateBotServersParams{
+			Servers: int32(payload.Servers),
+			BotID:   d.Auth.ID,
+		})
 
 		if err != nil {
-			return resp.Err("Error while updating "+update.column, err, zap.String("botID", d.Auth.ID))
+			return resp.Err("Error while updating servers", err, zap.String("botID", d.Auth.ID))
+		}
+	}
+
+	if payload.Shards > 0 {
+		err := q.UpdateBotShards(d.Context, db.UpdateBotShardsParams{
+			Shards: int32(payload.Shards),
+			BotID:  d.Auth.ID,
+		})
+
+		if err != nil {
+			return resp.Err("Error while updating shards", err, zap.String("botID", d.Auth.ID))
+		}
+	}
+
+	if payload.Users > 0 {
+		err := q.UpdateBotUsers(d.Context, db.UpdateBotUsersParams{
+			Users: int32(payload.Users),
+			BotID: d.Auth.ID,
+		})
+
+		if err != nil {
+			return resp.Err("Error while updating users", err, zap.String("botID", d.Auth.ID))
+		}
+	}
+
+	if len(payload.ShardList) > 0 {
+		shardList := make([]int64, len(payload.ShardList))
+		for i, s := range payload.ShardList {
+			shardList[i] = int64(s)
+		}
+
+		err := q.UpdateBotShardList(d.Context, db.UpdateBotShardListParams{
+			ShardList: shardList,
+			BotID:     d.Auth.ID,
+		})
+
+		if err != nil {
+			return resp.Err("Error while updating shard_list", err, zap.String("botID", d.Auth.ID))
+		}
+	}
+
+	if payload.Status != "" {
+		err := q.UpdateBotSelfStatus(d.Context, db.UpdateBotSelfStatusParams{
+			SelfStatus: pgtype.Text{String: payload.Status, Valid: true},
+			BotID:      d.Auth.ID,
+		})
+
+		if err != nil {
+			return resp.Err("Error while updating self_status", err, zap.String("botID", d.Auth.ID))
 		}
 	}
 

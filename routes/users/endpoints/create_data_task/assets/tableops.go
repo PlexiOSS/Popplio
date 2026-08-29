@@ -9,13 +9,21 @@ import (
 	"fmt"
 
 	"github.com/PlexiOSS/Keel/uuidutil"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 )
 
+// defaultFetcher and defaultDeleter are intentionally left as raw pgx, not
+// converted to sqlc: tableName/columnName here are discovered at runtime by
+// getAllTableRefs walking pg_constraint (see tablerefs.go) — every FK in the
+// schema, not a fixed enum — so the query shape genuinely can't be
+// represented as a static sqlc query, the same reasoning that keeps
+// list.search_list on raw pgx.
 func defaultFetcher(tx pgx.Tx, l *zap.Logger, tableName, columnName, id string) ([]map[string]any, error) {
 	l.Info("Fetching table", zap.String("table", tableName), zap.String("column", columnName), zap.String("id", id))
 	rows, err := tx.Query(state.Context, "SELECT * FROM "+tableName+" WHERE "+columnName+" = $1", id)
@@ -66,27 +74,19 @@ var tableLogic = map[string]TableLogic{
 			// Select all team IDs
 			var teamIds []string
 
-			rows, err := tx.Query(state.Context, "SELECT team_id, flags, data_holder FROM team_members WHERE user_id = $1", id)
+			rows, err := db.New(tx).GetUserTeamMembershipsForDataTask(state.Context, id)
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to query table: %w", err)
 			}
 
-			for rows.Next() {
-				var teamId string
-				var flags []string
-				var dataHolder bool
+			for _, row := range rows {
+				teamId := uuid.UUID(row.TeamID.Bytes).String()
 
-				err = rows.Scan(&teamId, &flags, &dataHolder)
-
-				if err != nil {
-					return nil, fmt.Errorf("failed to scan row: %w", err)
-				}
-
-				if dataHolder {
+				if row.DataHolder {
 					teamIds = append(teamIds, teamId)
 				} else {
-					if perms.Entity.ResolveStrings(flags).Has(perms.EntityOwner) {
+					if perms.Entity.ResolveStrings(row.Flags).Has(perms.EntityOwner) {
 						teamIds = append(teamIds, teamId)
 					} else {
 						l.Warn("User does not have permission to dump team [not an owner and not data_holder]", zap.String("team_id", teamId), zap.String("user_id", id))

@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,10 +8,10 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
-	"github.com/jackc/pgx/v5"
 )
 
 // queueSession is one live `queue` browser. Sessions are author-scoped and
@@ -67,17 +66,29 @@ func cmdQueue() *Command {
 		Run: func(c *Ctx) error {
 			embed := c.BoolOption("embed", true)
 
-			rows, err := state.Pool.Query(c.Context,
-				"SELECT claimed_by, bot_id, approval_note, short, invite, client_id FROM bots WHERE type = 'pending' ORDER BY created_at ASC")
+			rows, err := db.New(state.Pool).GetPendingBotsQueue(c.Context)
 
 			if err != nil {
 				return err
 			}
 
-			bots, err := pgx.CollectRows(rows, pgx.RowToStructByName[queueBot])
+			bots := make([]queueBot, len(rows))
 
-			if err != nil {
-				return err
+			for i, row := range rows {
+				var claimedBy *string
+
+				if row.ClaimedBy.Valid {
+					claimedBy = &row.ClaimedBy.String
+				}
+
+				bots[i] = queueBot{
+					ClaimedBy:    claimedBy,
+					BotID:        row.BotID,
+					ApprovalNote: row.ApprovalNote,
+					Short:        row.Short,
+					Invite:       row.Invite,
+					ClientID:     row.ClientID,
+				}
 			}
 
 			if len(bots) == 0 {
@@ -194,27 +205,24 @@ func cmdClaim() *Command {
 		Run: func(c *Ctx) error {
 			botID := strings.Trim(c.Option("bot", 0), "<@!>")
 
-			var (
-				botType   string
-				claimedBy *string
-			)
-
-			err := state.Pool.QueryRow(c.Context, "SELECT type, claimed_by FROM bots WHERE bot_id = $1", botID).Scan(&botType, &claimedBy)
+			row, err := db.New(state.Pool).GetBotTypeAndClaimedBy(c.Context, botID)
 
 			if err != nil {
 				return err
 			}
 
-			if botType != "pending" {
+			if row.Type != "pending" {
 				return fmt.Errorf("This bot is not pending review")
 			}
 
-			if claimedBy != nil {
+			if row.ClaimedBy.Valid {
+				claimedBy := row.ClaimedBy.String
+
 				// Offer force-claim or a reminder rather than claiming outright.
 				messageID, err := c.SendTracked(discord.MessageCreate{
 					Embeds: []discord.Embed{{
 						Title:       "Bot Already Claimed",
-						Description: fmt.Sprintf("This bot is already claimed by <@%s>", *claimedBy),
+						Description: fmt.Sprintf("This bot is already claimed by <@%s>", claimedBy),
 						Color:       impls.ColourRed,
 					}},
 					Components: []discord.ContainerComponent{
@@ -233,7 +241,7 @@ func cmdClaim() *Command {
 				claimSessions[messageID.String()] = &claimSession{
 					AuthorID:  c.Author.ID.String(),
 					BotID:     botID,
-					ClaimedBy: *claimedBy,
+					ClaimedBy: claimedBy,
 				}
 				sessionsMu.Unlock()
 
@@ -360,18 +368,12 @@ func (c *Ctx) reasonArg(name string, from int) string {
 
 // claimReminderLog records that a reviewer was nudged.
 func claimReminderLog(c *Ctx, botID, claimedBy string) error {
-	data, err := json.Marshal(map[string]string{
-		"bot_id":     botID,
-		"claimed_by": claimedBy,
+	return db.New(state.Pool).InsertStaffGeneralLog(c.Context, db.InsertStaffGeneralLogParams{
+		UserID: c.Author.ID.String(),
+		Action: "claim_reminder",
+		Data: map[string]any{
+			"bot_id":     botID,
+			"claimed_by": claimedBy,
+		},
 	})
-
-	if err != nil {
-		return err
-	}
-
-	_, err = state.Pool.Exec(c.Context,
-		"INSERT INTO staff_general_logs (user_id, action, data) VALUES ($1, $2, $3)",
-		c.Author.ID.String(), "claim_reminder", data)
-
-	return err
 }

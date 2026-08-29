@@ -7,6 +7,7 @@ package get_blog_seo
 import (
 	"net/http"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -37,10 +38,7 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	slug := chi.URLParam(r, "slug")
 
-	var title string
-	var description string
-
-	err := state.Pool.QueryRow(d.Context, "SELECT title, description FROM blogs WHERE slug = $1", slug).Scan(&title, &description)
+	row, err := db.New(state.Pool).GetBlogSEO(d.Context, slug)
 
 	if err != nil {
 		state.Logger.Error("Error fetching blog post [db query]", zap.Error(err), zap.String("slug", slug))
@@ -49,9 +47,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	seo := types.SEO{
 		ID:     slug,
-		Name:   title,
+		Name:   row.Title,
 		Avatar: "",
-		Short:  description,
+		Short:  row.Description,
 	}
 
 	return uapi.HttpResponse{

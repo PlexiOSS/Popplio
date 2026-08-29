@@ -1,10 +1,3 @@
-// Package validatetable checks that database tables match the Go types that
-// scan them.
-//
-// Popplio builds its queries from the `db` struct tags in popplio/types, so
-// a column that is renamed or dropped without the corresponding struct
-// change fails at runtime on the affected endpoint. This turns that into a
-// check that can be run ahead of deploying.
 package validatetable
 
 import (
@@ -89,7 +82,6 @@ func ValidateTable(progname string, args []string) {
 			continue
 		}
 
-		// Ensure that the field also exists in the backer table
 		var exists bool
 
 		err = sp.QueryRow(Ctx, "SELECT EXISTS (SELECT 1 FROM "+backSplit[0]+" WHERE "+backSplit[1]+" = $1)", id).Scan(&exists)

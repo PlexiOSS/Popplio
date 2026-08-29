@@ -1,26 +1,3 @@
-/**
-* The captcha package is designed to be stateless and self-contained, providing a secure
-* and efficient way to prevent automated abuse of voting systems.
-*
-* It leverages cryptographic techniques to ensure that challenges cannot be tampered
-* with or reused, while also being easy to implement and scale.
-*
-* Key Features:
-* - Stateless Challenge Issuance: Challenges are generated without any server-side storage, making it easy to scale and distribute.
-* - Proof-of-Work Mechanism: Clients must perform real computational work to solve challenges, deterring automated scripts from abusing the voting system.
-* - HMAC Signing: Challenges are signed with a server-only secret, ensuring that they cannot be forged or tampered with.
-* - Single-Use Verification: Each solved challenge can only be used once, preventing replay attacks and ensuring the integrity of the voting process.
-*
-* Usage:
-* 1. Generate a new challenge using the New() function.
-* 2. Send the challenge to the client for solving.
-* 3. Upon receiving a solution from the client, verify it using the Verify() function.
-* 4. Check if a captcha is required for a specific target using RequiresCaptcha().
-*
-* This package is intended for use in environments where preventing automated abuse
-* is critical, such as voting systems, and can be easily integrated into existing
-* applications.
- */
 package captcha
 
 import (
@@ -37,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -47,7 +25,7 @@ const saltBytes = 16
 type Challenge struct {
 	Salt       string `json:"salt"`
 	Difficulty int    `json:"difficulty"`
-	Expires    int64  `json:"expires"` // unix ms
+	Expires    int64  `json:"expires"`
 	Signature  string `json:"signature"`
 }
 
@@ -113,24 +91,6 @@ func bitsLeadingZero(b byte) int {
 	return n
 }
 
-/**
-* Verify checks a client-submitted Solution to ensure it is valid and has not been tampered with or reused.
-*
-* Parameters:
-* - ctx: The context for the verification process, allowing for cancellation and timeouts.
-* - s: The Solution object submitted by the client, containing the salt, difficulty, expiration time, signature, and nonce.
-*
-* Returns:
-* - error: An error if the solution is invalid, expired, or has already been used; nil if the solution is valid.
-*
-* This function performs several checks:
-* 1. Validates that all required fields in the Solution are present.
-* 2. Verifies that the signature matches the expected value based on the salt, difficulty, and expiration time.
-* 3. Checks that the challenge has not expired.
-* 4. Ensures that the nonce is a valid number and meets size constraints.
-* 5. Confirms that the proof-of-work is sufficient based on the leading zero bits in the hash of the salt and nonce.
-* 6. Marks the signature as used in Redis to prevent replay attacks, with a TTL matching the challenge's remaining lifetime.
- */
 func Verify(ctx context.Context, s Solution) error {
 	if s.Salt == "" || s.Signature == "" || s.Nonce == "" {
 		return errors.New("captcha solution is missing required fields")
@@ -174,35 +134,21 @@ func Verify(ctx context.Context, s Solution) error {
 	return nil
 }
 
-/**
-* RequiresCaptcha checks if a captcha is required for voting on a specific target entity.
-*
-* Parameters:
-* - ctx: The context for the database query.
-* - targetType: The type of the target entity (e.g., "bot", "server").
-* - targetId: The unique identifier of the target entity.
-*
-* Returns:
-* - bool: True if a captcha is required, false otherwise.
-* - error: An error if the check fails due to database issues or invalid input.
-*
-* This function queries the database to determine if the specified target entity
-* has opted out of captcha requirements. If the entity has opted out, it returns
-* false; otherwise, it returns true, indicating that a captcha is required for voting.
- */
 func RequiresCaptcha(ctx context.Context, targetType, targetId string) (bool, error) {
-	var table, column string
+	q := db.New(state.Pool)
+
+	var optOut bool
+	var err error
+
 	switch targetType {
 	case "bot":
-		table, column = "bots", "bot_id"
+		optOut, err = q.GetBotCaptchaOptOut(ctx, targetId)
 	case "server":
-		table, column = "servers", "server_id"
+		optOut, err = q.GetServerCaptchaOptOut(ctx, targetId)
 	default:
 		return false, nil
 	}
 
-	var optOut bool
-	err := state.Pool.QueryRow(ctx, "SELECT captcha_opt_out FROM "+table+" WHERE "+column+" = $1", targetId).Scan(&optOut)
 	if err != nil {
 		return false, fmt.Errorf("failed to check captcha_opt_out: %w", err)
 	}

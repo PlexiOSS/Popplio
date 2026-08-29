@@ -6,6 +6,10 @@ all:
 	systemctl reload popplio-staging
 dev:
 	go run .
+migrate:
+	go run ./cmd/migrate up
+migrate-status:
+	go run ./cmd/migrate status
 fmt:
 	go fmt ./...
 build-cdocs:

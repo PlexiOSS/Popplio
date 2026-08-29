@@ -5,6 +5,7 @@
 package create_app
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
 	"popplio/apps"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -89,20 +91,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("This position is currently closed. Please check back later.")
 	}
 
-	var appBanned bool
-	err = state.Pool.QueryRow(d.Context, "SELECT app_banned FROM users WHERE user_id = $1", d.Auth.ID).Scan(&appBanned)
+	q := db.New(state.Pool)
+
+	appBanned, err := q.GetUserAppBanned(d.Context, d.Auth.ID)
 
 	if err != nil {
-		return resp.Err("Error gettingstate.Pop banned state", err, zap.String("user_id", d.Auth.ID))
+		return resp.Err("Error getting state.Pool banned state", err, zap.String("user_id", d.Auth.ID))
 	}
 
 	if appBanned {
 		return resp.Forbidden("You are currently banned from making applications on the site")
 	}
 
-	var userApps int64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM apps WHERE user_id = $1 AND position = $2 AND state = 'pending'", d.Auth.ID, payload.Position).Scan(&userApps)
+	userApps, err := q.CountPendingUserApps(d.Context, db.CountPendingUserAppsParams{
+		UserID:   d.Auth.ID,
+		Position: payload.Position,
+	})
 
 	if err != nil {
 		return resp.Err("Error getting user apps", err, zap.String("user_id", d.Auth.ID), zap.String("position", payload.Position))
@@ -114,9 +118,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if position.Cooldown > 0 {
 		// Fetch the time the last app the user created was on
-		var lastApp time.Time
-
-		err = state.Pool.QueryRow(d.Context, "SELECT created_at FROM apps WHERE user_id = $1 AND position = $2 ORDER BY created_at DESC LIMIT 1", d.Auth.ID, payload.Position).Scan(&lastApp)
+		lastAppTs, err := q.GetLastAppCreatedAt(d.Context, db.GetLastAppCreatedAtParams{
+			UserID:   d.Auth.ID,
+			Position: payload.Position,
+		})
+		lastApp := lastAppTs.Time
 
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
@@ -194,15 +200,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if !noPersistToDatabase {
 		appId = crypto.RandString(64)
 
-		_, err = state.Pool.Exec(
-			d.Context,
-			"INSERT INTO apps (app_id, user_id, position, questions, answers) VALUES ($1, $2, $3, $4, $5)",
-			appId,
-			d.Auth.ID,
-			payload.Position,
-			position.Questions,
-			answerMap,
-		)
+		questionsJSON, err := json.Marshal(position.Questions)
+
+		if err != nil {
+			return resp.Err("Error marshaling questions", err, zap.String("user_id", d.Auth.ID), zap.String("position", payload.Position))
+		}
+
+		err = q.InsertApp(d.Context, db.InsertAppParams{
+			AppID:     appId,
+			UserID:    d.Auth.ID,
+			Position:  payload.Position,
+			Questions: questionsJSON,
+			Answers:   answerMap,
+		})
 
 		if err != nil {
 			return resp.Err("Error inserting app", err, zap.String("user_id", d.Auth.ID), zap.String("position", payload.Position))

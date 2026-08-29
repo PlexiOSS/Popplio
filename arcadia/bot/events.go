@@ -8,6 +8,7 @@ import (
 
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
@@ -26,7 +27,7 @@ func onGuildsReady(ctx context.Context, _ *events.GuildsReady) {
 
 	state.Logger.Info(fmt.Sprintf("%s is ready! Doing some minor DB fixes", name))
 
-	_, err := state.Pool.Exec(ctx, "UPDATE bots SET claimed_by = NULL, type = 'pending' WHERE LOWER(claimed_by) = 'none'")
+	err := db.New(state.Pool).FixNoneClaimedBots(ctx)
 
 	if err != nil {
 		state.Logger.Error("Failed to run startup DB fixes", zap.Error(err))
@@ -127,9 +128,7 @@ func isStaff(c *Ctx) error {
 		return nil
 	}
 
-	var count int64
-
-	err := state.Pool.QueryRow(c.Context, "SELECT COUNT(*) FROM staff_members WHERE user_id = $1", c.Author.ID.String()).Scan(&count)
+	count, err := db.New(state.Pool).CountStaffMemberByID(c.Context, c.Author.ID.String())
 
 	if err != nil {
 		return err

@@ -13,11 +13,11 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -66,14 +66,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Both target_id and target_type must be specified")
 	}
 
-	var rows pgx.Rows
+	q := db.New(state.Pool)
+
+	var ev []string
 	var err error
 
 	var page = r.URL.Query().Get("page")
 	if page == "" {
-		rows, err = state.Pool.Query(d.Context, "SELECT author FROM entity_votes WHERE target_id = $1 AND target_type = $2 GROUP BY author", targetId, targetType)
+		ev, err = q.GetVoteAuthors(d.Context, db.GetVoteAuthorsParams{TargetID: targetId, TargetType: targetType})
 	} else {
-		page := r.URL.Query().Get("page")
 		var pageNum uint64
 		pageNum, err = strconv.ParseUint(page, 10, 32)
 
@@ -84,22 +85,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		limit := perPage
 		offset := (pageNum - 1) * perPage
 
-		rows, err = state.Pool.Query(d.Context, "SELECT author FROM entity_votes WHERE target_id = $1 AND target_type = $2 GROUP BY author LIMIT $3 OFFSET $4", targetId, targetType, limit, offset)
+		ev, err = q.GetVoteAuthorsPage(d.Context, db.GetVoteAuthorsPageParams{
+			TargetID:   targetId,
+			TargetType: targetType,
+			Limit:      int32(limit),
+			Offset:     int32(offset),
+		})
 	}
 
 	if err != nil {
 		return resp.Err("Failed to get user entity votes", err, zap.String("targetId", targetId), zap.String("targetType", targetType))
 	}
 
-	var ev = []string{}
-
-	for rows.Next() {
-		var author string
-		if err = rows.Scan(&author); err != nil {
-			return resp.Err("Failed to get user entity votes", err, zap.String("targetId", targetId), zap.String("targetType", targetType))
-		}
-
-		ev = append(ev, author)
+	if ev == nil {
+		ev = []string{}
 	}
 
 	return uapi.HttpResponse{

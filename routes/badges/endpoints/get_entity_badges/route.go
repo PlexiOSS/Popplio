@@ -8,14 +8,12 @@ package get_entity_badges
 
 import (
 	"net/http"
-	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -47,18 +45,6 @@ func Docs() *docs.Doc {
 	}
 }
 
-type entityBadgeRow struct {
-	Reason      string    `db:"reason"`
-	AwardedBy   string    `db:"awarded_by"`
-	CreatedAt   time.Time `db:"created_at"`
-	BadgeID     string    `db:"badge_id"`
-	Name        string    `db:"name"`
-	Description string    `db:"description"`
-	Icon        string    `db:"icon"`
-	Color       string    `db:"color"`
-	TargetTypes []string  `db:"target_types"`
-}
-
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetId := chi.URLParam(r, "target_id")
 	targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
@@ -67,23 +53,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Both target_id and target_type must be specified")
 	}
 
-	rows, err := state.Pool.Query(d.Context,
-		`SELECT eb.reason, eb.awarded_by, eb.created_at,
-                b.id AS badge_id, b.name, b.description, b.icon, b.color, b.target_types
-                FROM entity_badges eb
-                INNER JOIN badges b ON b.id = eb.badge_id
-                WHERE eb.target_type = $1 AND eb.target_id = $2
-                ORDER BY eb.created_at ASC`,
-		targetType, targetId)
+	badgeRows, err := db.New(state.Pool).GetEntityBadges(d.Context, db.GetEntityBadgesParams{
+		TargetType: targetType,
+		TargetID:   targetId,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to fetch entity badges [db fetch]", err)
-	}
-
-	badgeRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[entityBadgeRow])
-
-	if err != nil {
-		return resp.Err("Failed to fetch entity badges [collect]", err)
 	}
 
 	badges := make([]types.EntityBadge, 0, len(badgeRows))
@@ -100,7 +76,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			},
 			Reason:    row.Reason,
 			AwardedBy: row.AwardedBy,
-			CreatedAt: row.CreatedAt,
+			CreatedAt: row.CreatedAt.Time,
 		})
 	}
 

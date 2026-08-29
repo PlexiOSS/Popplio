@@ -1,8 +1,3 @@
-// Package delete_pack implements DELETE /users/{uid}/packs/{id} — "Delete
-// Pack".
-//
-// Deletes a pack by URL. You *must* be the owner of the pack to delete
-// packs. Returns 204 on success
 package delete_pack
 
 import (
@@ -10,6 +5,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -48,10 +44,9 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var id = chi.URLParam(r, "id")
 
-	// Check that the pack exists and get its owner in one query
-	var owner string
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(d.Context, "SELECT owner FROM packs WHERE url = $1", id).Scan(&owner)
+	owner, err := q.GetPackOwner(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -65,8 +60,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("You are not the owner of this pack")
 	}
 
-	// Delete the pack
-	_, err = state.Pool.Exec(d.Context, "DELETE FROM packs WHERE url = $1", id)
+	err = q.DeletePack(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Error while deleting pack [db exec]", err, zap.String("id", id))

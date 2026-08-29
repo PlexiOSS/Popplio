@@ -1,8 +1,3 @@
-// Package assets holds the bot logic shared between endpoints.
-//
-// It covers resolving a bot into its index representation and refreshing bot
-// metadata from Discord, both of which are needed by several endpoints and
-// by the team entity resolvers.
 package assets
 
 import (
@@ -10,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
@@ -48,9 +44,7 @@ func ResolveIndexBot(ctx context.Context, bot *types.IndexBot) error {
 	bot.User = botUser
 	ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost)
 
-	var code string
-
-	err = state.Pool.QueryRow(ctx, "SELECT code FROM vanity WHERE itag = $1", bot.VanityRef).Scan(&code)
+	code, err := db.New(state.Pool).GetVanityCodeByItag(ctx, bot.VanityRef)
 
 	if err != nil {
 		return fmt.Errorf("error querying vanity table: %w", err)
@@ -67,9 +61,6 @@ func ResolveIndexBot(ctx context.Context, bot *types.IndexBot) error {
 	return nil
 }
 
-// ResolveIndexBots resolves every bot in the slice concurrently, since each
-// bot's resolution (user lookup, vanity lookup, vote count) is independent of
-// every other bot's. Returns the first error encountered, if any.
 func ResolveIndexBots(ctx context.Context, bots []types.IndexBot) error {
 	g, ctx := errgroup.WithContext(ctx)
 

@@ -1,29 +1,34 @@
-// Package get_public_coupons implements GET /shop/public-coupons — "Get Shop
-// Coupons".
-//
-// Gets the publicly viewable shop coupons on the list
 package get_public_coupons
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-var (
-	// Shop coupons
-	shopCouponsColsArr = dbutil.GetCols(types.ShopCoupon{})
-	shopCouponsCols    = strings.Join(shopCouponsColsArr, ",")
-)
+func intPtr(v pgtype.Int4) *int {
+	if !v.Valid {
+		return nil
+	}
+	i := int(v.Int32)
+	return &i
+}
+
+func float64Ptr(v pgtype.Float8) *float64 {
+	if !v.Valid {
+		return nil
+	}
+	f := v.Float64
+	return &f
+}
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -34,18 +39,32 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+shopCouponsCols+" FROM shop_coupons WHERE public = true ORDER BY created_at DESC")
+	rows, err := db.New(state.Pool).GetPublicShopCoupons(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to fetch shop coupons list [db fetch]", err)
 	}
 
-	defer rows.Close()
-
-	coupons, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.ShopCoupon])
-
-	if err != nil {
-		return resp.Err("Failed to fetch shop coupons list [db fetch]", err)
+	coupons := make([]types.ShopCoupon, len(rows))
+	for i, row := range rows {
+		coupons[i] = types.ShopCoupon{
+			ID:                row.ID,
+			Code:              row.Code,
+			Public:            row.Public,
+			MaxUses:           intPtr(row.MaxUses),
+			Cents:             float64Ptr(row.Cents),
+			Requirements:      row.Requirements,
+			AllowedUsers:      row.AllowedUsers,
+			CreatedAt:         row.CreatedAt.Time,
+			LastUpdated:       row.LastUpdated.Time,
+			CreatedByID:       row.CreatedBy,
+			UpdatedByID:       row.UpdatedBy,
+			ReuseWaitDuration: intPtr(row.ReuseWaitDuration),
+			Expiry:            intPtr(row.Expiry),
+			ApplicableItems:   row.ApplicableItems,
+			Usable:            row.Usable,
+			TargetTypes:       row.TargetTypes,
+		}
 	}
 
 	return uapi.HttpResponse{

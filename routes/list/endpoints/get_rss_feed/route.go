@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/seo"
 	"popplio/seo/fetchers"
@@ -120,21 +121,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	var collector = seo.IDCollector{}
+	q := db.New(state.Pool)
 
 	// Get new bots
-	rows, err := state.Pool.Query(d.Context, "SELECT bot_id FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	newBotIDs, err := q.GetNewBotIDs(d.Context, db.GetNewBotIDsParams{Limit: int32(limit), Offset: int32(offset)})
 
 	if err != nil {
 		return resp.Err("Failed to get bots [row query] for generating RSS feed", err)
 	}
 
-	defer rows.Close()
-
-	newBots, err := collector.Collect(rows)
-
-	if err != nil {
-		return resp.Err("Failed to collect bot IDs for generating RSS feed", err)
-	}
+	newBots := collector.CollectIDs(newBotIDs)
 
 	for _, id := range newBots {
 		err := state.SeoMapGenerator.AddToRss(d.Context, &fetchers.BotFetcher{}, &rssFeed, "New Bots", id)
@@ -145,19 +141,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Get certified bots
-	rows, err = state.Pool.Query(d.Context, "SELECT bot_id FROM bots WHERE type = 'certified' ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	certBotIDs, err := q.GetCertifiedBotIDs(d.Context, db.GetCertifiedBotIDsParams{Limit: int32(limit), Offset: int32(offset)})
 
 	if err != nil {
 		return resp.Err("Failed to get bots [row query] for generating RSS feed", err)
 	}
 
-	defer rows.Close()
-
-	certBots, err := collector.Collect(rows)
-
-	if err != nil {
-		return resp.Err("Failed to collect bot IDs for generating RSS feed", err)
-	}
+	certBots := collector.CollectIDs(certBotIDs)
 
 	for _, id := range certBots {
 		err := state.SeoMapGenerator.AddToRss(d.Context, &fetchers.BotFetcher{}, &rssFeed, "Certified Bots", id)
@@ -168,19 +158,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Get premium bots
-	rows, err = state.Pool.Query(d.Context, "SELECT bot_id FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	premiumBotIDs, err := q.GetPremiumBotIDs(d.Context, db.GetPremiumBotIDsParams{Limit: int32(limit), Offset: int32(offset)})
 
 	if err != nil {
 		return resp.Err("Failed to get bots [row query] for generating RSS feed", err)
 	}
 
-	defer rows.Close()
-
-	premiumBots, err := collector.Collect(rows)
-
-	if err != nil {
-		return resp.Err("Failed to collect bot IDs for generating RSS feed", err)
-	}
+	premiumBots := collector.CollectIDs(premiumBotIDs)
 
 	for _, id := range premiumBots {
 		err := state.SeoMapGenerator.AddToRss(d.Context, &fetchers.BotFetcher{}, &rssFeed, "Premium Bots", id)

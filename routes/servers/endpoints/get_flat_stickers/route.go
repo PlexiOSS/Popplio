@@ -8,11 +8,10 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/state"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -48,40 +47,37 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (pageNum - 1) * perPage
 
-	rows, err := state.Pool.Query(
-		d.Context,
-		`SELECT s.server_id AS server_id, s.name AS server_name, s.avatar AS server_avatar,
-			e->>'id' AS id, e->>'name' AS name, e->>'format' AS format, e->>'url' AS url
-		FROM servers s
-		CROSS JOIN LATERAL jsonb_array_elements(s.stickers) AS e
-		WHERE s.show_emojis = true AND (s.type = 'approved' OR s.type = 'certified') AND s.state = 'public'
-		ORDER BY e->>'name' ASC
-		LIMIT $1 OFFSET $2`,
-		limit, offset,
-	)
+	q := db.New(state.Pool)
+
+	rows, err := q.GetFlatStickers(d.Context, db.GetFlatStickersParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 
 	if err != nil {
 		return resp.Err("Error while querying flat stickers [db fetch]", err)
 	}
 
-	stickers, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.FlatSticker])
-
-	if err != nil {
-		return resp.Err("Error while querying flat stickers [collect]", err)
+	stickers := make([]types.FlatSticker, len(rows))
+	for i, row := range rows {
+		stickers[i] = types.FlatSticker{
+			ServerID:     row.ServerID,
+			ServerName:   row.ServerName,
+			ServerAvatar: row.ServerAvatar,
+			ID:           row.ID,
+			Name:         row.Name,
+			Format:       row.Format,
+			URL:          row.Url,
+		}
 	}
 
-	var count uint64
-
-	err = state.Pool.QueryRow(
-		d.Context,
-		`SELECT coalesce(SUM(jsonb_array_length(s.stickers)), 0)
-		FROM servers s
-		WHERE s.show_emojis = true AND (s.type = 'approved' OR s.type = 'certified') AND s.state = 'public'`,
-	).Scan(&count)
+	countRaw, err := q.CountFlatStickers(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while counting flat stickers [db count]", err)
 	}
+
+	count := uint64(countRaw)
 
 	data := types.PagedResult[[]types.FlatSticker]{
 		Count:   count,

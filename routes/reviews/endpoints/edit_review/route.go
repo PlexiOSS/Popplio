@@ -1,9 +1,3 @@
-// Package edit_review implements PATCH
-// /{target_type}/{target_id}/reviews/{review_id} — "Edit Review".
-//
-// Edits a review by review ID. The user must be the author of this review.
-// This will automatically trigger a garbage collection task. Note that
-// non-users can only edit 'owner review's. Returns 204 on success
 package edit_review
 
 import (
@@ -11,6 +5,7 @@ import (
 
 	"popplio/api"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/reviews/assets"
 	"popplio/state"
@@ -20,6 +15,7 @@ import (
 	cevents "popplio/webhooks/core/events"
 	"popplio/webhooks/events"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -76,7 +72,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -84,20 +79,27 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
 
-	var author string
-	var content string
-	var stars int32
-	var ownerReview bool
+	q := db.New(state.Pool)
 
-	err = state.Pool.QueryRow(d.Context, "SELECT author, content, stars, owner_review FROM reviews WHERE id = $1 AND target_id = $2 AND target_type = $3", rid, targetId, targetType).Scan(&author, &content, &stars, &ownerReview)
+	var ridUUID pgtype.UUID
+	if err := ridUUID.Scan(rid); err != nil {
+		return uapi.DefaultResponse(http.StatusNotFound)
+	}
+
+	review, err := q.GetReviewForModify(d.Context, db.GetReviewForModifyParams{
+		ID:         ridUUID,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		state.Logger.Error("Failed to query review [db queryrow]", zap.Error(err), zap.String("rid", rid))
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
+	author, content, stars, ownerReview := review.Author, review.Content, review.Stars, review.OwnerReview
+
 	if ownerReview {
-		// Perform entity specific checks
 		err := api.AuthzEntityPermissionCheck(
 			d.Context,
 			d.Auth,
@@ -121,7 +123,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	_, err = state.Pool.Exec(d.Context, "UPDATE reviews SET content = $1, stars = $2 WHERE id = $3", payload.Content, payload.Stars, rid)
+	err = q.UpdateReview(d.Context, db.UpdateReviewParams{
+		Content: payload.Content,
+		Stars:   payload.Stars,
+		ID:      ridUUID,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to update review", err, zap.String("rid", rid))
@@ -149,7 +155,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		state.Logger.Error("Failed to send webhook", zap.Error(err), zap.String("target_id", targetId), zap.String("target_type", targetType), zap.String("user_id", d.Auth.ID), zap.String("review_id", rid))
 	}
 
-	// Trigger a garbage collection step to remove any orphaned reviews
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil {

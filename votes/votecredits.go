@@ -4,21 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"time"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	db "popplio/db"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-)
-
-var (
-	voteCreditTiersColsArr = dbutil.GetCols(types.VoteCreditTier{})
-	voteCreditTiersCols    = strings.Join(voteCreditTiersColsArr, ",")
-
-	entityVoteRedeemLogsColsArr = dbutil.GetCols(types.EntityVoteRedeemLog{})
-	entityVoteRedeemLogsCols    = strings.Join(entityVoteRedeemLogsColsArr, ",")
 )
 
 // Returns a summary of the vote credit tiers of an entity
@@ -28,16 +17,10 @@ func EntityGetVoteCreditsSummary(
 	targetId string,
 	targetType string,
 ) (*types.VoteCreditTierRedeemSummary, error) {
-	rows, err := c.Query(ctx, "SELECT "+voteCreditTiersCols+" FROM vote_credit_tiers WHERE target_type = $1 ORDER BY position ASC", targetType)
+	vcts, err := getVoteCreditTiers(ctx, c, targetType)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch vote credit tiers [row]: %w", err)
-	}
-
-	vcts, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[types.VoteCreditTier])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		vcts = []*types.VoteCreditTier{}
 	}
 
 	voteCount, err := EntityGetVoteCount(ctx, c, targetId, targetType)
@@ -82,16 +65,10 @@ func EntityRedeemVoteCredits(
 		return errors.New("vote credits are not supported for this entity")
 	}
 
-	rows, err := c.Query(ctx, "SELECT "+voteCreditTiersCols+" FROM vote_credit_tiers WHERE target_type = $1 ORDER BY position ASC", targetType)
+	vcts, err := getVoteCreditTiers(ctx, c, targetType)
 
 	if err != nil {
 		return fmt.Errorf("could not fetch vote credit tiers [row]: %w", err)
-	}
-
-	vcts, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[types.VoteCreditTier])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		vcts = []*types.VoteCreditTier{}
 	}
 
 	voteCount, err := EntityGetVoteCount(ctx, c, targetId, targetType)
@@ -116,28 +93,40 @@ func EntityRedeemVoteCredits(
 		return errors.New("no vote credits to redeem")
 	}
 
-	var id pgtype.UUID
-	err = c.QueryRow(ctx, "INSERT INTO entity_vote_redeem_logs (target_id, target_type, credits) VALUES ($1, $2, $3) RETURNING id", targetId, targetType, totalCredits).Scan(&id)
+	q := db.New(c)
+
+	id, err := q.InsertVoteRedeemLog(ctx, db.InsertVoteRedeemLogParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		Credits:    int32(totalCredits),
+	})
 
 	if err != nil {
 		return fmt.Errorf("could not log vote credit redemption: %w", err)
 	}
 
 	if vi.SupportsPartialVoteCreditsRedeem {
-		var ids []pgtype.UUID
-		err = c.QueryRow(ctx, "SELECT array(SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false ORDER BY created_at ASC LIMIT $3)", targetId, targetType, votesToRedeem).Scan(&ids)
+		ids, err := q.GetRedeemableVoteItags(ctx, db.GetRedeemableVoteItagsParams{
+			TargetID:   targetId,
+			TargetType: targetType,
+			Limit:      int32(votesToRedeem),
+		})
 
 		if err != nil {
 			return fmt.Errorf("could not fetch vote ids: %w", err)
 		}
 
-		_, err = c.Exec(ctx, "UPDATE entity_votes SET credit_redeem = $1, void = true, void_reason = 'Vote credits redeemed' WHERE itag = ANY($2)", id, ids)
+		err = q.RedeemVotesByItags(ctx, db.RedeemVotesByItagsParams{CreditRedeem: id, Itags: ids})
 
 		if err != nil {
 			return fmt.Errorf("could not redeem vote credits: %w", err)
 		}
 	} else {
-		_, err = c.Exec(ctx, "UPDATE entity_votes SET credit_redeem = $1, void = true, void_reason = 'Vote credits redeemed' WHERE target_id = $2 AND target_type = $3 AND void = false", id, targetId, targetType)
+		err = q.RedeemAllVotesForTarget(ctx, db.RedeemAllVotesForTargetParams{
+			CreditRedeem: id,
+			TargetID:     targetId,
+			TargetType:   targetType,
+		})
 
 		if err != nil {
 			return fmt.Errorf("could not redeem vote credits: %w", err)
@@ -154,16 +143,31 @@ func EntityGetVoteRedeemLogsSummary(
 	targetId string,
 	targetType string,
 ) (*types.EntityVoteRedeemLogSummary, error) {
-	rows, err := c.Query(ctx, "SELECT "+entityVoteRedeemLogsCols+" FROM entity_vote_redeem_logs WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC", targetId, targetType)
+	rows, err := db.New(c).GetVoteRedeemLogs(ctx, db.GetVoteRedeemLogsParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch vote redeem logs [db fetch]: %w", err)
 	}
 
-	evrls, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[types.EntityVoteRedeemLog])
+	evrls := make([]*types.EntityVoteRedeemLog, len(rows))
+	for i, row := range rows {
+		var redeemedAt *time.Time
+		if row.RedeemedAt.Valid {
+			redeemedAt = &row.RedeemedAt.Time
+		}
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		evrls = []*types.EntityVoteRedeemLog{}
+		evrls[i] = &types.EntityVoteRedeemLog{
+			ID:              row.ID,
+			TargetID:        row.TargetID,
+			TargetType:      row.TargetType,
+			Credits:         int(row.Credits),
+			RedeemedCredits: int(row.RedeemedCredits),
+			CreatedAt:       row.CreatedAt.Time,
+			RedeemedAt:      redeemedAt,
+		}
 	}
 
 	var totalCredits int
@@ -180,6 +184,31 @@ func EntityGetVoteRedeemLogsSummary(
 		RedeemedCredits:  redeemedCredits,
 		AvailableCredits: max(totalCredits-redeemedCredits, 0),
 	}, nil
+}
+
+// getVoteCreditTiers fetches and converts the vote credit tiers for a
+// target type, shared by EntityGetVoteCreditsSummary and
+// EntityRedeemVoteCredits.
+func getVoteCreditTiers(ctx context.Context, c DbConn, targetType string) ([]*types.VoteCreditTier, error) {
+	rows, err := db.New(c).GetVoteCreditTiers(ctx, targetType)
+
+	if err != nil {
+		return nil, err
+	}
+
+	vcts := make([]*types.VoteCreditTier, len(rows))
+	for i, row := range rows {
+		vcts[i] = &types.VoteCreditTier{
+			ID:         row.ID,
+			TargetType: row.TargetType,
+			Position:   int(row.Position),
+			Votes:      int(row.Votes),
+			Cents:      int(row.Cents),
+			CreatedAt:  row.CreatedAt.Time,
+		}
+	}
+
+	return vcts, nil
 }
 
 // Given a number of votes and the vote credit tiers, return the structure of how vote credits should be awarded

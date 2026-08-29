@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
+	"popplio/db"
 	"popplio/state"
 	ptypes "popplio/types"
 	"popplio/votes"
@@ -25,13 +27,9 @@ func BansSync(ctx context.Context) error {
 		return fmt.Errorf("Error while fetching bans: %s", err)
 	}
 
-	rows, err := state.Pool.Query(ctx, "SELECT user_id FROM users WHERE banned = true")
+	q := db.New(state.Pool)
 
-	if err != nil {
-		return fmt.Errorf("Error while fetching bans from database: %s", err)
-	}
-
-	dbBanned, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	dbBanned, err := q.GetBannedUserIDs(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while fetching bans from database: %s", err)
@@ -74,16 +72,18 @@ func BansSync(ctx context.Context) error {
 	for _, userID := range toModify {
 		_, isBanned := serverBans[userID]
 
-		tag, err := state.Pool.Exec(ctx, "UPDATE users SET banned = $1 WHERE user_id = $2", isBanned, userID)
+		rowsAffected, err := q.UpdateUserBanned(ctx, db.UpdateUserBannedParams{UserID: userID, Banned: isBanned})
 
 		if err != nil {
 			return fmt.Errorf("Error while updating user %s in database: %v", userID, err)
 		}
 
-		if tag.RowsAffected() == 0 {
-			_, err := state.Pool.Exec(ctx,
-				"INSERT INTO users (user_id, banned, api_token) VALUES ($1, $2, $3)",
-				userID, isBanned, impls.GenRandom(512))
+		if rowsAffected == 0 {
+			err := q.InsertBannedUser(ctx, db.InsertBannedUserParams{
+				UserID:   userID,
+				Banned:   isBanned,
+				ApiToken: impls.GenRandom(512),
+			})
 
 			if err != nil {
 				return fmt.Errorf("Error while inserting user %s into database: %v", userID, err)
@@ -182,17 +182,24 @@ func SpecRoleSync(ctx context.Context) error {
 
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, "UPDATE users SET bug_hunters = false"); err != nil {
+	txq := db.New(tx)
+
+	if err := txq.ClearAllBugHunters(ctx); err != nil {
 		return fmt.Errorf("Error updating users: %v", err)
 	}
 
 	for _, userID := range bugHunters {
-		if _, err := tx.Exec(ctx, "UPDATE users SET bug_hunters = true WHERE user_id = $1", userID); err != nil {
+		if err := txq.SetUserBugHunter(ctx, userID); err != nil {
 			return fmt.Errorf("Error updating users: %v", err)
 		}
 	}
 
 	return tx.Commit(ctx)
+}
+
+type AutomatedVoteResetRow struct {
+	ID        string    `db:"id"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 func VoteResetter(ctx context.Context) error {
@@ -204,9 +211,9 @@ func VoteResetter(ctx context.Context) error {
 
 	defer tx.Rollback(ctx)
 
-	var id string
+	txq := db.New(tx)
 
-	err = tx.QueryRow(ctx, "SELECT id FROM automated_vote_resets WHERE created_at > NOW() - INTERVAL '1 month' FOR UPDATE").Scan(&id)
+	_, err = txq.GetRecentAutomatedVoteResetForUpdate(ctx)
 
 	if err == nil {
 		return nil
@@ -216,31 +223,23 @@ func VoteResetter(ctx context.Context) error {
 		return err
 	}
 
-	if _, err := tx.Exec(ctx, "LOCK TABLE entity_votes IN EXCLUSIVE MODE"); err != nil {
+	if err := txq.LockEntityVotesExclusive(ctx); err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(ctx,
-		"UPDATE entity_votes SET void = TRUE, void_reason = 'Automated votes reset', voided_at = NOW() WHERE void = false AND immutable = false")
+	err = txq.VoidAllUnvoidedEntityVotes(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	// Voiding entity_votes rows above doesn't touch bots/servers/teams'
-	// cached approximate_votes column -- that's only ever recomputed when
-	// an entity receives a new vote (votes.EntityPostVote). Left alone, the
-	// public bot/server listings would keep showing stale pre-reset totals
-	// for anything that hasn't been voted for since. Recompute every
-	// entity's count from what's left in entity_votes (immutable votes
-	// survive the reset above, so this isn't just "set everything to 0").
 	for _, targetType := range []string{"bot", "server", "team"} {
 		if err := votes.RecomputeApproximateVotes(ctx, tx, targetType); err != nil {
 			return err
 		}
 	}
 
-	if _, err := tx.Exec(ctx, "INSERT INTO automated_vote_resets (created_at) VALUES (NOW())"); err != nil {
+	if err := txq.InsertAutomatedVoteReset(ctx); err != nil {
 		return err
 	}
 
@@ -261,8 +260,6 @@ func isNoRows(err error) bool {
 	return err != nil && err.Error() == pgx.ErrNoRows.Error()
 }
 
-const topReviewerQuery = "SELECT user_id, approved_count, denied_count, total_count FROM (SELECT rpc.user_id, SUM(CASE WHEN rpc.method = 'Approve' THEN 1 ELSE 0 END) AS approved_count, SUM(CASE WHEN rpc.method = 'Deny' THEN 1 ELSE 0 END) AS denied_count, SUM(CASE WHEN rpc.method IN ('Approve', 'Deny') THEN 1 ELSE 0 END) AS total_count FROM rpc_logs rpc LEFT JOIN staff_members sm ON rpc.user_id = sm.user_id WHERE rpc.method IN ('Approve', 'Deny') AND sm.user_id IS NOT NULL GROUP BY rpc.user_id) AS subquery WHERE total_count > 0 ORDER BY total_count DESC LIMIT $1"
-
 type TopReviewer struct {
 	UserID        string `db:"user_id"`
 	ApprovedCount int64  `db:"approved_count"`
@@ -271,13 +268,23 @@ type TopReviewer struct {
 }
 
 func QueryTopReviewers(ctx context.Context, limit int) ([]TopReviewer, error) {
-	rows, err := state.Pool.Query(ctx, topReviewerQuery, limit)
+	rows, err := db.New(state.Pool).GetTopReviewers(ctx, int32(limit))
 
 	if err != nil {
 		return nil, err
 	}
 
-	return pgx.CollectRows(rows, pgx.RowToStructByName[TopReviewer])
+	reviewers := make([]TopReviewer, len(rows))
+	for i, row := range rows {
+		reviewers[i] = TopReviewer{
+			UserID:        row.UserID,
+			ApprovedCount: row.ApprovedCount,
+			DeniedCount:   row.DeniedCount,
+			TotalCount:    row.TotalCount,
+		}
+	}
+
+	return reviewers, nil
 }
 
 func TopReviewerSync(ctx context.Context) error {

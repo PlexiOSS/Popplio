@@ -6,15 +6,13 @@ package get_user_reminders
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -22,11 +20,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	reminderColsArr = dbutil.GetCols(types.Reminder{})
-	reminderCols    = strings.Join(reminderColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -49,17 +42,24 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var id = chi.URLParam(r, "id")
 
+	q := db.New(state.Pool)
+
 	// Fetch reminder from postgres
-	rows, err := state.Pool.Query(d.Context, "SELECT "+reminderCols+" FROM user_reminders WHERE user_id = $1", id)
+	rows, err := q.GetUserReminders(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Error querying reminders [db fetch]", err, zap.String("user_id", id))
 	}
 
-	reminders, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.Reminder])
-
-	if err != nil {
-		return resp.Err("Error querying reminders [collect]", err, zap.String("user_id", id))
+	reminders := make([]types.Reminder, len(rows))
+	for i, row := range rows {
+		reminders[i] = types.Reminder{
+			UserID:     row.UserID,
+			TargetType: row.TargetType,
+			TargetID:   row.TargetID,
+			CreatedAt:  row.CreatedAt.Time,
+			LastAcked:  row.LastAcked.Time,
+		}
 	}
 
 	for i, reminder := range reminders {
@@ -80,20 +80,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				}
 			}
 		case "server":
-			var name, avatar string
-
-			err := state.Pool.QueryRow(d.Context, "SELECT name, avatar FROM servers WHERE server_id = $1", reminder.TargetID).Scan(&name, &avatar)
+			row, err := q.GetServerNameAndAvatar(d.Context, reminder.TargetID)
 
 			if err == nil {
 				reminders[i].Resolved = &types.ResolvedReminder{
-					Name:   name,
-					Avatar: avatar,
+					Name:   row.Name,
+					Avatar: row.Avatar,
 				}
 			}
 		case "team":
-			var name string
-
-			err := state.Pool.QueryRow(d.Context, "SELECT name FROM teams WHERE id = $1", reminder.TargetID).Scan(&name)
+			name, err := q.GetTeamName(d.Context, reminder.TargetID)
 
 			if err == nil {
 				reminders[i].Resolved = &types.ResolvedReminder{

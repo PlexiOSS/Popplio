@@ -5,6 +5,7 @@ package get_server
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,28 +13,21 @@ import (
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"github.com/PlexiOSS/Keel/uuidutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
 	"popplio/votes"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	serverColsArr = dbutil.GetCols(types.Server{})
-	serverCols    = strings.Join(serverColsArr, ",")
-
-	teamColsArr = dbutil.GetCols(types.Team{})
-	teamCols    = strings.Join(teamColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -50,8 +44,8 @@ func Docs() *docs.Doc {
 			},
 			{
 				Name: "target",
-				Description: `The target page of the request if any. 
-				
+				Description: `The target page of the request if any.
+
 If target is 'page', then unique clicks will be counted based on a SHA-256 hashed IP
 
 If target is 'invite', then the invite will be counted as a click
@@ -99,16 +93,19 @@ func handleAnalytics(r *http.Request, id, target string) error {
 
 		defer tx.Rollback(state.Context)
 
-		_, err = tx.Exec(state.Context, "UPDATE servers SET clicks = clicks + 1 WHERE server_id = $1", id)
+		q := db.New(tx)
+
+		err = q.UpdateServerClicks(state.Context, id)
 
 		if err != nil {
 			return fmt.Errorf("error updating clicks count: %w", err)
 		}
 
 		// Check if the IP has already clicked the server by checking the unique_clicks row
-		var hasClicked bool
-
-		err = tx.QueryRow(state.Context, "SELECT $1 = ANY(unique_clicks) FROM servers WHERE server_id = $2", hashedIp, id).Scan(&hasClicked)
+		hasClicked, err := q.CheckServerHasUniqueClick(state.Context, db.CheckServerHasUniqueClickParams{
+			HashedIp: hashedIp,
+			ServerID: id,
+		})
 
 		if err != nil {
 			return fmt.Errorf("error checking for any unique clicks from this user: %w", err)
@@ -116,8 +113,11 @@ func handleAnalytics(r *http.Request, id, target string) error {
 
 		if !hasClicked {
 			// If not, add it to the array
-			state.Logger.Debug("Adding new unique click for user during handleAnalytics", zap.Error(err), zap.String("id", id), zap.String("target", target), zap.String("targetType", "bot"))
-			_, err = tx.Exec(state.Context, "UPDATE servers SET unique_clicks = array_append(unique_clicks, $1) WHERE server_id = $2", hashedIp, id)
+			state.Logger.Debug("Adding new unique click for user during handleAnalytics", zap.String("id", id), zap.String("target", target), zap.String("targetType", "bot"))
+			err = q.AppendServerUniqueClick(state.Context, db.AppendServerUniqueClickParams{
+				ArrayAppend: hashedIp,
+				ServerID:    id,
+			})
 
 			if err != nil {
 				return fmt.Errorf("error adding new unique click for user: %w", err)
@@ -132,7 +132,7 @@ func handleAnalytics(r *http.Request, id, target string) error {
 		}
 	case "invite":
 		// Update clicks
-		_, err := state.Pool.Exec(state.Context, "UPDATE servers SET invite_clicks = invite_clicks + 1 WHERE server_id = $1", id)
+		err := db.New(state.Pool).UpdateServerInviteClicks(state.Context, id)
 
 		if err != nil {
 			return fmt.Errorf("error updating invite clicks: %w", err)
@@ -147,32 +147,89 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	target := r.URL.Query().Get("target")
 
-	row, err := state.Pool.Query(d.Context, "SELECT "+serverCols+" FROM servers WHERE server_id = $1", id)
+	q := db.New(state.Pool)
 
-	if err != nil {
-		return resp.Err("Error while getting server [db fetch]", err, zap.String("id", id), zap.String("target", target))
-	}
-
-	server, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Server])
+	row, err := q.GetServerByID(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	if err != nil {
-		return resp.Err("Error while getting server [db collect]", err, zap.String("id", id), zap.String("target", target))
+		return resp.Err("Error while getting server [db fetch]", err, zap.String("id", id), zap.String("target", target))
 	}
 
-	row, err = state.Pool.Query(d.Context, "SELECT "+teamCols+" FROM teams WHERE id = $1", server.TeamOwnerID)
+	var extraLinks []types.Link
+	if err := json.Unmarshal(row.ExtraLinks, &extraLinks); err != nil {
+		return resp.Err("Error parsing server extra_links [json]", err, zap.String("id", id), zap.String("target", target))
+	}
+
+	server := types.Server{
+		ServerID:               row.ServerID,
+		Name:                   row.Name,
+		Avatar:                 row.Avatar,
+		TotalMembers:           int(row.TotalMembers),
+		OnlineMembers:          int(row.OnlineMembers),
+		Short:                  row.Short,
+		Type:                   row.Type,
+		Note:                   pgtype.Text{String: row.ApprovalNote, Valid: true},
+		State:                  row.State,
+		Tags:                   row.Tags,
+		VanityRef:              row.VanityRef,
+		ExtraLinks:             extraLinks,
+		TeamOwnerID:            row.TeamOwner,
+		InviteClicks:           int(row.InviteClicks),
+		Clicks:                 int(row.Clicks),
+		NSFW:                   row.Nsfw,
+		ApproximateVotes:       int(row.ApproximateVotes),
+		VoteBanned:             row.VoteBanned,
+		Premium:                row.Premium,
+		StartPeriod:            row.StartPremiumPeriod,
+		PremiumPeriodLength:    row.PremiumPeriodLength,
+		CaptchaOptOut:          row.CaptchaOptOut,
+		CreatedAt:              row.CreatedAt,
+		ClaimedBy:              row.ClaimedBy,
+		LastClaimed:            row.LastClaimed,
+		LoginRequiredForInvite: row.LoginRequiredForInvite,
+		ShowEmojis:             row.ShowEmojis,
+		Emojis:                 row.Emojis,
+		Stickers:               row.Stickers,
+		EmojisSyncedAt:         row.EmojisSyncedAt,
+		SupporterBadge:         row.SupporterBadge,
+		BoostedUntil:           row.BoostedUntil,
+		FeaturedUntil:          row.FeaturedUntil,
+		SpotlightedUntil:       row.SpotlightedUntil,
+		VoteBlitzUntil:         row.VoteBlitzUntil,
+		DiscordNSFWLevel:       int(row.DiscordNsfwLevel),
+		NSFWChannelCount:       int(row.NsfwChannelCount),
+		ModerationFlagged:      row.ModerationFlagged,
+		ModerationCategories:   row.ModerationCategories,
+	}
+
+	teamRow, err := q.GetTeamByID(d.Context, uuidutil.Encode(server.TeamOwnerID.Bytes))
 
 	if err != nil {
 		return resp.Err("Error while getting team [db fetch]", err, zap.String("id", id), zap.String("target", target))
 	}
 
-	eto, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Team])
+	var teamExtraLinks []types.Link
+	if err := json.Unmarshal(teamRow.ExtraLinks, &teamExtraLinks); err != nil {
+		return resp.Err("Error parsing team extra_links [json]", err, zap.String("id", id), zap.String("target", target))
+	}
 
-	if err != nil {
-		return resp.Err("Error while getting team [db collect]", err, zap.String("id", id), zap.String("target", target))
+	eto := types.Team{
+		ID:               teamRow.ID,
+		Name:             teamRow.Name,
+		Short:            teamRow.Short,
+		Tags:             teamRow.Tags,
+		VoteBanned:       teamRow.VoteBanned,
+		ApproximateVotes: int(teamRow.ApproximateVotes),
+		ExtraLinks:       teamExtraLinks,
+		NSFW:             teamRow.Nsfw,
+		VanityRef:        teamRow.VanityRef,
+		Service:          teamRow.Service,
+		CreatedAt:        teamRow.CreatedAt.Time,
+		UpdatedAt:        teamRow.UpdatedAt.Time,
 	}
 
 	if r.URL.Query().Get("team_includes") != "" {
@@ -195,18 +252,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	server.TeamOwner = &eto
 
-	var uniqueClicks int64
-	err = state.Pool.QueryRow(d.Context, "SELECT cardinality(unique_clicks) AS unique_clicks FROM servers WHERE server_id = $1", server.ServerID).Scan(&uniqueClicks)
+	uniqueClicks, err := q.GetServerUniqueClicksCount(d.Context, server.ServerID)
 
 	if err != nil {
 		return resp.Err("Error while getting unique clicks", err, zap.String("id", id), zap.String("target", target))
 	}
 
-	server.UniqueClicks = uniqueClicks
+	server.UniqueClicks = int64(uniqueClicks)
 
-	var code string
-
-	err = state.Pool.QueryRow(d.Context, "SELECT code FROM vanity WHERE itag = $1", server.VanityRef).Scan(&code)
+	code, err := q.GetVanityCodeByItag(d.Context, server.VanityRef)
 
 	if err != nil {
 		return resp.Err("Error while getting bot vanity code [db collect]", err, zap.String("id", id), zap.String("target", target), zap.String("serverID", server.ServerID))
@@ -244,8 +298,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			switch include {
 			case "long":
 				// Fetch long description
-				var long string
-				err := state.Pool.QueryRow(d.Context, "SELECT long FROM servers WHERE server_id = $1", server.ServerID).Scan(&long)
+				long, err := q.GetServerLongDescription(d.Context, server.ServerID)
 
 				if err != nil {
 					return resp.Err("Error while getting bot server description [db fetch]", err, zap.String("id", id), zap.String("target", target), zap.String("serverID", server.ServerID))

@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -57,15 +58,25 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
 
-	var entry types.BotChangelog
-
-	err := state.Pool.QueryRow(d.Context,
-		"INSERT INTO bot_changelogs (bot_id, title, content, version, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, content, version, created_by, created_at",
-		botId, payload.Title, payload.Content, payload.Version, d.Auth.ID,
-	).Scan(&entry.ID, &entry.Title, &entry.Content, &entry.Version, &entry.CreatedBy, &entry.CreatedAt)
+	row, err := db.New(state.Pool).InsertBotChangelog(d.Context, db.InsertBotChangelogParams{
+		BotID:     botId,
+		Title:     payload.Title,
+		Content:   payload.Content,
+		Version:   payload.Version,
+		CreatedBy: d.Auth.ID,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to create bot changelog", err, zap.String("botID", botId))
+	}
+
+	entry := types.BotChangelog{
+		ID:        row.ID,
+		Title:     row.Title,
+		Content:   row.Content,
+		Version:   row.Version,
+		CreatedBy: row.CreatedBy,
+		CreatedAt: row.CreatedAt.Time,
 	}
 
 	return uapi.HttpResponse{

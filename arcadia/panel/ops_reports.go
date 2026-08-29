@@ -1,13 +1,15 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/perms"
 	"popplio/reports"
@@ -19,25 +21,9 @@ import (
 	"go.uber.org/zap"
 )
 
-type reportRow struct {
-	ID             pgtype.UUID      `db:"id"`
-	TargetType     string           `db:"target_type"`
-	TargetID       string           `db:"target_id"`
-	ReporterID     string           `db:"reporter_id"`
-	Reason         string           `db:"reason"`
-	Description    string           `db:"description"`
-	Status         string           `db:"status"`
-	ResolvedBy     pgtype.Text      `db:"resolved_by"`
-	ResolutionNote pgtype.Text      `db:"resolution_note"`
-	CreatedAt      time.Time        `db:"created_at"`
-	ResolvedAt     pgtype.Timestamp `db:"resolved_at"`
-}
-
-func (r reportRow) toPanelReport(ctx context.Context) types.Report {
+func toPanelReport(ctx context.Context, r db.Report) types.Report {
 	name, url := r.TargetID, ""
 
-	// A deleted target shouldn't break the report list — fall back to
-	// showing the raw ID with no link.
 	if info, err := reports.GetTargetInfo(ctx, state.Pool, r.TargetType, r.TargetID); err == nil {
 		name, url = info.Name, info.URL
 	}
@@ -52,7 +38,7 @@ func (r reportRow) toPanelReport(ctx context.Context) types.Report {
 		Reason:      r.Reason,
 		Description: r.Description,
 		Status:      r.Status,
-		CreatedAt:   types.NewTimestamp(r.CreatedAt),
+		CreatedAt:   types.NewTimestamp(r.CreatedAt.Time),
 	}
 
 	if r.ResolvedBy.Valid {
@@ -78,29 +64,19 @@ func (s *Server) updateReports(ctx context.Context, q *types.QUpdateReports) (re
 		return response{}, err
 	}
 
-	// Every report operation, including listing, requires review_reports —
-	// unlike Partners' public List, report contents (including reporter
-	// identity) are staff-only by design.
 	if !userPerms.Has(perms.StaffReviewReports) {
 		return writeText(http.StatusForbidden, "You do not have permission to review reports [review_reports]"), nil
 	}
 
 	switch {
 	case q.Action.List != nil:
-		var rows pgx.Rows
-		var err error
+		var status pgtype.Text
 
 		if q.Action.List.Status != nil {
-			rows, err = state.Pool.Query(ctx, "SELECT id, target_type, target_id, reporter_id, reason, description, status, resolved_by, resolution_note, created_at, resolved_at FROM reports WHERE status = $1 ORDER BY created_at DESC", *q.Action.List.Status)
-		} else {
-			rows, err = state.Pool.Query(ctx, "SELECT id, target_type, target_id, reporter_id, reason, description, status, resolved_by, resolution_note, created_at, resolved_at FROM reports ORDER BY created_at DESC")
+			status = pgtype.Text{String: *q.Action.List.Status, Valid: true}
 		}
 
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		reportRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[reportRow])
+		reportRows, err := db.New(state.Pool).ListReports(ctx, status)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -109,7 +85,7 @@ func (s *Server) updateReports(ctx context.Context, q *types.QUpdateReports) (re
 		out := make([]types.Report, 0, len(reportRows))
 
 		for _, row := range reportRows {
-			out = append(out, row.toPanelReport(ctx))
+			out = append(out, toPanelReport(ctx, row))
 		}
 
 		return writeJSON(http.StatusOK, out), nil
@@ -127,16 +103,18 @@ func (s *Server) resolveReport(ctx context.Context, staffID string, action *type
 		return writeText(http.StatusBadRequest, "id is required"), nil
 	}
 
-	var reporterID string
+	var reportUUID pgtype.UUID
 
-	err := state.Pool.QueryRow(
-		ctx,
-		"UPDATE reports SET status = $1, resolved_by = $2, resolution_note = $3, resolved_at = NOW() WHERE id = $4 AND status IN ('open', 'under_review') RETURNING reporter_id",
-		status,
-		staffID,
-		action.Note,
-		action.ID,
-	).Scan(&reporterID)
+	if err := reportUUID.Scan(action.ID); err != nil {
+		return writeText(http.StatusNotFound, "Report not found, or has already been resolved/dismissed"), nil
+	}
+
+	reporterID, err := db.New(state.Pool).ResolveReportReturningReporter(ctx, db.ResolveReportReturningReporterParams{
+		Status:         status,
+		ResolvedBy:     pgtype.Text{String: staffID, Valid: true},
+		ResolutionNote: pgtype.Text{String: action.Note, Valid: true},
+		ID:             reportUUID,
+	})
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -146,9 +124,6 @@ func (s *Server) resolveReport(ctx context.Context, staffID string, action *type
 		return response{}, newError(err)
 	}
 
-	// Best-effort: the report is already resolved/dismissed at this point,
-	// so a failure to notify the reporter shouldn't read back as the
-	// resolution itself having failed.
 	alertTitle := "Report Dismissed"
 	alertMessage := "Your report has been reviewed and dismissed."
 

@@ -1,8 +1,3 @@
-// Package patch_ticket implements PATCH /tickets/{id} — "Patch Ticket".
-//
-// Closes or reopens a ticket. The author may close their own ticket;
-// reopening requires staff with the 'manage_tickets' permission. Returns
-// 204 on success.
 package patch_ticket
 
 import (
@@ -10,12 +5,14 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -55,9 +52,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	var userID string
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(d.Context, "SELECT user_id FROM tickets WHERE id = $1", ticketID).Scan(&userID)
+	userID, err := q.GetTicketOwner(d.Context, ticketID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -88,12 +85,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("Only staff can reopen a ticket.")
 	}
 
-	var closeUserID *string
+	closeUserID := pgtype.Text{}
 	if !payload.Open {
-		closeUserID = &d.Auth.ID
+		closeUserID = pgtype.Text{String: d.Auth.ID, Valid: true}
 	}
 
-	_, err = state.Pool.Exec(d.Context, "UPDATE tickets SET open = $1, close_user_id = $2 WHERE id = $3", payload.Open, closeUserID, ticketID)
+	err = q.UpdateTicketOpenState(d.Context, db.UpdateTicketOpenStateParams{
+		Open:        payload.Open,
+		CloseUserID: closeUserID,
+		ID:          ticketID,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to update ticket", err, zap.String("ticket_id", ticketID))

@@ -1,20 +1,18 @@
-// Package patch_bot_team implements PATCH /users/{uid}/bots/{bid}/teams —
-// "Patch Bot Team".
-//
-// Transfers a bot to another team.
 package patch_bot_team
 
 import (
 	"fmt"
 	"net/http"
 
-	"github.com/PlexiOSS/Keel/ptr"
-	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/api"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
+
+	"github.com/PlexiOSS/Keel/ptr"
+	"github.com/PlexiOSS/Keel/uuidutil"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -104,23 +102,28 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("You must be able to add the bot in the new team to transfer it: " + err.Error())
 	}
 
-	// Get old team ID for audit log
-	var currentBotTeam pgtype.UUID
+	q := db.New(state.Pool)
 
-	err = state.Pool.QueryRow(d.Context, "SELECT team_owner FROM bots WHERE bot_id = $1", id).Scan(&currentBotTeam)
+	currentBotTeam, err := q.GetBotTeamOwner(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Error getting current team for bot: ", err, zap.String("botID", id), zap.String("userID", d.Auth.ID))
 	}
 
-	// Transfer bot
-	_, err = state.Pool.Exec(d.Context, "UPDATE bots SET team_owner = $1, owner = NULL WHERE bot_id = $2", payload.TeamID, id)
+	var newTeamOwner pgtype.UUID
+	if err := newTeamOwner.Scan(payload.TeamID); err != nil {
+		return resp.BadRequest("Invalid team ID: " + err.Error())
+	}
+
+	err = q.UpdateBotTeamOwner(d.Context, db.UpdateBotTeamOwnerParams{
+		TeamOwner: newTeamOwner,
+		BotID:     id,
+	})
 
 	if err != nil {
 		return resp.Err("Error transferring bot to team", nil, zap.String("botID", id), zap.String("userID", d.Auth.ID), zap.String("newTeamID", payload.TeamID))
 	}
 
-	// Send message to mod logs
 	state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Embeds: []discord.Embed{
 			{

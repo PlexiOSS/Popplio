@@ -1,10 +1,3 @@
-// Package add_review implements POST /{target_type}/{target_id}/reviews —
-// "Create Review".
-//
-// Creates a new review for an entity. A user may have only one `root review`
-// per entity. Triggers a garbage collection step to remove any orphaned
-// reviews afterwards. Note that non-users can only create an 'owner review'.
-// Returns 204 on success
 package add_review
 
 import (
@@ -13,6 +6,7 @@ import (
 
 	"popplio/api"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/reviews/assets"
 	"popplio/state"
@@ -21,6 +15,7 @@ import (
 	"popplio/webhooks/core/drivers"
 	"popplio/webhooks/events"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
@@ -83,7 +78,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err = state.Validator.Struct(payload)
 
 	if err != nil {
@@ -94,12 +88,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetId := chi.URLParam(r, "target_id")
 	targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
 
+	q := db.New(state.Pool)
+
 	switch targetType {
 	case "bot":
-		// Check if the bot exists
-		var count int64
-
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM bots WHERE bot_id = $1", targetId).Scan(&count)
+		count, err := q.CountBotByID(d.Context, targetId)
 
 		if err != nil {
 			return resp.Err("Failed to query bot count [db count]", err, zap.String("bot_id", targetId))
@@ -109,10 +102,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest("Bot not found")
 		}
 	case "server":
-		// Check if the server exists
-		var count int64
-
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE server_id = $1", targetId).Scan(&count)
+		count, err := q.CountServerByID(d.Context, targetId)
 
 		if err != nil {
 			return resp.Err("Failed to query server count [db count]", err, zap.String("server_id", targetId))
@@ -122,10 +112,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest("Server not found")
 		}
 	case "team":
-		// Check if the team exists
-		var count int64
-
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM teams WHERE id = $1", targetId).Scan(&count)
+		count, err := q.CountTeamByID(d.Context, targetId)
 
 		if err != nil {
 			return resp.Err("Failed to query team count [db count]", err, zap.String("team_id", targetId))
@@ -143,7 +130,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if payload.OwnerReview {
-		// Perform entity specific checks
 		err := api.AuthzEntityPermissionCheck(
 			d.Context,
 			d.Auth,
@@ -157,11 +143,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Check if the user has already made a 'root' review for this entity
 	if payload.ParentID == "" {
-		var count int
-
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM reviews WHERE author = $1 AND target_id = $2 AND target_type = $3 AND parent_id IS NULL", d.Auth.ID, targetId, targetType).Scan(&count)
+		count, err := q.CountRootReview(d.Context, db.CountRootReviewParams{
+			Author:     d.Auth.ID,
+			TargetID:   targetId,
+			TargetType: targetType,
+		})
 
 		if err != nil {
 			return resp.Err("Failed to query root review count [db count]", err, zap.String("author", d.Auth.ID), zap.String("target_id", targetId), zap.String("target_type", targetType))
@@ -172,11 +159,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// If parent_id is provided, check if it exists and check nesting
+	var parentID pgtype.UUID
 	if payload.ParentID != "" {
-		var count int
+		if err := parentID.Scan(payload.ParentID); err != nil {
+			return resp.BadRequest("Parent review not found")
+		}
 
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM reviews WHERE id = $1", payload.ParentID).Scan(&count)
+		count, err := q.CountReviewByID(d.Context, parentID)
 
 		if err != nil {
 			return resp.Err("Failed to query parent review count [db count]", err, zap.String("parent_id", payload.ParentID))
@@ -197,18 +186,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Create the review
-	var parentId = pgtype.Text{
-		Valid:  payload.ParentID != "",
-		String: payload.ParentID,
-	}
-
-	var reviewId string
-	err = state.Pool.QueryRow(d.Context, "INSERT INTO reviews (author, target_id, target_type, content, stars, parent_id, owner_review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id", d.Auth.ID, targetId, targetType, payload.Content, payload.Stars, parentId, payload.OwnerReview).Scan(&reviewId)
+	reviewIdUUID, err := q.InsertReview(d.Context, db.InsertReviewParams{
+		Author:      d.Auth.ID,
+		TargetID:    targetId,
+		TargetType:  targetType,
+		Content:     payload.Content,
+		Stars:       payload.Stars,
+		ParentID:    parentID,
+		OwnerReview: payload.OwnerReview,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to insert review", err, zap.String("author", d.Auth.ID), zap.String("target_id", targetId), zap.String("target_type", targetType))
 	}
+
+	reviewId := uuid.UUID(reviewIdUUID.Bytes).String()
 
 	err = drivers.Send(drivers.With{
 		Data: events.WebhookNewReviewData{
@@ -226,7 +218,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		state.Logger.Error("Failed to send webhook", zap.Error(err), zap.String("target_id", targetId), zap.String("target_type", targetType), zap.String("user_id", d.Auth.ID), zap.String("review_id", reviewId))
 	}
 
-	// Trigger a garbage collection step to remove any orphaned reviews
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil {

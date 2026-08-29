@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -7,16 +9,38 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// The review queue as the panel sees it, and the user lookup beside it.
-//
-// partialBots is the batched manager resolution: upstream resolved each bot's
-// managers with two queries inside the loop, so an N-bot response cost 2N round
-// trips. It is three queries total here, with the same JSON out.
+func timePtr(t pgtype.Timestamptz) *time.Time {
+	if !t.Valid {
+		return nil
+	}
+
+	return &t.Time
+}
+
+type botQueueRow struct {
+	BotID                string
+	ClientID             string
+	LastClaimed          *time.Time
+	ClaimedBy            *string
+	Type                 string
+	ApprovalNote         string
+	Short                string
+	Invite               string
+	ApproximateVotes     int32
+	Shards               int32
+	Library              string
+	InviteClicks         int32
+	Clicks               int32
+	Servers              int32
+	ModerationFlagged    bool
+	ModerationCategories []string
+}
 
 func (s *Server) getUser(ctx context.Context, q *types.QGetUser) (response, error) {
 	if _, err := checkAuth(ctx, q.LoginToken); err != nil {
@@ -32,77 +56,96 @@ func (s *Server) getUser(ctx context.Context, q *types.QGetUser) (response, erro
 	return writeJSON(http.StatusOK, user), nil
 }
 
-type botQueueRow struct {
-	BotID                string     `db:"bot_id"`
-	ClientID             string     `db:"client_id"`
-	LastClaimed          *time.Time `db:"last_claimed"`
-	ClaimedBy            *string    `db:"claimed_by"`
-	Type                 string     `db:"type"`
-	ApprovalNote         string     `db:"approval_note"`
-	Short                string     `db:"short"`
-	Invite               string     `db:"invite"`
-	ApproximateVotes     int32      `db:"approximate_votes"`
-	Shards               int32      `db:"shards"`
-	Library              string     `db:"library"`
-	InviteClicks         int32      `db:"invite_clicks"`
-	Clicks               int32      `db:"clicks"`
-	Servers              int32      `db:"servers"`
-	ModerationFlagged    bool       `db:"moderation_flagged"`
-	ModerationCategories []string   `db:"moderation_categories"`
-}
-
 func (s *Server) botQueue(ctx context.Context, q *types.QLoginTokenOnly) (response, error) {
-	// Public to all staff: no permission check.
 	if _, err := checkAuth(ctx, q.LoginToken); err != nil {
 		return response{}, err
 	}
 
-	rows, err := state.Pool.Query(ctx,
-		`SELECT bot_id, client_id, last_claimed, claimed_by, type, approval_note, short,
-                invite, approximate_votes, shards, library, invite_clicks, clicks, servers,
-                moderation_flagged, moderation_categories
-                FROM bots WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at`)
+	rows, err := db.New(state.Pool).BotQueuePending(ctx)
 
 	if err != nil {
 		return response{}, newError(err)
 	}
 
-	queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[botQueueRow])
+	queue := make([]botQueueRow, len(rows))
 
-	if err != nil {
-		return response{}, newError(err)
+	for i, row := range rows {
+		var claimedBy *string
+
+		if row.ClaimedBy.Valid {
+			claimedBy = &row.ClaimedBy.String
+		}
+
+		queue[i] = botQueueRow{
+			BotID:                row.BotID,
+			ClientID:             row.ClientID,
+			LastClaimed:          timePtr(row.LastClaimed),
+			ClaimedBy:            claimedBy,
+			Type:                 row.Type,
+			ApprovalNote:         row.ApprovalNote,
+			Short:                row.Short,
+			Invite:               row.Invite,
+			ApproximateVotes:     row.ApproximateVotes,
+			Shards:               row.Shards,
+			Library:              row.Library,
+			InviteClicks:         row.InviteClicks,
+			Clicks:               row.Clicks,
+			Servers:              row.Servers,
+			ModerationFlagged:    row.ModerationFlagged,
+			ModerationCategories: row.ModerationCategories,
+		}
 	}
 
 	return s.partialBots(ctx, queue)
 }
 
 func (s *Server) serverQueue(ctx context.Context, q *types.QLoginTokenOnly) (response, error) {
-	// Public to all staff: no permission check, matching botQueue.
 	if _, err := checkAuth(ctx, q.LoginToken); err != nil {
 		return response{}, err
 	}
 
-	rows, err := state.Pool.Query(ctx,
-		`SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
-                approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
-                tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories
-                FROM servers WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at`)
+	rows, err := db.New(state.Pool).ServerQueuePending(ctx)
 
 	if err != nil {
 		return response{}, newError(err)
 	}
 
-	queue, err := pgx.CollectRows(rows, pgx.RowToStructByName[searchServerRow])
+	queue := make([]searchServerRow, len(rows))
 
-	if err != nil {
-		return response{}, newError(err)
+	for i, row := range rows {
+		var claimedBy *string
+
+		if row.ClaimedBy.Valid {
+			claimedBy = &row.ClaimedBy.String
+		}
+
+		queue[i] = searchServerRow{
+			ServerID:             row.ServerID,
+			Name:                 row.Name,
+			Avatar:               row.Avatar,
+			TotalMembers:         row.TotalMembers,
+			OnlineMembers:        row.OnlineMembers,
+			Short:                row.Short,
+			Type:                 row.Type,
+			ApprovalNote:         row.ApprovalNote,
+			ApproximateVotes:     row.ApproximateVotes,
+			InviteClicks:         row.InviteClicks,
+			Clicks:               row.Clicks,
+			NSFW:                 row.Nsfw,
+			DiscordNSFWLevel:     int32(row.DiscordNsfwLevel),
+			NSFWChannelCount:     row.NsfwChannelCount,
+			Tags:                 row.Tags,
+			Premium:              row.Premium,
+			ClaimedBy:            claimedBy,
+			LastClaimed:          timePtr(row.LastClaimed),
+			ModerationFlagged:    row.ModerationFlagged,
+			ModerationCategories: row.ModerationCategories,
+		}
 	}
 
 	return s.partialServers(ctx, queue)
 }
 
-// partialServers renders a server list, batching manager resolution the same
-// way partialBots does.
 func (s *Server) partialServers(ctx context.Context, queue []searchServerRow) (response, error) {
 	serverIDs := make([]string, 0, len(queue))
 
@@ -163,7 +206,6 @@ func (s *Server) partialBots(ctx context.Context, queue []botQueueRow) (response
 	bots := make([]types.PartialEntity, 0, len(queue))
 
 	for _, bot := range queue {
-		// Dovewing is fronted by a Redis hot cache, so this stays per-bot.
 		user, err := impls.GetPlatformUser(ctx, bot.BotID)
 
 		if err != nil {

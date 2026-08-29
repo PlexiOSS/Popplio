@@ -6,11 +6,21 @@ import (
 	"time"
 
 	"popplio/arcadia/impls"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 )
+
+type ModCaseRow struct {
+	GuildID     string    `db:"guild_id"`
+	UserID      string    `db:"user_id"`
+	ModeratorID string    `db:"moderator_id"`
+	Action      string    `db:"action"`
+	Reason      string    `db:"reason"`
+	CreatedAt   time.Time `db:"created_at"`
+}
 
 func cmdModlogs() *Command {
 	return &Command{
@@ -32,36 +42,24 @@ func cmdModlogs() *Command {
 				return err
 			}
 
-			rows, err := state.Pool.Query(c.Context,
-				`SELECT action, moderator_id, reason, created_at FROM mod_cases
-				 WHERE guild_id = $1 AND user_id = $2
-				 ORDER BY created_at DESC LIMIT 10`,
-				c.GuildID.String(), target.String())
+			rows, err := db.New(state.Pool).GetModCasesForUser(c.Context, db.GetModCasesForUserParams{
+				GuildID: c.GuildID.String(),
+				UserID:  target.String(),
+			})
 
 			if err != nil {
 				return err
 			}
 
-			defer rows.Close()
-
 			var fields []discord.EmbedField
 
-			for rows.Next() {
-				var action, moderatorID, reason string
-				var createdAt time.Time
-
-				if err := rows.Scan(&action, &moderatorID, &reason, &createdAt); err != nil {
-					return err
-				}
+			for _, row := range rows {
+				action, moderatorID, reason, createdAt := row.Action, row.ModeratorID, row.Reason, row.CreatedAt.Time
 
 				fields = append(fields, discord.EmbedField{
 					Name:  fmt.Sprintf("%s — <t:%d:f>", strings.ToUpper(action[:1])+action[1:], createdAt.Unix()),
 					Value: fmt.Sprintf("By <@%s>: %s", moderatorID, reason),
 				})
-			}
-
-			if err := rows.Err(); err != nil {
-				return err
 			}
 
 			if len(fields) == 0 {

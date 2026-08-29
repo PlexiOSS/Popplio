@@ -4,24 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
-
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	indexServersColsArr = dbutil.GetCols(types.IndexServer{})
-	indexServersCols    = strings.Join(indexServersColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -35,66 +27,68 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	listIndex := types.ListIndexServer{}
 
-	certRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_votes DESC LIMIT 9")
+	q := db.New(state.Pool)
+
+	certRows, err := q.GetCertifiedIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting certified servers", err)
 	}
-	listIndex.Certified, err = processRow(d.Context, certRows)
+	listIndex.Certified, err = processRow(d.Context, toIndexServersFromCertified(certRows))
 	if err != nil {
 		return resp.Err("Error while processing certified servers", err)
 	}
 
-	premRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND premium = true ORDER BY approximate_votes  DESC LIMIT 9")
+	premRows, err := q.GetPremiumIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting premium servers", err)
 	}
-	listIndex.Premium, err = processRow(d.Context, premRows)
+	listIndex.Premium, err = processRow(d.Context, toIndexServersFromPremium(premRows))
 	if err != nil {
 		return resp.Err("Error while processing premium servers", err)
 	}
 
-	mostViewedRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY clicks DESC LIMIT 9")
+	mostViewedRows, err := q.GetMostViewedIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting most viewed servers", err)
 	}
-	listIndex.MostViewed, err = processRow(d.Context, mostViewedRows)
+	listIndex.MostViewed, err = processRow(d.Context, toIndexServersFromMostViewed(mostViewedRows))
 	if err != nil {
 		return resp.Err("Error while processing most viewed servers", err)
 	}
 
-	recentlyAddedRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND type = 'approved' ORDER BY created_at DESC LIMIT 9")
+	recentlyAddedRows, err := q.GetRecentlyAddedIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting recently added servers", err)
 	}
-	listIndex.RecentlyAdded, err = processRow(d.Context, recentlyAddedRows)
+	listIndex.RecentlyAdded, err = processRow(d.Context, toIndexServersFromRecentlyAdded(recentlyAddedRows))
 	if err != nil {
 		return resp.Err("Error while processing recently added servers", err)
 	}
 
-	topVotedRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes  DESC LIMIT 9")
+	topVotedRows, err := q.GetTopVotedIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting top voted servers", err)
 	}
-	listIndex.TopVoted, err = processRow(d.Context, topVotedRows)
+	listIndex.TopVoted, err = processRow(d.Context, toIndexServersFromTopVoted(topVotedRows))
 	if err != nil {
 		return resp.Err("Error while processing top voted servers", err)
 	}
 
-	featuredRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND featured_until IS NOT NULL AND featured_until > NOW() ORDER BY featured_until DESC LIMIT 9")
+	featuredRows, err := q.GetFeaturedIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting featured servers", err)
 	}
-	listIndex.Featured, err = processRow(d.Context, featuredRows)
+	listIndex.Featured, err = processRow(d.Context, toIndexServersFromFeatured(featuredRows))
 	if err != nil {
 		return resp.Err("Error while processing featured servers", err)
 	}
 
 	// Spotlight Servers (set by staff, distinct from shop-purchased Featured)
-	spotlightRows, err := state.Pool.Query(d.Context, "SELECT "+indexServersCols+" FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9")
+	spotlightRows, err := q.GetSpotlightIndexServers(d.Context)
 	if err != nil {
 		return resp.Err("Error while getting spotlight servers", err)
 	}
-	listIndex.Spotlight, err = processRow(d.Context, spotlightRows)
+	listIndex.Spotlight, err = processRow(d.Context, toIndexServersFromSpotlight(spotlightRows))
 	if err != nil {
 		return resp.Err("Error while processing spotlight servers", err)
 	}
@@ -104,13 +98,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 }
 
-func processRow(ctx context.Context, rows pgx.Rows) ([]types.IndexServer, error) {
-	servers, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexServer])
-
-	if err != nil {
-		return nil, err
-	}
-
+// processRow validates that every returned server actually matches the
+// public/approved-or-certified invariant every one of these queries relies
+// on, then resolves each server (vanity, votes) concurrently.
+func processRow(ctx context.Context, servers []types.IndexServer) ([]types.IndexServer, error) {
 	for i := range servers {
 		if (servers[i].Type != "approved" && servers[i].Type != "certified") || servers[i].State != "public" {
 			return nil, fmt.Errorf("internal error: servers %s has invalid type %s or state %s", servers[i].ServerID, servers[i].Type, servers[i].State)
@@ -122,4 +113,200 @@ func processRow(ctx context.Context, rows pgx.Rows) ([]types.IndexServer, error)
 	}
 
 	return servers, nil
+}
+
+func toIndexServersFromCertified(rows []db.GetCertifiedIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromPremium(rows []db.GetPremiumIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromMostViewed(rows []db.GetMostViewedIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromRecentlyAdded(rows []db.GetRecentlyAddedIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromTopVoted(rows []db.GetTopVotedIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromFeatured(rows []db.GetFeaturedIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromSpotlight(rows []db.GetSpotlightIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
 }

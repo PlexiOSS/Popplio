@@ -12,6 +12,7 @@ import (
 	"slices"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -60,11 +61,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 		}
 
-		_, err := state.Pool.Exec(
-			d.Context,
-			"INSERT INTO user_notification_prefs (user_id, category, enabled) VALUES ($1, $2, $3) ON CONFLICT (user_id, category) DO UPDATE SET enabled = $3",
-			id, category, enabled,
-		)
+		err := db.New(state.Pool).UpsertUserNotificationPref(d.Context, db.UpsertUserNotificationPrefParams{
+			UserID:   id,
+			Category: category,
+			Enabled:  enabled,
+		})
 
 		if err != nil {
 			return resp.Err("Failed to update notification preferences", err, zap.String("user_id", id), zap.String("category", string(category)))

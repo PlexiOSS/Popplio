@@ -2,12 +2,14 @@ package create_oauth2_login
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 
 	"github.com/PlexiOSS/Keel/urlutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
@@ -15,6 +17,8 @@ import (
 	"github.com/PlexiOSS/Keel/crypto"
 	"github.com/PlexiOSS/Keel/jsonimpl"
 	"github.com/PlexiOSS/Keel/uapi"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // oauthUser is the subset of Discord's /users/@me payload this endpoint needs.
@@ -220,7 +224,9 @@ func fetchOauthUser(ctx context.Context, accessToken string) (oauthUser, error) 
 // The caller needs the distinction for more than logging: a brand-new user
 // cannot be banned, so the ban check is skipped for them.
 func ensureUser(ctx context.Context, userID string) (existed bool, err error) {
-	err = state.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)", userID).Scan(&existed)
+	q := db.New(state.Pool)
+
+	existed, err = q.UserExists(ctx, userID)
 
 	if err != nil {
 		return false, &oauthError{
@@ -235,12 +241,22 @@ func ensureUser(ctx context.Context, userID string) (existed bool, err error) {
 		return true, nil
 	}
 
-	_, err = state.Pool.Exec(
-		ctx,
-		"INSERT INTO users (user_id, extra_links, developer, certified) VALUES ($1, $2, false, false)",
-		userID,
-		[]types.Link{},
-	)
+	extraLinks, err := json.Marshal([]types.Link{})
+
+	if err != nil {
+		return false, &oauthError{
+			status:  http.StatusInternalServerError,
+			message: "Failed to marshal extra_links",
+			reason:  "Failed to marshal extra_links",
+			cause:   err,
+		}
+	}
+
+	err = q.InsertUser(ctx, db.InsertUserParams{
+		UserID:     userID,
+		ApiToken:   crypto.RandString(256),
+		ExtraLinks: extraLinks,
+	})
 
 	if err != nil {
 		return false, &oauthError{
@@ -262,9 +278,7 @@ func ensureUser(ctx context.Context, userID string) (existed bool, err error) {
 // an unbanned user may not use that scope at all, since it would otherwise be a
 // way to obtain a session with different semantics than intended.
 func checkBanScope(ctx context.Context, userID, scope string) error {
-	var banned bool
-
-	err := state.Pool.QueryRow(ctx, "SELECT banned FROM users WHERE user_id = $1", userID).Scan(&banned)
+	banned, err := db.New(state.Pool).GetUserBanned(ctx, userID)
 
 	if err != nil {
 		return &oauthError{
@@ -317,9 +331,7 @@ func checkBugHunterOnly(ctx context.Context, userID, redirectURI string) error {
 		return nil
 	}
 
-	var bugHunter bool
-
-	err := state.Pool.QueryRow(ctx, "SELECT bug_hunters FROM users WHERE user_id = $1", userID).Scan(&bugHunter)
+	bugHunter, err := db.New(state.Pool).GetUserBugHunter(ctx, userID)
 
 	if err != nil {
 		return &oauthError{
@@ -352,11 +364,11 @@ func checkBugHunterOnly(ctx context.Context, userID, redirectURI string) error {
 func createSession(ctx context.Context, userID, sessionName string) (token, sessionID string, err error) {
 	token = crypto.RandString(128)
 
-	err = state.Pool.QueryRow(
-		ctx,
-		"INSERT INTO api_sessions (target_type, target_id, type, token, expiry, name) VALUES ('user', $1, 'login', $2, NOW() + INTERVAL '30 days', $3) RETURNING id",
-		userID, token, sessionName,
-	).Scan(&sessionID)
+	sessionID, err = db.New(state.Pool).InsertLoginSession(ctx, db.InsertLoginSessionParams{
+		TargetID: userID,
+		Token:    token,
+		Name:     pgtype.Text{String: sessionName, Valid: true},
+	})
 
 	if err != nil {
 		return "", "", &oauthError{

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/PlexiOSS/Keel/ptr"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -39,16 +40,14 @@ func sendAuthLog(user oauthUser, req types.AuthorizeRequest, isNew bool) {
 	var bans banState
 
 	if !isNew {
-		err := state.Pool.QueryRow(
-			state.Context,
-			"SELECT banned, vote_banned, app_banned FROM users WHERE user_id = $1",
-			user.ID,
-		).Scan(&bans.banned, &bans.voteBanned, &bans.appBanned)
+		flags, err := db.New(state.Pool).GetUserBanFlags(state.Context, user.ID)
 
 		if err != nil {
 			state.Logger.Error("sendAuthLog: Failed to get user details from database", zap.Error(err), zap.String("user_id", user.ID))
 			return
 		}
+
+		bans.banned, bans.voteBanned, bans.appBanned = flags.Banned, flags.VoteBanned, flags.AppBanned
 	}
 
 	state.Logger.With(

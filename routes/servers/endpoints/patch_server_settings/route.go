@@ -1,14 +1,13 @@
 package patch_server_settings
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"reflect"
-	"strconv"
-	"strings"
 
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -23,35 +22,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func updateServerArgs(server types.ServerSettingsUpdate) []any {
-	return []any{
-		server.Short,
-		server.Long,
-		server.ExtraLinks,
-		server.State,
-		server.Tags,
-		server.NSFW,
-		server.CaptchaOptOut,
-		server.LoginRequiredForInvite,
-		server.ShowEmojis,
-	}
-}
-
-var (
-	compiledMessages = uapi.CompileValidationErrors(types.ServerSettingsUpdate{})
-	updateSql        = []string{}
-	updateSqlStr     string
-)
-
-func Setup() {
-	for i, field := range reflect.VisibleFields(reflect.TypeOf(types.ServerSettingsUpdate{})) {
-		if field.Tag.Get("db") != "" {
-			updateSql = append(updateSql, field.Tag.Get("db")+"=$"+strconv.Itoa(i+1))
-		}
-	}
-
-	updateSqlStr = strings.Join(updateSql, ",")
-}
+var compiledMessages = uapi.CompileValidationErrors(types.ServerSettingsUpdate{})
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -95,27 +66,38 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(err.Error())
 	}
 
-	serverArgs := updateServerArgs(payload)
+	extraLinksJSON, err := json.Marshal(payload.ExtraLinks)
 
-	if len(updateSql) != len(serverArgs) {
-		return resp.ErrBody("Internal Error: The number of columns and arguments do not match", "Internal Error: The number of columns and arguments do not match", nil)
+	if err != nil {
+		return resp.Err("Error marshaling extra links", err, zap.String("serverID", id))
 	}
 
-	serverArgs = append(serverArgs, id)
+	q := db.New(state.Pool)
 
-	_, err = state.Pool.Exec(d.Context, "UPDATE servers SET "+updateSqlStr+" WHERE server_id=$"+strconv.Itoa(len(serverArgs)), serverArgs...)
+	err = q.UpdateServerSettings(d.Context, db.UpdateServerSettingsParams{
+		Short:                  payload.Short,
+		Long:                   payload.Long,
+		ExtraLinks:             extraLinksJSON,
+		State:                  payload.State,
+		Tags:                   payload.Tags,
+		Nsfw:                   payload.NSFW,
+		CaptchaOptOut:          payload.CaptchaOptOut,
+		LoginRequiredForInvite: payload.LoginRequiredForInvite,
+		ShowEmojis:             payload.ShowEmojis,
+		ServerID:               id,
+	})
 
 	if err != nil {
 		return resp.Err("Error while updating server", err, zap.String("serverID", id))
 	}
 
-	var name, avatar string
-
-	err = state.Pool.QueryRow(d.Context, "SELECT name, avatar FROM servers WHERE server_id = $1", id).Scan(&name, &avatar)
+	nameAvatar, err := q.GetServerNameAndAvatar(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Error while getting server info", err, zap.String("serverID", id))
 	}
+
+	name, avatar := nameAvatar.Name, nameAvatar.Avatar
 
 	embed := discord.Embed{
 		URL:   state.Config.Sites.Frontend + "/servers/" + id,

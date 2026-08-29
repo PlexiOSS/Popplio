@@ -7,25 +7,16 @@ package get_staff_templates
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	templateTypesColsArr = dbutil.GetCols(types.StaffTemplateType{})
-	templateTypesCols    = strings.Join(templateTypesColsArr, ",")
-
-	templateColsArr = dbutil.GetCols(types.StaffTemplate{})
-	templateCols    = strings.Join(templateColsArr, ",")
 )
 
 func Docs() *doclib.Doc {
@@ -52,42 +43,47 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("entity_type must be \"bot\" or \"server\"")
 	}
 
-	query := "SELECT " + templateCols + " FROM staff_templates"
-	args := []any{}
+	q := db.New(state.Pool)
 
+	entityTypeFilter := pgtype.Text{}
 	if entityType != "" {
-		query += " WHERE entity_type = $1"
-		args = append(args, entityType)
+		entityTypeFilter = pgtype.Text{String: entityType, Valid: true}
 	}
 
-	query += " ORDER BY created_at DESC"
-
-	rows, err := state.Pool.Query(d.Context, query, args...)
+	rows, err := q.GetStaffTemplates(d.Context, entityTypeFilter)
 
 	if err != nil {
 		return resp.Err("Failed to fetch staff templates list [db fetch]", err)
 	}
 
-	defer rows.Close()
-
-	templates, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.StaffTemplate])
-
-	if err != nil {
-		return resp.Err("Failed to fetch staff templates list [db fetch]", err)
+	templates := make([]types.StaffTemplate, len(rows))
+	for i, row := range rows {
+		templates[i] = types.StaffTemplate{
+			ID:          row.ID,
+			Name:        row.Name,
+			Emoji:       row.Emoji,
+			Tags:        row.Tags,
+			Description: row.Description,
+			Type:        row.Type,
+			EntityType:  row.EntityType,
+			CreatedAt:   row.CreatedAt.Time,
+		}
 	}
 
-	typeRows, err := state.Pool.Query(d.Context, "SELECT "+templateTypesCols+" FROM staff_template_types ORDER BY created_at DESC")
+	typeRows, err := q.GetStaffTemplateTypes(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to fetch staff templates types list [db fetch]", err)
 	}
 
-	defer rows.Close()
-
-	templatesTypes, err := pgx.CollectRows(typeRows, pgx.RowToStructByName[types.StaffTemplateType])
-
-	if err != nil {
-		return resp.Err("Failed to fetch staff templates type list [db fetch]", err)
+	templatesTypes := make([]types.StaffTemplateType, len(typeRows))
+	for i, row := range typeRows {
+		templatesTypes[i] = types.StaffTemplateType{
+			ID:    row.ID,
+			Name:  row.Name,
+			Icon:  row.Icon,
+			Short: row.Short,
+		}
 	}
 
 	return uapi.HttpResponse{

@@ -2,11 +2,13 @@ package impls
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
@@ -14,32 +16,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// numericToFloat64Ptr converts a nullable pgtype.Numeric (as returned by an
+// EXTRACT(epoch FROM ...) expression) to the *float64 this package's structs
+// use, mirroring the nil-on-NULL behavior the raw driver gave for free.
+func numericToFloat64Ptr(n pgtype.Numeric) *float64 {
+	if !n.Valid {
+		return nil
+	}
+
+	f, err := n.Float64Value()
+
+	if err != nil || !f.Valid {
+		return nil
+	}
+
+	return &f.Float64
+}
+
 var (
 	ErrIdentityExpired  = errors.New("identityExpired")
 	ErrSessionNotActive = errors.New("sessionNotActive")
 )
 
+type StaffAuthChainRow struct {
+	Token      string    `db:"token"`
+	UserID     string    `db:"user_id"`
+	CreatedAt  time.Time `db:"created_at"`
+	State      string    `db:"state"`
+	LastSeenAt time.Time `db:"last_seen_at"`
+}
+
 func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error) {
-	// Sliding expiration: an active session's clock is last_seen_at, bumped
-	// to NOW() on every successful CheckAuth call below — so this prunes
-	// sessions that have been idle for an hour, not sessions that are simply
-	// over an hour old. created_at is untouched and still means "when this
-	// row was first created."
-	_, err := state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE last_seen_at < NOW() - INTERVAL '1 hour'")
+	q := db.New(state.Pool)
+
+	err := q.DeleteStaleAuthChainEntries(ctx)
 
 	if err != nil {
 		return types.AuthData{}, err
 	}
 
-	_, err = state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE state = 'pending' AND created_at < NOW() - INTERVAL '5 minutes'")
+	err = q.DeleteExpiredPendingAuthChainEntries(ctx)
 
 	if err != nil {
 		return types.AuthData{}, err
 	}
 
-	var count int64
-
-	err = state.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM staffpanel__authchain WHERE token = $1", token).Scan(&count)
+	count, err := q.CountAuthChainByToken(ctx, token)
 
 	if err != nil {
 		return types.AuthData{}, err
@@ -49,28 +71,15 @@ func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error
 		return types.AuthData{}, ErrIdentityExpired
 	}
 
-	var (
-		userID    string
-		createdAt time.Time
-		sessState string
-	)
-
-	err = state.Pool.QueryRow(ctx, "SELECT user_id, created_at, state FROM staffpanel__authchain WHERE token = $1", token).Scan(&userID, &createdAt, &sessState)
+	chain, err := q.GetAuthChainByToken(ctx, token)
 
 	if err != nil {
 		return types.AuthData{}, err
 	}
 
-	var (
-		positions []pgtype.UUID
-		isBot     bool
-	)
+	userID, createdAt, sessState := chain.UserID, chain.CreatedAt.Time, chain.State
 
-	err = state.Pool.QueryRow(ctx, `
-		SELECT sm.positions, COALESCE(iuc.bot, false)
-		FROM staff_members sm
-		LEFT JOIN internal_user_cache__discord iuc ON iuc.id = sm.user_id
-		WHERE sm.user_id = $1`, userID).Scan(&positions, &isBot)
+	row, err := q.GetStaffPositionsAndBotFlag(ctx, userID)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -79,6 +88,8 @@ func CheckAuthInsecure(ctx context.Context, token string) (types.AuthData, error
 
 		return types.AuthData{}, err
 	}
+
+	positions, isBot := row.Positions, row.Bot
 
 	if len(positions) == 0 {
 		return types.AuthData{}, ErrIdentityExpired
@@ -106,106 +117,107 @@ func CheckAuth(ctx context.Context, token string) (types.AuthData, error) {
 		return types.AuthData{}, ErrSessionNotActive
 	}
 
-	// Sliding expiration: every successful authenticated call for an active
-	// session resets its idle clock, so a session in continuous use never
-	// hits the 1-hour prune above.
-	if _, err := state.Pool.Exec(ctx, "UPDATE staffpanel__authchain SET last_seen_at = NOW() WHERE token = $1", token); err != nil {
+	if err := db.New(state.Pool).TouchAuthChainSeen(ctx, token); err != nil {
 		return types.AuthData{}, err
 	}
 
 	return data, nil
 }
 
-type disciplinaryRow struct {
-	ID          pgtype.UUID `db:"id"`
-	CreatedAt   time.Time   `db:"created_at"`
-	Expiry      *float64    `db:"expiry"`
-	Title       string      `db:"title"`
-	Description string      `db:"description"`
-	Type        string      `db:"type"`
-
-	TypeName           *string    `db:"type_name"`
-	TypeDescription    *string    `db:"type_description"`
-	TypeSelfAssignable *bool      `db:"self_assignable"`
-	TypePermLimits     []string   `db:"perm_limits"`
-	TypeAdditory       *bool      `db:"additory"`
-	TypeNeedsApproval  *bool      `db:"needs_approval"`
-	TypeMaxExpiry      *float64   `db:"max_expiry"`
-	TypeCreatedAt      *time.Time `db:"type_created_at"`
-}
-
-const disciplinaryQuery = `SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
-        t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
-        EXTRACT(epoch FROM t.max_expiry) AS max_expiry, t.created_at AS type_created_at
-        FROM staff_disciplinary d LEFT JOIN staff_disciplinary_types t ON t.id = d.type
-        WHERE d.user_id = $1`
-
 func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]types.StaffDisciplinary, error) {
-	query := disciplinaryQuery
+	q := db.New(state.Pool)
+
+	disciplinaries := make([]types.StaffDisciplinary, 0)
 
 	if active {
-		query += " AND NOW() - d.created_at < d.expiry"
+		rows, err := q.GetActiveStaffDisciplinaries(ctx, userID)
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, rec := range rows {
+			d, err := disciplinaryFromActiveRow(rec, userID)
+
+			if err != nil {
+				return nil, err
+			}
+
+			disciplinaries = append(disciplinaries, d)
+		}
+
+		return disciplinaries, nil
 	}
 
-	rows, err := state.Pool.Query(ctx, query, userID)
+	rows, err := q.GetStaffDisciplinaries(ctx, userID)
 
 	if err != nil {
 		return nil, err
 	}
 
-	records, err := pgx.CollectRows(rows, pgx.RowToStructByName[disciplinaryRow])
+	for _, rec := range rows {
+		d, err := disciplinaryFromRow(rec, userID)
 
-	if err != nil {
-		return nil, err
-	}
-
-	disciplinaries := make([]types.StaffDisciplinary, 0, len(records))
-
-	for _, rec := range records {
-		if rec.TypeName == nil {
-			return nil, pgx.ErrNoRows
+		if err != nil {
+			return nil, err
 		}
 
-		var expiresAt *int64
-
-		if rec.Expiry != nil {
-			seconds := int64(*rec.Expiry)
-			expiresAt = &seconds
-		}
-
-		disciplinaries = append(disciplinaries, types.StaffDisciplinary{
-			ID:          UUIDString(rec.ID),
-			UserID:      userID,
-			CreatedAt:   types.NewTimestamp(rec.CreatedAt),
-			ExpiresAt:   expiresAt,
-			Title:       rec.Title,
-			Description: rec.Description,
-			Type: types.StaffDisciplinaryType{
-				ID:             rec.Type,
-				Name:           *rec.TypeName,
-				Description:    derefOr(rec.TypeDescription, ""),
-				SelfAssignable: derefOr(rec.TypeSelfAssignable, false),
-				PermLimits:     types.NonNilStrings(rec.TypePermLimits),
-				Additory:       derefOr(rec.TypeAdditory, false),
-				NeedsApproval:  derefOr(rec.TypeNeedsApproval, false),
-				MaxExpiry:      rec.TypeMaxExpiry,
-				CreatedAt:      types.NewTimestamp(derefOr(rec.TypeCreatedAt, rec.CreatedAt)),
-			},
-		})
+		disciplinaries = append(disciplinaries, d)
 	}
 
 	return disciplinaries, nil
 }
 
-func derefOr[T any](v *T, fallback T) T {
-	if v == nil {
-		return fallback
+func disciplinaryFromRow(rec db.GetStaffDisciplinariesRow, userID string) (types.StaffDisciplinary, error) {
+	if !rec.TypeName.Valid {
+		return types.StaffDisciplinary{}, pgx.ErrNoRows
 	}
 
-	return *v
+	var typeCreatedAt time.Time
+	if rec.TypeCreatedAt.Valid {
+		typeCreatedAt = rec.TypeCreatedAt.Time
+	} else {
+		typeCreatedAt = rec.CreatedAt.Time
+	}
+
+	return types.StaffDisciplinary{
+		ID:          UUIDString(rec.ID),
+		UserID:      userID,
+		CreatedAt:   types.NewTimestamp(rec.CreatedAt.Time),
+		ExpiresAt:   epochFloatToSeconds(numericToFloat64Ptr(rec.Expiry)),
+		Title:       rec.Title,
+		Description: rec.Description,
+		Type: types.StaffDisciplinaryType{
+			ID:             rec.Type,
+			Name:           rec.TypeName.String,
+			Description:    rec.TypeDescription.String,
+			SelfAssignable: rec.SelfAssignable.Bool,
+			PermLimits:     types.NonNilStrings(rec.PermLimits),
+			Additory:       rec.Additory.Bool,
+			NeedsApproval:  rec.NeedsApproval.Bool,
+			MaxExpiry:      numericToFloat64Ptr(rec.MaxExpiry),
+			CreatedAt:      types.NewTimestamp(typeCreatedAt),
+		},
+	}, nil
 }
 
-type staffPositionRow struct {
+func disciplinaryFromActiveRow(rec db.GetActiveStaffDisciplinariesRow, userID string) (types.StaffDisciplinary, error) {
+	// Same shape as GetStaffDisciplinariesRow, just from the filtered query
+	// -- converting through GetStaffDisciplinariesRow keeps the mapping in
+	// one place.
+	return disciplinaryFromRow(db.GetStaffDisciplinariesRow(rec), userID)
+}
+
+func epochFloatToSeconds(f *float64) *int64 {
+	if f == nil {
+		return nil
+	}
+
+	seconds := int64(*f)
+	return &seconds
+}
+
+type StaffPositionRow struct {
 	ID                 pgtype.UUID  `db:"id"`
 	Name               string       `db:"name"`
 	RoleID             string       `db:"role_id"`
@@ -216,38 +228,51 @@ type staffPositionRow struct {
 	CreatedAt          time.Time    `db:"created_at"`
 }
 
-func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, error) {
-	var (
-		positionIDs   []pgtype.UUID
-		permOverrides []string
-		noAutosync    bool
-		unaccounted   bool
-		mfaVerified   bool
-		createdAt     time.Time
-	)
+type StaffMemberRow struct {
+	UserID        string        `db:"user_id"`
+	Positions     []pgtype.UUID `db:"positions"`
+	PermOverrides []string      `db:"perm_overrides"`
+	NoAutosync    bool          `db:"no_autosync"`
+	Unaccounted   bool          `db:"unaccounted"`
+	MFAVerified   bool          `db:"mfa_verified"`
+	CreatedAt     time.Time     `db:"created_at"`
+}
 
-	err := state.Pool.QueryRow(ctx,
-		"SELECT positions, perm_overrides, no_autosync, unaccounted, mfa_verified, created_at FROM staff_members WHERE user_id = $1",
-		userID,
-	).Scan(&positionIDs, &permOverrides, &noAutosync, &unaccounted, &mfaVerified, &createdAt)
+func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, error) {
+	q := db.New(state.Pool)
+
+	member, err := q.GetStaffMemberRaw(ctx, userID)
 
 	if err != nil {
 		return types.StaffMember{}, fmt.Errorf("Error while getting staff perms of user %s: %s", userID, err)
 	}
 
-	rows, err := state.Pool.Query(ctx,
-		"SELECT id, name, role_id, perms, corresponding_roles, icon, index, created_at FROM staff_positions WHERE id = ANY($1)",
-		positionIDs,
-	)
+	positionIDs, permOverrides, noAutosync, unaccounted, mfaVerified, createdAt :=
+		member.Positions, member.PermOverrides, member.NoAutosync, member.Unaccounted, member.MfaVerified, member.CreatedAt.Time
+
+	rawPositions, err := q.GetStaffPositionsByIDs(ctx, positionIDs)
 
 	if err != nil {
 		return types.StaffMember{}, fmt.Errorf("Error while getting positions of user %s: %s", userID, err)
 	}
 
-	positionRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[staffPositionRow])
+	positionRows := make([]StaffPositionRow, len(rawPositions))
+	for i, row := range rawPositions {
+		var correspondingRoles []types.Link
+		if err := json.Unmarshal(row.CorrespondingRoles, &correspondingRoles); err != nil {
+			return types.StaffMember{}, fmt.Errorf("Error while parsing corresponding_roles of position %s: %s", UUIDString(row.ID), err)
+		}
 
-	if err != nil {
-		return types.StaffMember{}, fmt.Errorf("Error while getting positions of user %s: %s", userID, err)
+		positionRows[i] = StaffPositionRow{
+			ID:                 row.ID,
+			Name:               row.Name,
+			RoleID:             row.RoleID,
+			Perms:              row.Perms,
+			CorrespondingRoles: correspondingRoles,
+			Icon:               row.Icon,
+			Index:              row.Index,
+			CreatedAt:          row.CreatedAt.Time,
+		}
 	}
 
 	user, err := GetPlatformUser(ctx, userID)

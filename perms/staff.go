@@ -20,6 +20,11 @@ import (
 // costs nothing here and does not need Discord to be reachable, so a bot account
 // resolves to no permissions even while the write paths that should have stopped
 // it are unavailable.
+//
+// This stays raw pgx, not sqlc, deliberately: popplio/db imports popplio/types
+// (for column-override Go types like types.AlertType), and popplio/types
+// imports popplio/perms (teams.go) for its permission-set fields — so perms
+// importing popplio/db would be an import cycle (perms -> db -> types -> perms).
 const staffQuery = `SELECT
 	sm.perm_overrides,
 	COALESCE((
@@ -183,6 +188,17 @@ func StaffPerms(ctx context.Context, userID string) (Set, error) {
 	}
 
 	return g.Resolve(), nil
+}
+
+// InternalUserCacheDiscordRow describes internal_user_cache__discord's
+// columns actually relied on by Popplio's own raw queries against it (it's
+// otherwise owned/populated by Keel/dovewing, not scanned into a struct
+// here in practice) -- exists so dbmigrate's schema validation has
+// something to check this table's columns against.
+type InternalUserCacheDiscordRow struct {
+	ID       string `db:"id"`
+	Username string `db:"username"`
+	Bot      bool   `db:"bot"`
 }
 
 // cachedBotFlag reads what dovewing's user cache already knows about an account,

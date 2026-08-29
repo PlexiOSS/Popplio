@@ -4,6 +4,7 @@
 package add_bot
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -13,9 +14,9 @@ import (
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api"
+	"popplio/db"
 	"popplio/moderation"
 	"popplio/perms"
 	"popplio/routes/bots/assets"
@@ -39,43 +40,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func createBotsArgs(bot types.CreateBot) []any {
-	return []any{
-		bot.BotID,
-		bot.ClientID,
-		bot.Short,
-		bot.Long,
-		bot.Prefix,
-		bot.Invite,
-		bot.Library,
-		bot.ExtraLinks,
-		bot.Tags,
-		bot.NSFW,
-		bot.StaffNote,
-		bot.TeamOwner,
-		bot.GuildCount,
-		bot.VanityRef,
-	}
-}
-
-var (
-	compiledMessages = uapi.CompileValidationErrors(types.CreateBot{})
-
-	createBotsColsArr = dbutil.GetCols(types.CreateBot{})
-	createBotsCols    = strings.Join(createBotsColsArr, ", ")
-
-	// $1, $2, $3, etc, using the length of the array
-	createBotsParams string
-)
-
-func Setup() {
-	var paramsList []string = make([]string, len(createBotsColsArr))
-	for i := 0; i < len(createBotsColsArr); i++ {
-		paramsList[i] = fmt.Sprintf("$%d", i+1)
-	}
-
-	createBotsParams = strings.Join(paramsList, ",")
-}
+var compiledMessages = uapi.CompileValidationErrors(types.CreateBot{})
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -125,9 +90,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Check if the bot is already in the database
-	var count int
+	q := db.New(state.Pool)
 
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM bots WHERE bot_id = $1", payload.BotID).Scan(&count)
+	count, err := q.CountBotByID(d.Context, payload.BotID)
 
 	if err != nil {
 		return resp.Err("Error while checking if bot is already in database", err, zap.String("userID", d.Auth.ID), zap.String("botID", payload.BotID))
@@ -180,9 +145,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	vanity = strings.TrimSuffix(vanity, "-")
 
 	// Check that vanity isnt already taken
-	var vanityCount int64
-
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM vanity WHERE code = $1", vanity).Scan(&vanityCount)
+	vanityCount, err := q.CountVanityByCode(d.Context, vanity)
 
 	if err != nil {
 		return resp.Err("Error while checking if calculated vanity is already taken", err, zap.String("userID", d.Auth.ID), zap.String("botID", payload.BotID), zap.String("vanity", vanity))
@@ -212,6 +175,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
+	txq := db.New(tx)
+
 	// Setup teams
 	if d.Auth.TargetType == api.TargetTypeTeam {
 		payload.TeamOwner = d.Auth.ID
@@ -233,21 +198,32 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		// Create new team
 		var teamId = uuid.New()
 
-		var vanityRef string
-		err = tx.QueryRow(d.Context, "INSERT INTO vanity (target_id, target_type, code) VALUES ($1, 'team', $2) RETURNING itag", teamId, metadata.Name+crypto.RandString(16)).Scan(&vanityRef)
+		vanityRef, err := txq.InsertVanityReturningItag(d.Context, db.InsertVanityReturningItagParams{
+			Code:       metadata.Name + crypto.RandString(16),
+			TargetID:   teamId.String(),
+			TargetType: "team",
+		})
 
 		if err != nil {
 			return resp.BadRequest("Error while creating vanity: " + err.Error())
 		}
 
-		_, err = tx.Exec(d.Context, "INSERT INTO teams (id, name, vanity_ref, service) VALUES ($1, $2, $3, 'api/add_bot')", teamId, metadata.Name, vanityRef)
+		err = txq.InsertTeamForAddBot(d.Context, db.InsertTeamForAddBotParams{
+			ID:        teamId.String(),
+			Name:      metadata.Name,
+			VanityRef: vanityRef,
+		})
 
 		if err != nil {
 			return resp.BadRequest("Error while creating vanity: " + err.Error())
 		}
 
 		// Add the team member to the team as well
-		_, err = tx.Exec(d.Context, "INSERT INTO team_members (team_id, user_id, flags, service) VALUES ($1, $2, $3, 'api/add_bot')", teamId, d.Auth.ID, []string{string(perms.EntityOwner)})
+		err = txq.InsertTeamMemberForAddBot(d.Context, db.InsertTeamMemberForAddBotParams{
+			TeamID: pgtype.UUID{Bytes: teamId, Valid: true},
+			UserID: d.Auth.ID,
+			Flags:  []string{string(perms.EntityOwner)},
+		})
 
 		if err != nil {
 			return resp.BadRequest("Error while adding team member: " + err.Error())
@@ -257,8 +233,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Create vanity
-	var itag pgtype.UUID
-	err = tx.QueryRow(d.Context, "INSERT INTO vanity (code, target_id, target_type) VALUES ($1, $2, $3) RETURNING itag", vanity, payload.BotID, "bot").Scan(&itag)
+	itag, err := txq.InsertVanityReturningItag(d.Context, db.InsertVanityReturningItagParams{
+		Code:       vanity,
+		TargetID:   payload.BotID,
+		TargetType: "bot",
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting vanity", err, zap.String("userID", d.Auth.ID), zap.String("botID", payload.BotID), zap.String("vanity", vanity))
@@ -267,14 +246,35 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// Lastly, set the vanity ref correctly
 	payload.VanityRef = itag
 
-	// Get the arguments to pass when adding the bot
-	botArgs := createBotsArgs(payload)
+	extraLinksJSON, err := json.Marshal(payload.ExtraLinks)
 
-	if len(createBotsColsArr) != len(botArgs) {
-		return resp.ErrBody("createBotsColsArr and botArgs do not match in length", "Internal Error: The number of columns and arguments do not match", nil, zap.Any("createBotsColsArr", createBotsColsArr), zap.Any("botArgs", botArgs))
+	if err != nil {
+		return resp.Err("Error marshaling extra links", err, zap.String("userID", d.Auth.ID), zap.String("botID", payload.BotID))
 	}
 
-	_, err = tx.Exec(d.Context, "INSERT INTO bots ("+createBotsCols+") VALUES ("+createBotsParams+")", botArgs...)
+	var teamOwnerUUID pgtype.UUID
+	if payload.TeamOwner != "" {
+		if err := teamOwnerUUID.Scan(payload.TeamOwner); err != nil {
+			return resp.BadRequest("Invalid team ID: " + err.Error())
+		}
+	}
+
+	err = txq.InsertBot(d.Context, db.InsertBotParams{
+		BotID:        payload.BotID,
+		ClientID:     payload.ClientID,
+		Short:        payload.Short,
+		Long:         payload.Long,
+		Prefix:       payload.Prefix,
+		Invite:       payload.Invite,
+		Library:      payload.Library,
+		ExtraLinks:   extraLinksJSON,
+		Tags:         payload.Tags,
+		Nsfw:         payload.NSFW,
+		ApprovalNote: *payload.StaffNote,
+		TeamOwner:    teamOwnerUUID,
+		Servers:      int32(*payload.GuildCount),
+		VanityRef:    payload.VanityRef,
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting bot", err, zap.String("userID", d.Auth.ID), zap.String("botID", payload.BotID))
@@ -290,10 +290,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if result, err := moderation.CheckText(d.Context, payload.Short, payload.Long); err != nil {
 		state.Logger.Error("Failed to run moderation check on new bot", zap.Error(err), zap.String("botID", payload.BotID))
 	} else if result.Flagged {
-		if _, err := state.Pool.Exec(d.Context,
-			"UPDATE bots SET moderation_flagged = $2, moderation_categories = $3 WHERE bot_id = $1",
-			payload.BotID, result.Flagged, result.Categories,
-		); err != nil {
+		if err := q.UpdateBotModerationResult(d.Context, db.UpdateBotModerationResultParams{
+			BotID:                payload.BotID,
+			ModerationFlagged:    result.Flagged,
+			ModerationCategories: result.Categories,
+		}); err != nil {
 			state.Logger.Error("Failed to store moderation result for new bot", zap.Error(err), zap.String("botID", payload.BotID))
 		}
 

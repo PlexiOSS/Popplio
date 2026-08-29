@@ -6,18 +6,17 @@
 package get_staff_tickets
 
 import (
-	"errors"
+	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -26,11 +25,6 @@ import (
 )
 
 const perPage = 20
-
-var (
-	ticketColsArr = dbutil.GetCols(types.Ticket{})
-	ticketCols    = strings.Join(ticketColsArr, ", ")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -73,35 +67,49 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		page = 1
 	}
 
-	query := "SELECT " + ticketCols + " FROM tickets"
-	args := []any{}
-
+	openFilter := pgtype.Bool{}
 	switch r.URL.Query().Get("open") {
 	case "true":
-		query += " WHERE open = true"
+		openFilter = pgtype.Bool{Bool: true, Valid: true}
 	case "false":
-		query += " WHERE open = false"
+		openFilter = pgtype.Bool{Bool: false, Valid: true}
 	}
 
-	query += " ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-	args = append(args, perPage, (page-1)*perPage)
-
-	rows, err := state.Pool.Query(d.Context, query, args...)
+	rows, err := db.New(state.Pool).GetStaffTicketsPage(d.Context, db.GetStaffTicketsPageParams{
+		Limit:  perPage,
+		Offset: int32((page - 1) * perPage),
+		Open:   openFilter,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to fetch tickets [db fetch]", err, zap.String("userId", d.Auth.ID))
 	}
 
-	ticketList, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.Ticket])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uapi.HttpResponse{
-			Json: types.TicketList{Tickets: []types.Ticket{}},
+	ticketList := make([]types.Ticket, len(rows))
+	for i, row := range rows {
+		var messages []types.Message
+		if err := json.Unmarshal(row.Messages, &messages); err != nil {
+			return resp.Err("Failed to parse ticket messages [json]", err, zap.String("userId", d.Auth.ID))
 		}
-	}
 
-	if err != nil {
-		return resp.Err("Failed to fetch tickets [collect]", err, zap.String("userId", d.Auth.ID))
+		var ticketContext map[string]string
+		if err := json.Unmarshal(row.TicketContext, &ticketContext); err != nil {
+			return resp.Err("Failed to parse ticket context [json]", err, zap.String("userId", d.Auth.ID))
+		}
+
+		ticketList[i] = types.Ticket{
+			ID:            row.ID,
+			ChannelID:     row.ChannelID,
+			TopicID:       row.TopicID,
+			Issue:         row.Issue,
+			TicketContext: ticketContext,
+			Messages:      messages,
+			UserID:        row.UserID,
+			CloseUserID:   row.CloseUserID,
+			Open:          row.Open,
+			CreatedAt:     row.CreatedAt.Time,
+			EncKey:        row.EncKey,
+		}
 	}
 
 	for i := range ticketList {

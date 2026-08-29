@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -104,19 +104,21 @@ func handleDeleteComponent(ctx context.Context, e *events.ComponentInteractionCr
 
 	defer tx.Rollback(ctx)
 
-	var vanityRef pgtype.UUID
+	q := db.New(tx)
 
-	if err := tx.QueryRow(ctx, "SELECT vanity_ref FROM servers WHERE server_id = $1", s.GuildID.String()).Scan(&vanityRef); err != nil {
+	vanityRef, err := q.GetServerVanityRef(ctx, s.GuildID.String())
+
+	if err != nil {
 		c.Fail(fmt.Sprintf("Error while fetching server: %s", err))
 		return
 	}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM vanity WHERE itag = $1", vanityRef); err != nil {
+	if err := q.DeleteVanityByItag(ctx, vanityRef); err != nil {
 		c.Fail(fmt.Sprintf("Error while deleting vanity: %s", err))
 		return
 	}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM servers WHERE server_id = $1", s.GuildID.String()); err != nil {
+	if err := q.DeleteServerByID(ctx, s.GuildID.String()); err != nil {
 		c.Fail(fmt.Sprintf("Error while deleting server: %s", err))
 		return
 	}

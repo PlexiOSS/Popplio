@@ -5,17 +5,16 @@
 package revoke_session
 
 import (
-	"errors"
 	"net/http"
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -61,13 +60,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Missing target_id or target_type")
 	}
 
-	var count int64
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM api_sessions WHERE target_type = $1 AND target_id = $2 AND id = $3", targetType, targetId, sessionId).Scan(&count)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return resp.NotFound("No sessions found")
-	}
+	count, err := q.CountSession(d.Context, db.CountSessionParams{
+		TargetType: targetType,
+		TargetID:   targetId,
+		ID:         sessionId,
+	})
 
 	if err != nil {
 		return resp.Err("Error while getting user session", err)
@@ -77,7 +76,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.NotFound("No sessions found")
 	}
 
-	_, err = state.Pool.Exec(d.Context, "DELETE FROM api_sessions WHERE id = $1 AND target_id = $2 AND target_type = $3", sessionId, targetId, targetType)
+	err = q.DeleteSession(d.Context, db.DeleteSessionParams{
+		ID:         sessionId,
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.Err("Error while revoking user session", err)

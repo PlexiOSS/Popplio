@@ -5,25 +5,17 @@ package get_blog_list
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	blogColsArr = dbutil.GetCols(types.BlogListPost{})
-
-	blogCols = strings.Join(blogColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -35,16 +27,23 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+blogCols+" FROM blogs WHERE draft = false ORDER BY created_at DESC")
+	rows, err := db.New(state.Pool).GetBlogList(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while fetching blog posts [db query]", err)
 	}
 
-	blogPosts, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.BlogListPost])
-
-	if err != nil {
-		return resp.Err("Error while fetching blog posts [collect]", err)
+	blogPosts := make([]types.BlogListPost, len(rows))
+	for i, row := range rows {
+		blogPosts[i] = types.BlogListPost{
+			Slug:        row.Slug,
+			Title:       row.Title,
+			Description: row.Description,
+			UserID:      row.UserID,
+			CreatedAt:   row.CreatedAt.Time,
+			Draft:       row.Draft,
+			Tags:        row.Tags,
+		}
 	}
 
 	for i := range blogPosts {

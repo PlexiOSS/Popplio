@@ -8,6 +8,7 @@ package handle_stripe_webhook
 import (
 	"io"
 	"net/http"
+	"slices"
 
 	"popplio/api/resp"
 	"popplio/notifications"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/stripe/stripe-go/v75"
 	"github.com/stripe/stripe-go/v75/webhook"
-	"golang.org/x/exp/slices"
 )
 
 func Docs() *docs.Doc {

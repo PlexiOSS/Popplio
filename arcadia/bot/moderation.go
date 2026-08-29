@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"popplio/arcadia/impls"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
@@ -49,11 +50,13 @@ type modCase struct {
 // logModeration: called after the action already succeeded, a failure here
 // is logged by the caller but never undoes it.
 func writeModCase(ctx context.Context, mc modCase) error {
-	_, err := state.Pool.Exec(ctx,
-		`INSERT INTO mod_cases (guild_id, user_id, moderator_id, action, reason) VALUES ($1, $2, $3, $4, $5)`,
-		mc.GuildID.String(), mc.UserID.String(), mc.ModeratorID.String(), mc.Action, mc.Reason)
-
-	return err
+	return db.New(state.Pool).InsertModCase(ctx, db.InsertModCaseParams{
+		GuildID:     mc.GuildID.String(),
+		UserID:      mc.UserID.String(),
+		ModeratorID: mc.ModeratorID.String(),
+		Action:      mc.Action,
+		Reason:      mc.Reason,
+	})
 }
 
 // logPurge posts a mod-log entry for a purge. Separate from logModeration

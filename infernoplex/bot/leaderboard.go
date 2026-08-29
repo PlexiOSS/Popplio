@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
@@ -36,16 +37,7 @@ func cmdLeaderboard() *Command {
 				return errors.New("This command requires the GUILD_MEMBERS intent.")
 			}
 
-			rows, err := state.Pool.Query(c.Context, `
-				SELECT author,
-				(SUM(CASE WHEN upvote THEN 1 ELSE 0 END) - SUM(CASE WHEN NOT upvote THEN 1 ELSE 0 END)) AS score
-				FROM entity_votes
-				WHERE target_id = $1
-				AND target_type = 'server'
-				AND void = false
-				GROUP BY author
-				ORDER BY score DESC
-			`, c.GuildID.String())
+			rows, err := db.New(state.Pool).GetServerVoteLeaderboard(c.Context, c.GuildID.String())
 
 			if err != nil {
 				return err
@@ -58,25 +50,12 @@ func cmdLeaderboard() *Command {
 
 			var leaderboard []row
 
-			for rows.Next() {
-				var r row
-
-				if err := rows.Scan(&r.author, &r.score); err != nil {
-					rows.Close()
-					return err
-				}
-
-				leaderboard = append(leaderboard, r)
+			for _, r := range rows {
+				leaderboard = append(leaderboard, row{author: r.Author, score: r.Score})
 
 				if int64(len(leaderboard)) >= limit {
 					break
 				}
-			}
-
-			rows.Close()
-
-			if err := rows.Err(); err != nil {
-				return err
 			}
 
 			if len(leaderboard) == 0 {

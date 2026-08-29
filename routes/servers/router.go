@@ -132,7 +132,6 @@ func (b Router) Routes(r *chi.Mux) {
 				Type: api.TargetTypeTeam,
 			},
 		},
-		Setup: add_server.Setup,
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil,
 		},
@@ -160,7 +159,6 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.PATCH,
 		Docs:    patch_server_settings.Docs,
 		Handler: patch_server_settings.Route,
-		Setup:   patch_server_settings.Setup,
 		Auth: []uapi.AuthType{
 			{
 				Type: api.TargetTypeUser,

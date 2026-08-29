@@ -6,23 +6,15 @@ package get_random_servers
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
-
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
-	indexServerCols    = strings.Join(indexServerColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -36,16 +28,35 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	rows, err := state.Pool.Query(d.Context, "SELECT "+indexServerCols+" FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public' ORDER BY RANDOM() LIMIT 3")
+	rows, err := db.New(state.Pool).GetRandomIndexServers(d.Context)
 
 	if err != nil {
 		return resp.Err("Failed to query servers [db query]", err)
 	}
 
-	servers, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexServer])
-
-	if err != nil {
-		return resp.Err("Failed to query servers [db collect]", err)
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
 	}
 
 	// Resolve all servers concurrently, since each server's resolution is independent

@@ -1,11 +1,11 @@
 package hooks
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/webhooks/core/drivers"
@@ -16,11 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	teamColsArr = dbutil.GetCols(types.Team{})
-	teamCols    = strings.Join(teamColsArr, ", ")
-)
-
 type TeamDriver struct{}
 
 func (td TeamDriver) TargetType() string {
@@ -28,7 +23,9 @@ func (td TeamDriver) TargetType() string {
 }
 
 func (td TeamDriver) Construct(userId, id string) (*events.Target, *sender.WebhookEntity, error) {
-	row, err := state.Pool.Query(state.Context, "SELECT "+teamCols+" FROM teams WHERE id = $1", id)
+	q := db.New(state.Pool)
+
+	row, err := q.GetTeamByID(state.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil, errors.New("team not found")
@@ -39,20 +36,32 @@ func (td TeamDriver) Construct(userId, id string) (*events.Target, *sender.Webho
 		return nil, nil, err
 	}
 
-	team, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.Team])
-
-	if err != nil {
-		state.Logger.Error("Failed to fetch team data for this teambook", zap.Error(err), zap.String("teamID", id), zap.String("userID", userId))
+	var extraLinks []types.Link
+	if err := json.Unmarshal(row.ExtraLinks, &extraLinks); err != nil {
+		state.Logger.Error("Failed to parse team extra_links for this hook", zap.Error(err), zap.String("teamID", id), zap.String("userID", userId))
 		return nil, nil, err
+	}
+
+	team := types.Team{
+		ID:               row.ID,
+		Name:             row.Name,
+		Short:            row.Short,
+		Tags:             row.Tags,
+		VoteBanned:       row.VoteBanned,
+		ApproximateVotes: int(row.ApproximateVotes),
+		ExtraLinks:       extraLinks,
+		NSFW:             row.Nsfw,
+		VanityRef:        row.VanityRef,
+		Service:          row.Service,
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
 	}
 
 	team.Entities = &types.TeamEntities{
 		Targets: []string{}, // We don't provide any entities right now, may change
 	}
 
-	var code string
-
-	err = state.Pool.QueryRow(state.Context, "SELECT code FROM vanity WHERE itag = $1", team.VanityRef).Scan(&code)
+	code, err := q.GetVanityCodeByItag(state.Context, team.VanityRef)
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("error while getting bot vanity code [db fetch]: %w", err)

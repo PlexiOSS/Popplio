@@ -9,10 +9,12 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -71,15 +73,24 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Status(http.StatusNotImplemented, "Creating webhooks for this target type is not yet supported")
 	}
 
+	var webhookUUID pgtype.UUID
+	if err := webhookUUID.Scan(webhookId); err != nil {
+		return resp.NotFound("Webhook not found")
+	}
+
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
 		return resp.Err("Error while starting transaction", err, zap.String("userID", d.Auth.ID))
 	}
 
-	var count int64
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM webhooks WHERE target_id = $1 AND target_type = $2 AND id = $3", targetId, targetType, webhookId).Scan(&count)
+	count, err := q.CountWebhookByID(d.Context, db.CountWebhookByIDParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		ID:         webhookUUID,
+	})
 
 	if err != nil {
 		return resp.Err("Error while checking webhook", err, zap.String("userID", d.Auth.ID))
@@ -89,7 +100,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.NotFound("Webhook not found")
 	}
 
-	_, err = tx.Exec(d.Context, "DELETE FROM webhooks WHERE target_id = $1 AND target_type = $2 AND id = $3", targetId, targetType, webhookId)
+	err = q.DeleteWebhook(d.Context, db.DeleteWebhookParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+		ID:         webhookUUID,
+	})
 
 	if err != nil {
 		return resp.Err("Error while inserting webhook", err, zap.String("userID", d.Auth.ID))

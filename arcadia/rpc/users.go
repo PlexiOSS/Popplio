@@ -6,6 +6,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -22,12 +23,10 @@ func banUserSet(ctx context.Context, m *types.RPCTargetReason, h Handle, banned 
 		return Success{}, err
 	}
 
-	query := "UPDATE users SET banned = false WHERE user_id = $1"
-	if banned {
-		query = "UPDATE users SET banned = true WHERE user_id = $1"
-	}
-
-	if _, err := state.Pool.Exec(ctx, query, m.TargetID); err != nil {
+	if _, err := db.New(state.Pool).UpdateUserBanned(ctx, db.UpdateUserBannedParams{
+		UserID: m.TargetID,
+		Banned: banned,
+	}); err != nil {
 		return Success{}, err
 	}
 

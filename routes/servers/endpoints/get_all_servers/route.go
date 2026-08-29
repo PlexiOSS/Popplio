@@ -2,17 +2,15 @@ package get_all_servers
 
 import (
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/pagination"
 	"popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -20,11 +18,6 @@ import (
 )
 
 const perPage = 12
-
-var (
-	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
-	indexServerCols    = strings.Join(indexServerColsArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -51,8 +44,6 @@ func Docs() *docs.Doc {
 	}
 }
 
-const trendingWindow = "7 days"
-
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	pageNum, err := pagination.Parse(r)
 
@@ -64,56 +55,97 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	offset := (pageNum - 1) * perPage
 	trending := r.URL.Query().Get("sort") == "trending"
 
-	var rows pgx.Rows
+	q := db.New(state.Pool)
+
+	var servers []types.IndexServer
 
 	if trending {
-		rows, err = state.Pool.Query(d.Context, `
-			WITH scored AS (
-				SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS score
-				FROM entity_votes
-				WHERE target_type = 'server' AND void = false AND created_at > now() - interval '`+trendingWindow+`'
-				GROUP BY target_id
-			)
-			SELECT `+indexServerCols+` FROM servers
-			WHERE (type = 'approved' OR type = 'certified') AND state = 'public' AND server_id IN (SELECT target_id FROM scored)
-			ORDER BY (SELECT score FROM scored WHERE scored.target_id = servers.server_id) DESC
-			LIMIT $1 OFFSET $2`, limit, offset)
+		rows, err := q.GetTrendingIndexServers(d.Context, db.GetTrendingIndexServersParams{
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
+
+		if err != nil {
+			return resp.Err("Failed to query servers [db query]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
+		}
+
+		servers = make([]types.IndexServer, len(rows))
+		for i, row := range rows {
+			servers[i] = types.IndexServer{
+				ServerID:         row.ServerID,
+				Name:             row.Name,
+				Avatar:           row.Avatar,
+				TotalMembers:     int(row.TotalMembers),
+				OnlineMembers:    int(row.OnlineMembers),
+				Short:            row.Short,
+				Type:             row.Type,
+				State:            row.State,
+				VanityRef:        row.VanityRef,
+				ApproximateVotes: int(row.ApproximateVotes),
+				InviteClicks:     int(row.InviteClicks),
+				Clicks:           int(row.Clicks),
+				NSFW:             row.Nsfw,
+				Tags:             row.Tags,
+				Premium:          row.Premium,
+				SupporterBadge:   row.SupporterBadge,
+				BoostedUntil:     row.BoostedUntil,
+				FeaturedUntil:    row.FeaturedUntil,
+				SpotlightedUntil: row.SpotlightedUntil,
+			}
+		}
 	} else {
+		rows, err := q.GetIndexServersPaged(d.Context, db.GetIndexServersPagedParams{
+			Limit:  int32(limit),
+			Offset: int32(offset),
+		})
 
-		rows, err = state.Pool.Query(d.Context, "SELECT "+indexServerCols+" FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public' ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC LIMIT $1 OFFSET $2", limit, offset)
-	}
+		if err != nil {
+			return resp.Err("Failed to query servers [db query]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
+		}
 
-	if err != nil {
-		return resp.Err("Failed to query servers [db query]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
-	}
-
-	servers, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexServer])
-
-	if err != nil {
-		return resp.Err("Failed to query servers [collect]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
+		servers = make([]types.IndexServer, len(rows))
+		for i, row := range rows {
+			servers[i] = types.IndexServer{
+				ServerID:         row.ServerID,
+				Name:             row.Name,
+				Avatar:           row.Avatar,
+				TotalMembers:     int(row.TotalMembers),
+				OnlineMembers:    int(row.OnlineMembers),
+				Short:            row.Short,
+				Type:             row.Type,
+				State:            row.State,
+				VanityRef:        row.VanityRef,
+				ApproximateVotes: int(row.ApproximateVotes),
+				InviteClicks:     int(row.InviteClicks),
+				Clicks:           int(row.Clicks),
+				NSFW:             row.Nsfw,
+				Tags:             row.Tags,
+				Premium:          row.Premium,
+				SupporterBadge:   row.SupporterBadge,
+				BoostedUntil:     row.BoostedUntil,
+				FeaturedUntil:    row.FeaturedUntil,
+				SpotlightedUntil: row.SpotlightedUntil,
+			}
+		}
 	}
 
 	if err := assets.ResolveIndexServers(d.Context, servers); err != nil {
 		return resp.ErrBody("Error resolving indexserver", "An error occurred while resolving index server.", err)
 	}
 
-	var count uint64
+	var countRaw int64
 
 	if trending {
-		err = state.Pool.QueryRow(d.Context, `
-			SELECT COUNT(*) FROM servers
-			WHERE (type = 'approved' OR type = 'certified') AND state = 'public' AND server_id IN (
-				SELECT target_id FROM entity_votes
-				WHERE target_type = 'server' AND void = false AND created_at > now() - interval '`+trendingWindow+`'
-				GROUP BY target_id
-			)`).Scan(&count)
+		countRaw, err = q.CountTrendingServers(d.Context)
 	} else {
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers").Scan(&count)
+		countRaw, err = q.CountServers(d.Context)
 	}
 
 	if err != nil {
 		return resp.Err("Failed to query servers [db count]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
 	}
+
+	count := uint64(countRaw)
 
 	data := types.PagedResult[[]types.IndexServer]{
 		Count:   count,

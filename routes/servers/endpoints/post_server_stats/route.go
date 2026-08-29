@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -23,19 +24,6 @@ func Docs() *docs.Doc {
 		Description: "This endpoint posts the stats of a server. Posting at all marks the server as self-managing its stats, which stops the periodic Infernoplex sync from overwriting total_members/online_members for it.",
 		Req:         types.ServerStats{},
 		Resp:        types.ApiError{},
-	}
-}
-
-type statUpdate struct {
-	column  string
-	value   any
-	present bool
-}
-
-func statUpdates(payload types.ServerStats) []statUpdate {
-	return []statUpdate{
-		{"total_members", payload.TotalMembers, payload.TotalMembers > 0},
-		{"online_members", payload.OnlineMembers, payload.OnlineMembers > 0},
 	}
 }
 
@@ -63,21 +51,33 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	_, err = tx.Exec(d.Context, "UPDATE servers SET last_stats_post = NOW(), stats_self_managed = true WHERE server_id = $1", d.Auth.ID)
+	q := db.New(tx)
+
+	err = q.UpdateServerStatsMeta(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Error while updating last_stats_post", err, zap.String("serverID", d.Auth.ID))
 	}
 
-	for _, update := range statUpdates(payload) {
-		if !update.present {
-			continue
-		}
-
-		_, err := tx.Exec(d.Context, "UPDATE servers SET "+update.column+" = $1 WHERE server_id = $2", update.value, d.Auth.ID)
+	if payload.TotalMembers > 0 {
+		err := q.UpdateServerTotalMembers(d.Context, db.UpdateServerTotalMembersParams{
+			TotalMembers: int32(payload.TotalMembers),
+			ServerID:     d.Auth.ID,
+		})
 
 		if err != nil {
-			return resp.Err("Error while updating "+update.column, err, zap.String("serverID", d.Auth.ID))
+			return resp.Err("Error while updating total_members", err, zap.String("serverID", d.Auth.ID))
+		}
+	}
+
+	if payload.OnlineMembers > 0 {
+		err := q.UpdateServerOnlineMembers(d.Context, db.UpdateServerOnlineMembersParams{
+			OnlineMembers: int32(payload.OnlineMembers),
+			ServerID:      d.Auth.ID,
+		})
+
+		if err != nil {
+			return resp.Err("Error while updating online_members", err, zap.String("serverID", d.Auth.ID))
 		}
 	}
 

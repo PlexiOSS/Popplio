@@ -25,7 +25,7 @@ For example: `feat/team-stats`, `fix/infernoplex-invite-ssrf`.
    something's wrong with it.
 3. Open the PR against `develop`.
 4. Fill in what changed and why. If it touches the database, say so and
-   point at the `exp/*.sql` script if one's needed (see below).
+   include the migration if one's needed (see below).
 
 `develop` is a protected branch: PRs need required status checks passing
 and a review before they can merge. Force-pushing or bypassing the checks
@@ -50,12 +50,12 @@ fails, fix the underlying issue don't route around it.
 
 ## Database changes
 
-There's no migration framework. Schema changes are one-off SQL scripts
-under `exp/`, applied manually against the live database
-(`psql "$DATABASE_URL" -f exp/whatever.sql`) they are **not** run
-automatically by CI or on startup. If your PR needs a schema change,
-include the script and say so explicitly in the PR description, since
-whoever merges it needs to run it separately.
+Schema changes are versioned [goose](https://github.com/pressly/goose)
+migrations under `db/migrations/`, applied with `go run ./cmd/migrate up`.
+See `db/migrations/README.md` for the workflow. Migrations are **not** run
+automatically by CI or on startup they're a deliberate, manual step, so if
+your PR needs one, say so explicitly in the PR description: whoever merges
+it needs to run `up` separately before restarting the service.
 
 ## Code style
 

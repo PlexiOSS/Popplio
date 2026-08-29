@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - UNRELEASED
+
+### Added
+
+- A real, versioned schema migration tool: `cmd/migrate` (`go run
+  ./cmd/migrate up|status|create <name>`), backed by
+  [goose](https://github.com/pressly/goose). It tracks applied migrations
+  in a `goose_db_version` table and connects using the same `config.yaml`
+  DSN the rest of Popplio reads, instead of a separate hardcoded one. New
+  migrations live under `db/migrations/` as timestamp-prefixed
+  `-- +goose Up`/`Down` `.sql` files; applying them is a deliberate manual
+  step (`make migrate` or the command above), never wired into a deploy.
+  See `db/migrations/README.md`.
+
+### Changed
+
+- Every raw `pgx` SQL call in the module (`state.Pool.Query`/`.Exec`,
+  `pgx.CollectRows`/`RowToStructByName`) has been converted to type-safe
+  [sqlc](https://sqlc.dev)-generated code (`db/queries/*.sql` compiled to
+  `db/*.sql.go`), across `routes/`, `arcadia/` (`rpc`, `impls`, `tasks`,
+  `bot`, `panel`), `notifications/`, `webhooks/`, `teams/`, `apps/`,
+  `captcha/`, `seo/`, `moderation/`, `validators/`, and `infernoplex`. A
+  handful of call sites can't be modeled by sqlc's static query analysis
+  and stay raw pgx on purpose, each documented in place: `search_list`'s
+  template-built search SQL, two `pg_catalog`/`information_schema`
+  dispatchers (`create_data_task`'s table/column and foreign-key
+  discovery), one import-cycle case in `perms/staff.go`, one
+  runtime-discovered-table cleaner (`arcadia/tasks/cleaners.go`), and one
+  startup DDL statement (`arcadia/panel/server.go`'s
+  `CREATE TABLE IF NOT EXISTS`).
+- `exp/`'s one-off SQL scripts have been retired. Every one still relevant
+  was ported into a proper goose migration under `db/migrations/` first;
+  the folder itself has been removed. See `db/migrations/README.md` for
+  where to find the originals if you need the history.
+- Housekeeping pass over the sqlc migration's output: six pairs of
+  `db/queries/*.sql` entries turned out to be byte-identical SQL under two
+  different names (e.g. `CheckBadgeExists`/`CountBadgeByID`,
+  `ActivateBotPremium`/`ApplyBotPremiumDays`) -- each pair collapsed into
+  one, callers repointed. Dropped a dead unexported method
+  (`perms.Set.contains`, fully superseded by `Has`) and the three leftover
+  `golang.org/x/exp/slices` imports (stdlib `slices` has covered this
+  since Go 1.21; everywhere else in the module already used it), which let
+  `go mod tidy` drop the now-unused direct dependency. `data/seed.iblseed`
+  -- a generated-and-forgotten artifact nothing in this repo reads -- is
+  also gone and now gitignored.
+- `assets.CheckBot` (bot add/lookup) now tries Discord's own public
+  application RPC endpoint first and only falls back to JAPI.rest as a
+  last resort, instead of the other way around -- JAPI going down or
+  rate-limiting us used to take bot submission/lookup down with it, for
+  data Discord already hands out for free. The JAPI request also now
+  sends a descriptive `User-Agent` (confirmed with JAPI's own owner that
+  requests work fine without an API key as long as one is set; the lack
+  of one was likely why our traffic looked anonymous/abusive to it).
+  `DiscordBotMeta.fallback` now means the reverse of what it used to:
+  `true` if JAPI was needed, not RPC. One real cost: guild count,
+  suggested description/tags, and flags only come from JAPI, so a bot
+  added via the RPC-only happy path won't have them prefilled at
+  submission time -- guild count corrects itself on the bot's first
+  `POST /bots/{id}/stats`, and description/tags were always just
+  submitter-editable suggestions, not stored as-is.
+
+### Fixed
+
+- Several Arcadia panel write paths (shop items, shop item benefits, shop
+  coupons, badges, staff templates, staff disciplinary types, staff
+  positions, blog entries, changelog entries) could silently write SQL
+  `NULL` into a `NOT NULL` array column whenever a client omitted or
+  nulled an array field entirely -- e.g. creating a changelog entry with no
+  `"fixed"` key -- because the underlying `pgx` driver encodes a nil Go
+  slice as `NULL`, not `{}`, regardless of whether the call went through
+  raw SQL or sqlc. Every affected insert/update path now defaults a nil
+  slice to empty before it reaches the query.
+- `drivers.Send` (`webhooks/core/drivers/core.go`) pushed a "Webhook Send
+  Failed" alert to both the in-site bell and push notifications for
+  *any* non-nil error from `sender.Send`, including `ErrNoWebhooks`. Most
+  bots simply don't have a rewards webhook configured, so this fired on
+  practically every vote/review/team-edit event for them, misreporting a
+  routine "nothing to deliver to" as a failure. Now excluded via
+  `errors.Is(err, sender.ErrNoWebhooks)`, matching how `PullPending`
+  already treated the same case.
+
 ## [1.6.0] - 2026-08-27
 
 ### Added

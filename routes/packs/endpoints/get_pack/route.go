@@ -1,15 +1,12 @@
-// Package get_pack implements GET /packs/{id} — "Get Pack".
-//
-// Gets a pack on the list based on the URL.
 package get_pack
 
 import (
+	"errors"
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/routes/packs/assets"
 	"popplio/state"
 	"popplio/types"
@@ -21,11 +18,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-)
-
-var (
-	packColArr = dbutil.GetCols(types.BotPack{})
-	packCols   = strings.Join(packColArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -52,20 +44,27 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.DefaultResponse(http.StatusBadRequest)
 	}
 
-	row, err := state.Pool.Query(d.Context, "SELECT "+packCols+" FROM packs WHERE url = $1", id)
+	row, err := db.New(state.Pool).GetPackByURL(d.Context, id)
 
-	if err != nil {
-		return resp.Err("Error querying packs table [db fetch]", err, zap.String("url", id))
-	}
-
-	pack, err := pgx.CollectOneRow(row, pgx.RowToStructByName[types.BotPack])
-
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	if err != nil {
 		return resp.Err("Error querying packs table [collect]", err, zap.String("url", id))
+	}
+
+	pack := types.BotPack{
+		Owner:      row.Owner,
+		Name:       row.Name,
+		Short:      row.Short,
+		Tags:       row.Tags,
+		URL:        row.Url,
+		CreatedAt:  row.CreatedAt.Time,
+		PackType:   row.PackType,
+		Bots:       row.Bots,
+		Servers:    row.Servers,
+		VoteBanned: row.VoteBanned,
 	}
 
 	err = assets.ResolveBotPack(d.Context, &pack)

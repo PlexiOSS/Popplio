@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 
+	"popplio/db"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -32,7 +33,10 @@ func (m *mutLogger) add(p []byte) error {
 	}
 
 	// For us, this is just an array append of the json
-	_, err = state.Pool.Exec(state.Context, "UPDATE tasks SET statuses = array_append(statuses, $1) WHERE task_id = $2", data, m.taskId)
+	err = db.New(state.Pool).AppendTaskStatus(state.Context, db.AppendTaskStatusParams{
+		ArrayAppend: data,
+		TaskID:      m.taskId,
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to update statuses: %w", err)

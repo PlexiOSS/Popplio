@@ -2,8 +2,8 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -16,16 +16,14 @@ import (
 
 // staffGeneralLog writes the claim/unclaim audit row.
 func staffGeneralLog(ctx context.Context, userID, action, targetID string, claimedByPrev *string) error {
-	data, err := json.Marshal(map[string]any{
+	data := map[string]any{
 		"target_id":       targetID,
 		"claimed_by_prev": claimedByPrev,
-	})
-
-	if err != nil {
-		return err
 	}
 
-	_, err = state.Pool.Exec(ctx, "INSERT INTO staff_general_logs (user_id, action, data) VALUES ($1, $2, $3)", userID, action, data)
-
-	return err
+	return db.New(state.Pool).InsertStaffGeneralLog(ctx, db.InsertStaffGeneralLogParams{
+		UserID: userID,
+		Action: action,
+		Data:   data,
+	})
 }

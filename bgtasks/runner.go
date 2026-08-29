@@ -1,7 +1,3 @@
-// Package bgtasks holds Popplio's own periodic background jobs — distinct
-// from arcadia/tasks, which are the staff bot's jobs and only run when
-// Arcadia is configured. Jobs here run regardless, since they're core
-// platform features rather than staff tooling.
 package bgtasks
 
 import (
@@ -15,7 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Task is one periodic job.
 type Task struct {
 	Name        string
 	Description string
@@ -24,7 +19,6 @@ type Task struct {
 	Run         func(ctx context.Context) error
 }
 
-// All returns every task, with their intervals.
 func All() []Task {
 	return []Task{
 		{
@@ -44,8 +38,6 @@ func All() []Task {
 	}
 }
 
-// Start launches every enabled task and returns a WaitGroup that completes
-// once they have all stopped. Cancelling ctx stops them.
 func Start(ctx context.Context) *sync.WaitGroup {
 	var wg sync.WaitGroup
 

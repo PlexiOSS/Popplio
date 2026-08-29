@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -7,17 +9,10 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5"
 )
-
-// Staff members: the people, their direct permission grants and their sync
-// settings.
-//
-// Which positions someone holds is not editable here — that follows their
-// Discord roles through the resync task. Only what is layered on top is.
 
 func (s *Server) updateStaffMembers(ctx context.Context, q *types.QUpdateStaffMembers) (response, error) {
 	authData, err := checkAuth(ctx, q.LoginToken)
@@ -28,15 +23,7 @@ func (s *Server) updateStaffMembers(ctx context.Context, q *types.QUpdateStaffMe
 
 	switch {
 	case q.Action.ListMembers != nil:
-		// No permission check. This is heavy: per member it hits staff_positions,
-		// staff_disciplinary, staff_disciplinary_types and dovewing.
-		rows, err := state.Pool.Query(ctx, "SELECT user_id FROM staff_members")
-
-		if err != nil {
-			return response{}, newError(fmt.Errorf("Error while getting staff members %s", err))
-		}
-
-		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		ids, err := db.New(state.Pool).ListStaffMemberIDs(ctx)
 
 		if err != nil {
 			return response{}, newError(fmt.Errorf("Error while getting staff members %s", err))
@@ -85,9 +72,6 @@ func (s *Server) editMember(ctx context.Context, callerID string, action *types.
 		return writeText(http.StatusForbidden, "Target has a lower index than the member"), nil
 	}
 
-	// Bots hold no staff permissions, so there is nothing here to edit. Writing
-	// the overrides anyway would leave a row that reads as a grant and resolves
-	// to nothing.
 	if target.User.Bot {
 		return writeText(http.StatusForbidden, perms.ErrBotAccount.Error()), nil
 	}
@@ -96,7 +80,6 @@ func (s *Server) editMember(ctx context.Context, callerID string, action *types.
 		return writeText(http.StatusBadRequest, err.Error()), nil
 	}
 
-	// The target's roles are kept; only their extra permissions change.
 	newResolved := perms.StaffGrants{
 		Roles:  target.Grants.Roles,
 		Extras: perms.ParseStrings(action.PermOverrides),
@@ -114,22 +97,18 @@ func (s *Server) editMember(ctx context.Context, callerID string, action *types.
 
 	defer tx.Rollback(ctx)
 
-	var (
-		currOverrides   []string
-		currNoAutosync  bool
-		currUnaccounted bool
-	)
+	queries := db.New(tx)
 
-	err = tx.QueryRow(ctx, "SELECT perm_overrides, no_autosync, unaccounted FROM staff_members WHERE user_id = $1 FOR UPDATE", action.UserID).
-		Scan(&currOverrides, &currNoAutosync, &currUnaccounted)
-
-	if err != nil {
+	if _, err := queries.GetStaffMemberForEdit(ctx, action.UserID); err != nil {
 		return response{}, newError(fmt.Errorf("Error while getting member %s", err))
 	}
 
-	_, err = tx.Exec(ctx,
-		"UPDATE staff_members SET perm_overrides = $1, no_autosync = $2, unaccounted = $3 WHERE user_id = $4",
-		action.PermOverrides, action.NoAutosync, action.Unaccounted, action.UserID)
+	err = queries.UpdateStaffMemberEdit(ctx, db.UpdateStaffMemberEditParams{
+		PermOverrides: action.PermOverrides,
+		NoAutosync:    action.NoAutosync,
+		Unaccounted:   action.Unaccounted,
+		UserID:        action.UserID,
+	})
 
 	if err != nil {
 		return response{}, newError(fmt.Errorf("Error while updating member %s", err))

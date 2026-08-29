@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -42,29 +43,16 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	rows, err := state.Pool.Query(d.Context, "SELECT category, enabled FROM user_notification_prefs WHERE user_id = $1", id)
+	rows, err := db.New(state.Pool).GetUserNotificationPrefs(d.Context, id)
 
 	if err != nil {
 		return resp.Err("Failed to get notification preferences", err, zap.String("user_id", id))
 	}
 
-	defer rows.Close()
-
 	stored := map[types.AlertCategory]bool{}
 
-	for rows.Next() {
-		var category types.AlertCategory
-		var enabled bool
-
-		if err := rows.Scan(&category, &enabled); err != nil {
-			return resp.Err("Failed to get notification preferences", err, zap.String("user_id", id))
-		}
-
-		stored[category] = enabled
-	}
-
-	if err := rows.Err(); err != nil {
-		return resp.Err("Failed to get notification preferences", err, zap.String("user_id", id))
+	for _, row := range rows {
+		stored[row.Category] = row.Enabled
 	}
 
 	prefs := make(types.NotificationPrefs, len(types.AllAlertCategories))

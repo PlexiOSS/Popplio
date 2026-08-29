@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/jackc/pgx/v5"
@@ -21,8 +22,7 @@ type session struct {
 }
 
 func clearExpiredSessions(ctx context.Context) error {
-	_, err := state.Pool.Exec(ctx, "DELETE FROM api_sessions WHERE expiry < NOW()")
-	return err
+	return db.New(state.Pool).DeleteExpiredSessions(ctx)
 }
 
 func sessionFromToken(ctx context.Context, token string) (*session, error) {
@@ -30,12 +30,7 @@ func sessionFromToken(ctx context.Context, token string) (*session, error) {
 		return nil, err
 	}
 
-	var s session
-
-	err := state.Pool.QueryRow(ctx,
-		"SELECT id, name, created_at, type, target_type, target_id, perm_limits, expiry FROM api_sessions WHERE token = $1",
-		token,
-	).Scan(&s.ID, &s.Name, &s.CreatedAt, &s.Type, &s.TargetType, &s.TargetID, &s.PermLimits, &s.Expiry)
+	row, err := db.New(state.Pool).GetFullSessionByToken(ctx, token)
 
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -43,6 +38,20 @@ func sessionFromToken(ctx context.Context, token string) (*session, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	s := session{
+		ID:         row.ID,
+		CreatedAt:  row.CreatedAt.Time,
+		Type:       row.Type,
+		TargetType: row.TargetType,
+		TargetID:   row.TargetID,
+		PermLimits: row.PermLimits,
+		Expiry:     row.Expiry.Time,
+	}
+
+	if row.Name.Valid {
+		s.Name = &row.Name.String
 	}
 
 	return &s, nil

@@ -1,19 +1,16 @@
-// Package delete_team_member implements DELETE /teams/{tid}/members/{mid} —
-// "Delete Team Member".
-//
-// Deletes a member from the team. Users can always delete themselves.
-// Returns a 204 on success
 package delete_team_member
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -58,7 +55,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if d.Auth.ID != userId {
-		// Ensure manager has perms to delete members
 		managerPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", teamId)
 
 		if err != nil {
@@ -66,10 +62,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest("Error getting user perms: " + err.Error())
 		}
 
-		// Ensure manager has permissions to remove all user perms
 		if err := perms.CheckPatch(managerPerms, userPerms, perms.Entity.NewSet()); err != nil {
 			return resp.Forbidden("You do not have permission to delete this member:" + err.Error())
 		}
+	}
+
+	var teamUUID pgtype.UUID
+	if err := teamUUID.Scan(teamId); err != nil {
+		return resp.BadRequest("Invalid team ID")
 	}
 
 	tx, err := state.Pool.Begin(d.Context)
@@ -80,11 +80,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Ensure that if perm is owner, then there is another owner
-	if userPerms.Has(perms.EntityOwner) {
-		var ownerCount int
+	q := db.New(tx)
 
-		err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND flags && $2", teamId, []string{perms.EntityOwner.String()}).Scan(&ownerCount)
+	if userPerms.Has(perms.EntityOwner) {
+		ownerCount, err := q.CountTeamOwnersWithFlag(d.Context, db.CountTeamOwnersWithFlagParams{
+			TeamID: teamUUID,
+			Flags:  []string{perms.EntityOwner.String()},
+		})
 
 		if err != nil {
 			return resp.Err("Error getting owner count", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
@@ -95,7 +97,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	_, err = tx.Exec(d.Context, "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2", teamId, userId)
+	err = q.DeleteTeamMember(d.Context, db.DeleteTeamMemberParams{
+		TeamID: teamUUID,
+		UserID: userId,
+	})
 
 	if err != nil {
 		return resp.Err("Error deleting member", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))

@@ -1,16 +1,13 @@
-// Package create_ticket_message implements POST /tickets/{id}/messages —
-// "Create Ticket Message".
-//
-// Replies to a ticket. Requires being the ticket's author or staff with
-// the 'manage_tickets' permission. Returns 204 on success.
 package create_ticket_message
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
@@ -65,10 +62,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errs)
 	}
 
-	var userID string
-	var open bool
+	q := db.New(state.Pool)
 
-	err := state.Pool.QueryRow(d.Context, "SELECT user_id, open FROM tickets WHERE id = $1", ticketID).Scan(&userID, &open)
+	ownerRow, err := q.GetTicketOwnerAndOpen(d.Context, ticketID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
@@ -77,6 +73,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if err != nil {
 		return resp.Err("Error getting ticket", err, zap.String("ticket_id", ticketID))
 	}
+
+	userID, open := ownerRow.UserID, ownerRow.Open
 
 	if userID != d.Auth.ID {
 		sp, err := perms.StaffPerms(d.Context, d.Auth.ID)
@@ -100,7 +98,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		AuthorID: d.Auth.ID,
 	}
 
-	_, err = state.Pool.Exec(d.Context, "UPDATE tickets SET messages = messages || $1 WHERE id = $2", []types.Message{msg}, ticketID)
+	msgJSON, err := json.Marshal([]types.Message{msg})
+
+	if err != nil {
+		return resp.Err("Failed to marshal ticket message", err, zap.String("ticket_id", ticketID))
+	}
+
+	err = q.AppendTicketMessage(d.Context, db.AppendTicketMessageParams{
+		Messages: msgJSON,
+		ID:       ticketID,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to add ticket message", err, zap.String("ticket_id", ticketID))

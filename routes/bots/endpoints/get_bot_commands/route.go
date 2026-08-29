@@ -6,24 +6,16 @@ package get_bot_commands
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	botCommandColsArr = dbutil.GetCols(types.BotCommand{})
-	botCommandCols    = strings.Join(botCommandColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -46,18 +38,24 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	botId := chi.URLParam(r, "id")
 
-	rows, err := state.Pool.Query(d.Context,
-		"SELECT "+botCommandCols+" FROM bot_commands WHERE bot_id = $1 ORDER BY position ASC, created_at ASC",
-		botId)
+	rows, err := db.New(state.Pool).GetBotCommands(d.Context, botId)
 
 	if err != nil {
 		return resp.Err("Failed to fetch bot commands [db fetch]", err)
 	}
 
-	commands, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.BotCommand])
-
-	if err != nil {
-		return resp.Err("Failed to fetch bot commands [collect]", err)
+	commands := make([]types.BotCommand, len(rows))
+	for i, row := range rows {
+		commands[i] = types.BotCommand{
+			ID:          row.ID,
+			Name:        row.Name,
+			Description: row.Description,
+			Usage:       row.Usage,
+			Category:    row.Category,
+			Position:    int(row.Position),
+			CreatedAt:   row.CreatedAt.Time,
+			UpdatedAt:   row.UpdatedAt.Time,
+		}
 	}
 
 	return uapi.HttpResponse{

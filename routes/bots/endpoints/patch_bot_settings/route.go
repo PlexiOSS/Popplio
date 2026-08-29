@@ -6,14 +6,13 @@
 package patch_bot_settings
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"reflect"
-	"strconv"
-	"strings"
 
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -29,36 +28,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func updateBotsArgs(bot types.BotSettingsUpdate) []any {
-	return []any{
-		bot.Short,
-		bot.Long,
-		bot.Prefix,
-		bot.Invite,
-		bot.Library,
-		bot.ExtraLinks,
-		bot.Tags,
-		bot.NSFW,
-		bot.CaptchaOptOut,
-	}
-}
-
-var (
-	compiledMessages = uapi.CompileValidationErrors(types.BotSettingsUpdate{})
-	updateSql        = []string{}
-	updateSqlStr     string
-)
-
-func Setup() {
-	// Creates the updateSql
-	for i, field := range reflect.VisibleFields(reflect.TypeOf(types.BotSettingsUpdate{})) {
-		if field.Tag.Get("db") != "" {
-			updateSql = append(updateSql, field.Tag.Get("db")+"=$"+strconv.Itoa(i+1))
-		}
-	}
-
-	updateSqlStr = strings.Join(updateSql, ",")
-}
+var compiledMessages = uapi.CompileValidationErrors(types.BotSettingsUpdate{})
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -111,19 +81,25 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Failed to get bot user: ", "Failed to get bot user.", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 	}
 
-	// Update the bot
-	// Get the arguments to pass when adding the bot
-	botArgs := updateBotsArgs(payload)
+	extraLinksJSON, err := json.Marshal(payload.ExtraLinks)
 
-	if len(updateSql) != len(botArgs) {
-		return resp.ErrBody("updateSql and botArgs do not match in length", "Internal Error: The number of columns and arguments do not match", nil, zap.Any("updateSql", updateSql), zap.Any("botArgs", botArgs))
+	if err != nil {
+		return resp.Err("Error marshaling extra links", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 	}
 
-	// Add the bot id to the end of the args
-	botArgs = append(botArgs, id)
-
 	// Update the bot
-	_, err = state.Pool.Exec(d.Context, "UPDATE bots SET "+updateSqlStr+", updated_at = NOW() WHERE bot_id=$"+strconv.Itoa(len(botArgs)), botArgs...)
+	err = db.New(state.Pool).UpdateBotSettings(d.Context, db.UpdateBotSettingsParams{
+		Short:         payload.Short,
+		Long:          payload.Long,
+		Prefix:        payload.Prefix,
+		Invite:        payload.Invite,
+		Library:       payload.Library,
+		ExtraLinks:    extraLinksJSON,
+		Tags:          payload.Tags,
+		Nsfw:          payload.NSFW,
+		CaptchaOptOut: payload.CaptchaOptOut,
+		BotID:         id,
+	})
 
 	if err != nil {
 		return resp.Err("Failed to update bot: ", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))

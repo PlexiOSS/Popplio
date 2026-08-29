@@ -1,10 +1,10 @@
-// Package votereminders notifies users when they are able to vote again.
 package votereminders
 
 import (
 	"fmt"
 	"time"
 
+	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
@@ -29,22 +29,16 @@ func VrLoop() {
 }
 
 func vrCheck() error {
-	rows, err := state.Pool.Query(state.Context, "SELECT user_id, target_id, target_type FROM user_reminders WHERE NOW() - last_acked > interval '4 hours'")
+	q := db.New(state.Pool)
+
+	rows, err := q.GetStaleUserReminders(state.Context)
 
 	if err != nil {
 		return fmt.Errorf("error finding reminders: %w", err)
 	}
 
-	for rows.Next() {
-		var userId string
-		var targetId string
-		var targetType string
-		err := rows.Scan(&userId, &targetId, &targetType)
-
-		if err != nil {
-			state.Logger.Error("Error decoding reminder:", zap.Error(err))
-			continue
-		}
+	for _, row := range rows {
+		userId, targetId, targetType := row.UserID, row.TargetID, row.TargetType
 
 		vi, err := votes.EntityVoteCheck(state.Context, state.Pool, userId, targetId, targetType)
 
@@ -77,7 +71,11 @@ func vrCheck() error {
 				continue
 			}
 
-			_, err = state.Pool.Exec(state.Context, "UPDATE user_reminders SET last_acked = NOW() WHERE user_id = $1 AND target_id = $2 AND target_type = $3", userId, targetId, targetType)
+			err = q.TouchUserReminder(state.Context, db.TouchUserReminderParams{
+				UserID:     userId,
+				TargetID:   targetId,
+				TargetType: targetType,
+			})
 			if err != nil {
 				state.Logger.Error("Error updating user reminder", zap.Error(err), zap.String("userId", userId), zap.String("targetId", targetId), zap.String("targetType", targetType))
 				continue

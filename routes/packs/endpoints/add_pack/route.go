@@ -1,6 +1,3 @@
-// Package add_pack implements PUT /users/{id}/packs — "Create Pack".
-//
-// Creates a pack. Returns 204 on success
 package add_pack
 
 import (
@@ -10,6 +7,7 @@ import (
 	"unicode"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -63,7 +61,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	// Validate the payload
 	err := state.Validator.Struct(payload)
 
 	if err != nil {
@@ -71,8 +68,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
 
-	// Content requirement depends on the pack type — a pack can't be empty,
-	// but what "empty" means differs per type.
 	switch payload.PackType {
 	case types.PackTypeBot:
 		if len(payload.Bots) == 0 {
@@ -88,8 +83,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Both columns are NOT NULL — a nil Go slice encodes as SQL NULL, so
-	// normalize an omitted field to an empty slice before it ever reaches a query.
 	if payload.Bots == nil {
 		payload.Bots = []string{}
 	}
@@ -97,7 +90,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		payload.Servers = []string{}
 	}
 
-	// Strip out unicode characters and validate pack URL
 	payload.URL = strings.Map(func(r rune) rune {
 		if r > unicode.MaxASCII {
 			return -1
@@ -116,7 +108,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("The chosen pack url is blacklisted")
 	}
 
-	// Check that all bots exist
 	for _, bot := range payload.Bots {
 		botUser, err := dovewing.GetUser(d.Context, bot, state.DovewingPlatformDiscord)
 
@@ -129,13 +120,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Check that all servers exist. Anyone may add any existing bot/server to
-	// a pack — packs are curated lists, not something scoped to what the
-	// author owns.
-	for _, server := range payload.Servers {
-		var count int64
+	q := db.New(state.Pool)
 
-		err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE server_id = $1", server).Scan(&count)
+	for _, server := range payload.Servers {
+		count, err := q.CountServerByID(d.Context, server)
 
 		if err != nil {
 			return resp.ErrBody("Error checking if server exists:", "Error checking if server exists: "+err.Error(), err)
@@ -146,9 +134,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Check that the pack does not already exist
-	var count int64
-	err = state.Pool.QueryRow(d.Context, "SELECT COUNT(*) FROM packs WHERE url = $1", payload.URL).Scan(&count)
+	count, err := q.CountPackByURL(d.Context, payload.URL)
 
 	if err != nil {
 		return resp.BadRequest(err.Error())
@@ -166,34 +152,31 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
-	// Create the pack
-	_, err = tx.Exec(
-		d.Context,
-		"INSERT INTO packs (name, url, short, tags, bots, servers, owner, pack_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		payload.Name,
-		payload.URL,
-		payload.Short,
-		payload.Tags,
-		payload.Bots,
-		payload.Servers,
-		d.Auth.ID,
-		payload.PackType,
-	)
+	txQ := db.New(tx)
+
+	err = txQ.InsertPack(d.Context, db.InsertPackParams{
+		Name:     payload.Name,
+		Url:      payload.URL,
+		Short:    payload.Short,
+		Tags:     payload.Tags,
+		Bots:     payload.Bots,
+		Servers:  payload.Servers,
+		Owner:    d.Auth.ID,
+		PackType: payload.PackType,
+	})
 
 	if err != nil {
 		return resp.BadRequest(err.Error())
 	}
 
 	for i, emoji := range payload.Emojis {
-		_, err = tx.Exec(
-			d.Context,
-			"INSERT INTO pack_emojis (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5)",
-			emoji.ID,
-			payload.URL,
-			emoji.Name,
-			emoji.Animated,
-			i,
-		)
+		err = txQ.InsertPackEmoji(d.Context, db.InsertPackEmojiParams{
+			ID:       emoji.ID,
+			PackUrl:  payload.URL,
+			Name:     emoji.Name,
+			Animated: emoji.Animated,
+			Position: int32(i),
+		})
 
 		if err != nil {
 			return resp.ErrBody("Failed to insert pack emoji [add_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))

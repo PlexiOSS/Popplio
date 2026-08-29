@@ -6,6 +6,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -18,10 +19,10 @@ func premiumAdd(ctx context.Context, m *types.RPCPremiumAdd, h Handle) (Success,
 		return Success{}, err
 	}
 
-	_, err := state.Pool.Exec(ctx,
-		"UPDATE bots SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE bot_id = $2",
-		m.TimePeriodHours, m.TargetID,
-	)
+	err := db.New(state.Pool).ApplyBotPremiumDays(ctx, db.ApplyBotPremiumDaysParams{
+		Hours: int32(m.TimePeriodHours),
+		BotID: m.TargetID,
+	})
 
 	if err != nil {
 		return Success{}, err
@@ -44,10 +45,10 @@ func premiumAddServer(ctx context.Context, m *types.RPCPremiumAdd, h Handle) (Su
 		return Success{}, err
 	}
 
-	_, err := state.Pool.Exec(ctx,
-		"UPDATE servers SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE server_id = $2",
-		m.TimePeriodHours, m.TargetID,
-	)
+	err := db.New(state.Pool).ApplyServerPremiumDays(ctx, db.ApplyServerPremiumDaysParams{
+		Hours:    int32(m.TimePeriodHours),
+		ServerID: m.TargetID,
+	})
 
 	if err != nil {
 		return Success{}, err
@@ -74,7 +75,7 @@ func premiumRemove(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE bots SET premium = false WHERE bot_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).RemoveBotPremium(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 
@@ -95,7 +96,7 @@ func premiumRemoveServer(ctx context.Context, m *types.RPCTargetReason, h Handle
 		return Success{}, err
 	}
 
-	if _, err := state.Pool.Exec(ctx, "UPDATE servers SET premium = false WHERE server_id = $1", m.TargetID); err != nil {
+	if err := db.New(state.Pool).RemoveServerPremium(ctx, m.TargetID); err != nil {
 		return Success{}, err
 	}
 

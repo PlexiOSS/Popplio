@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"popplio/config"
+	"popplio/db/dbmigrate"
 	"popplio/seo"
 	"popplio/state/discord_dovewing"
 
@@ -106,6 +107,12 @@ func Setup() {
 
 	if err != nil {
 		panic(err)
+	}
+
+	if os.Getenv("APPLY_MIGRATIONS") == "true" {
+		if err := dbmigrate.Apply(Config.Meta.PostgresURL); err != nil {
+			panic(err)
+		}
 	}
 
 	rOptions, err := redis.ParseURL(Config.Meta.RedisURL)

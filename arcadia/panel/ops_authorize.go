@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -13,9 +15,11 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const authVersion = 5
@@ -140,16 +144,7 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 		return response{}, newError(err)
 	}
 
-	var (
-		positions []string
-		isBot     bool
-	)
-
-	err = state.Pool.QueryRow(ctx, `
-		SELECT sm.positions, COALESCE(iuc.bot, false)
-		FROM staff_members sm
-		LEFT JOIN internal_user_cache__discord iuc ON iuc.id = sm.user_id
-		WHERE sm.user_id = $1`, user.ID).Scan(&positions, &isBot)
+	memberFlags, err := db.New(state.Pool).GetStaffPositionsAndBotFlag(ctx, user.ID)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -159,11 +154,11 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 		return response{}, newError(err)
 	}
 
-	if len(positions) == 0 {
+	if len(memberFlags.Positions) == 0 {
 		return writeText(http.StatusForbidden, "You are not a staff member [no positions]"), nil
 	}
 
-	if isBot {
+	if memberFlags.Bot {
 		return writeText(http.StatusForbidden, "You are not a staff member [bot account]"), nil
 	}
 
@@ -175,15 +170,20 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE user_id = $1", user.ID); err != nil {
+	queries := db.New(tx)
+
+	if err := queries.DeleteAuthChainByUserID(ctx, user.ID); err != nil {
 		return response{}, newError(err)
 	}
 
 	token := impls.GenRandom(impls.RandRange(4196, 6000))
 
-	_, err = tx.Exec(ctx,
-		"INSERT INTO staffpanel__authchain (user_id, token, popplio_token, state) VALUES ($1, $2, $3, $4)",
-		user.ID, token, impls.GenRandom(2048), "pending")
+	err = queries.InsertAuthChain(ctx, db.InsertAuthChainParams{
+		UserID:       user.ID,
+		Token:        token,
+		PopplioToken: impls.GenRandom(2048),
+		State:        "pending",
+	})
 
 	if err != nil {
 		return response{}, newError(err)
@@ -216,12 +216,9 @@ func (s *Server) authCheckMfaState(ctx context.Context, action *types.AuthCheckM
 
 	defer tx.Rollback(ctx)
 
-	var (
-		mfaSecret   *string
-		mfaVerified bool
-	)
+	queries := db.New(tx)
 
-	err = tx.QueryRow(ctx, "SELECT mfa_secret, mfa_verified FROM staff_members WHERE user_id = $1", authData.UserID).Scan(&mfaSecret, &mfaVerified)
+	mfa, err := queries.GetStaffMFA(ctx, authData.UserID)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -231,7 +228,7 @@ func (s *Server) authCheckMfaState(ctx context.Context, action *types.AuthCheckM
 		return response{}, newError(fmt.Errorf("Failed to fetch staff member mfa_secret/mfa_verified: %s", err))
 	}
 
-	if mfaSecret != nil && mfaVerified {
+	if mfa.MfaSecret.Valid && mfa.MfaVerified {
 
 		return writeJSON(http.StatusOK, types.MfaLogin{Info: nil}), nil
 	}
@@ -242,7 +239,12 @@ func (s *Server) authCheckMfaState(ctx context.Context, action *types.AuthCheckM
 		return response{}, newError(err)
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_members SET mfa_secret = $1 WHERE user_id = $2", secret, authData.UserID); err != nil {
+	err = queries.UpdateStaffMFASecret(ctx, db.UpdateStaffMFASecretParams{
+		MfaSecret: pgtype.Text{String: secret, Valid: true},
+		UserID:    authData.UserID,
+	})
+
+	if err != nil {
 		return response{}, newError(err)
 	}
 
@@ -280,27 +282,29 @@ func (s *Server) authResetMfaTotp(ctx context.Context, action *types.AuthResetMf
 
 	defer tx.Rollback(ctx)
 
-	var mfaSecret *string
+	queries := db.New(tx)
 
-	if err := tx.QueryRow(ctx, "SELECT mfa_secret FROM staff_members WHERE user_id = $1", authData.UserID).Scan(&mfaSecret); err != nil {
+	mfa, err := queries.GetStaffMFA(ctx, authData.UserID)
+
+	if err != nil {
 		return response{}, newError(err)
 	}
 
-	if mfaSecret == nil {
+	if !mfa.MfaSecret.Valid {
 		return response{}, errStatus(http.StatusBadRequest, "mfaNotSetup")
 	}
 
-	valid, err := verifyTOTP(action.OTP, *mfaSecret)
+	valid, err := verifyTOTP(action.OTP, mfa.MfaSecret.String)
 
 	if err != nil || !valid {
 		return response{}, errStatus(http.StatusBadRequest, "Invalid OTP entered")
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_members SET mfa_secret = NULL, mfa_verified = FALSE WHERE user_id = $1", authData.UserID); err != nil {
+	if err := queries.UpdateStaffMFAClear(ctx, authData.UserID); err != nil {
 		return response{}, newError(err)
 	}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE user_id = $1", authData.UserID); err != nil {
+	if err := queries.DeleteAuthChainByUserID(ctx, authData.UserID); err != nil {
 		return response{}, newError(err)
 	}
 
@@ -330,32 +334,29 @@ func (s *Server) authActivateSession(ctx context.Context, action *types.AuthActi
 
 	defer tx.Rollback(ctx)
 
-	var (
-		mfaSecret   *string
-		mfaVerified bool
-	)
+	queries := db.New(tx)
 
-	err = tx.QueryRow(ctx, "SELECT mfa_secret, mfa_verified FROM staff_members WHERE user_id = $1", authData.UserID).Scan(&mfaSecret, &mfaVerified)
+	mfa, err := queries.GetStaffMFA(ctx, authData.UserID)
 
 	if err != nil {
 		return response{}, newError(err)
 	}
 
-	if mfaSecret == nil {
+	if !mfa.MfaSecret.Valid {
 		return response{}, errStatus(http.StatusBadRequest, "mfaNotSetup")
 	}
 
-	valid, err := verifyTOTP(action.OTP, *mfaSecret)
+	valid, err := verifyTOTP(action.OTP, mfa.MfaSecret.String)
 
 	if err != nil || !valid {
 		return response{}, errStatus(http.StatusBadRequest, "Invalid OTP entered")
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staffpanel__authchain SET state = 'active' WHERE token = $1", action.LoginToken); err != nil {
+	if err := queries.ActivateAuthChain(ctx, action.LoginToken); err != nil {
 		return response{}, newError(err)
 	}
 
-	if _, err := tx.Exec(ctx, "UPDATE staff_members SET mfa_verified = TRUE WHERE user_id = $1", authData.UserID); err != nil {
+	if err := queries.UpdateStaffMFAVerified(ctx, authData.UserID); err != nil {
 		return response{}, newError(err)
 	}
 
@@ -367,13 +368,13 @@ func (s *Server) authActivateSession(ctx context.Context, action *types.AuthActi
 }
 
 func (s *Server) authLogout(ctx context.Context, action *types.AuthLogout) (response, error) {
-	tag, err := state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE token = $1", action.LoginToken)
+	rowsAffected, err := db.New(state.Pool).DeleteAuthChainByToken(ctx, action.LoginToken)
 
 	if err != nil {
 		return response{}, newError(err)
 	}
 
-	return writeText(http.StatusOK, strconv.FormatInt(tag.RowsAffected(), 10)), nil
+	return writeText(http.StatusOK, strconv.FormatInt(rowsAffected, 10)), nil
 }
 
 func containsString(haystack []string, needle string) bool {

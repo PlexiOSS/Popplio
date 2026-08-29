@@ -9,28 +9,19 @@ package get_shop_purchases
 
 import (
 	"net/http"
-	"strconv"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
 	"popplio/state"
 	"popplio/types"
-
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
 const listLimit = 100
-
-var (
-	shopPurchaseColsArr = dbutil.GetCols(types.ShopPurchase{})
-	shopPurchaseCols    = strings.Join(shopPurchaseColsArr, ",")
-)
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
@@ -58,18 +49,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("You do not have permission to view the shop.")
 	}
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+shopPurchaseCols+" FROM shop_purchases ORDER BY created_at DESC LIMIT "+strconv.Itoa(listLimit))
+	rows, err := db.New(state.Pool).GetRecentShopPurchases(d.Context, listLimit)
 
 	if err != nil {
 		return resp.Err("Failed to fetch shop purchases", err)
 	}
 
-	defer rows.Close()
-
-	purchases, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.ShopPurchase])
-
-	if err != nil {
-		return resp.Err("Failed to fetch shop purchases", err)
+	purchases := make([]types.ShopPurchase, len(rows))
+	for i, row := range rows {
+		purchases[i] = types.ShopPurchase{
+			ID:         row.ID,
+			TargetType: row.TargetType,
+			TargetID:   row.TargetID,
+			ItemID:     row.ItemID,
+			Cents:      row.Cents,
+			CreatedAt:  row.CreatedAt.Time,
+		}
 	}
 
 	return uapi.HttpResponse{

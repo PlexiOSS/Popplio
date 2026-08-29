@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"popplio/arcadia/impls"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
@@ -265,7 +266,10 @@ func editMemberExtras(c *Ctx, granting bool) error {
 		return fmt.Errorf("you do not hold %s yourself, so you cannot change it on someone else", perms.Staff.Label(perm))
 	}
 
-	_, err = state.Pool.Exec(c.Context, "UPDATE staff_members SET perm_overrides = $1 WHERE user_id = $2", next.Strings(), userID)
+	_, err = db.New(state.Pool).UpdateStaffMemberPermOverrides(c.Context, db.UpdateStaffMemberPermOverridesParams{
+		PermOverrides: next.Strings(),
+		UserID:        userID,
+	})
 
 	if err != nil {
 		return err

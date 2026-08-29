@@ -1,35 +1,16 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
-
-	"github.com/jackc/pgx/v5"
 )
-
-// The staff-template catalog: pre-built answers staff pick from when
-// approving/denying/etc, for both bot and server reviews (entity_type).
-// Same simple catalog shape as badges — no rank/hierarchy concerns, so this
-// mirrors ops_badges.go closely.
-//
-// ID is a plain string, not uuid.UUID, matching how the existing public GET
-// /list/staff-templates route (types.StaffTemplate) already scans it.
-
-type staffTemplateRow struct {
-	ID          string    `db:"id"`
-	Name        string    `db:"name"`
-	Emoji       string    `db:"emoji"`
-	Tags        []string  `db:"tags"`
-	Description string    `db:"description"`
-	Type        string    `db:"type"`
-	EntityType  string    `db:"entity_type"`
-	CreatedAt   time.Time `db:"created_at"`
-}
 
 func (s *Server) updateStaffTemplates(ctx context.Context, q *types.QUpdateStaffTemplates) (response, error) {
 	_, userPerms, err := authorize(ctx, q.LoginToken)
@@ -40,16 +21,7 @@ func (s *Server) updateStaffTemplates(ctx context.Context, q *types.QUpdateStaff
 
 	switch {
 	case q.Action.List != nil:
-		// No permission check — every staff member with panel access can see
-		// what templates exist, same as badges. Only writing them is gated.
-		rows, err := state.Pool.Query(ctx,
-			"SELECT id, name, emoji, tags, description, type, entity_type, created_at FROM staff_templates ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		templateRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[staffTemplateRow])
+		templateRows, err := db.New(state.Pool).ListStaffTemplates(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -83,9 +55,14 @@ func (s *Server) updateStaffTemplates(ctx context.Context, q *types.QUpdateStaff
 			return *resp, nil
 		}
 
-		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO staff_templates (name, emoji, tags, description, type, entity_type) VALUES ($1, $2, $3, $4, $5, $6)",
-			action.Name, action.Emoji, action.Tags, action.Description, action.Type, action.EntityType)
+		err := db.New(state.Pool).InsertStaffTemplate(ctx, db.InsertStaffTemplateParams{
+			Name:        action.Name,
+			Emoji:       action.Emoji,
+			Tags:        types.NonNilStrings(action.Tags),
+			Description: action.Description,
+			Type:        action.Type,
+			EntityType:  action.EntityType,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -105,15 +82,27 @@ func (s *Server) updateStaffTemplates(ctx context.Context, q *types.QUpdateStaff
 			return *resp, nil
 		}
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM staff_templates WHERE id::text = $1", action.ID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountStaffTemplateByID(ctx, action.ID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE staff_templates SET name = $1, emoji = $2, tags = $3, description = $4, type = $5, entity_type = $6 WHERE id::text = $7",
-			action.Name, action.Emoji, action.Tags, action.Description, action.Type, action.EntityType, action.ID)
+		err = queries.UpdateStaffTemplate(ctx, db.UpdateStaffTemplateParams{
+			Name:        action.Name,
+			Emoji:       action.Emoji,
+			Tags:        types.NonNilStrings(action.Tags),
+			Description: action.Description,
+			Type:        action.Type,
+			EntityType:  action.EntityType,
+			ID:          action.ID,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -127,13 +116,19 @@ func (s *Server) updateStaffTemplates(ctx context.Context, q *types.QUpdateStaff
 
 		id := q.Action.Delete.ID
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM staff_templates WHERE id::text = $1", id); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountStaffTemplateByID(ctx, id)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM staff_templates WHERE id::text = $1", id); err != nil {
+		if err := queries.DeleteStaffTemplate(ctx, id); err != nil {
 			return response{}, newError(err)
 		}
 

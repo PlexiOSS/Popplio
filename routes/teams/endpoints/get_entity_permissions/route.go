@@ -1,7 +1,3 @@
-// Package get_entity_permissions implements GET
-// /users/{id}/{target_type}/{target_id}/perms — "Get Entity Permissions".
-//
-// Returns the resolved permissions a user has on an entity
 package get_entity_permissions
 
 import (

@@ -6,26 +6,19 @@
 package get_general_vote_credit_tiers
 
 import (
-	"errors"
 	"net/http"
-	"strings"
 
 	"popplio/api/resp"
 
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	voteCreditTiersColsArr = dbutil.GetCols(types.VoteCreditTier{})
-	voteCreditTiersCols    = strings.Join(voteCreditTiersColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -48,23 +41,26 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetType := validators.NormalizeTargetType(r.URL.Query().Get("target_type"))
 
-	var rows pgx.Rows
-	var err error
-	if targetType == "" {
-		rows, err = state.Pool.Query(d.Context, "SELECT "+voteCreditTiersCols+" FROM vote_credit_tiers ORDER BY position ASC")
-	} else {
-		rows, err = state.Pool.Query(d.Context, "SELECT "+voteCreditTiersCols+" FROM vote_credit_tiers WHERE target_type = $1 ORDER BY position ASC", targetType)
+	filter := pgtype.Text{}
+	if targetType != "" {
+		filter = pgtype.Text{String: targetType, Valid: true}
 	}
+
+	rows, err := db.New(state.Pool).GetVoteCreditTiersFiltered(d.Context, filter)
 
 	if err != nil {
 		return resp.ErrBody("An error occurred while fetching vote credit tiers", "An error occurred while fetching vote credit tiers.", err)
 	}
 
-	vcts, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[types.VoteCreditTier])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uapi.HttpResponse{
-			Json: []types.VoteCreditTier{},
+	vcts := make([]*types.VoteCreditTier, len(rows))
+	for i, row := range rows {
+		vcts[i] = &types.VoteCreditTier{
+			ID:         row.ID,
+			TargetType: row.TargetType,
+			Position:   int(row.Position),
+			Votes:      int(row.Votes),
+			Cents:      int(row.Cents),
+			CreatedAt:  row.CreatedAt.Time,
 		}
 	}
 

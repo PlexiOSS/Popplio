@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
@@ -8,11 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// announceBlogPost posts to Channels.BlogAnnouncements when a new blog post
-// is created (every created post is published immediately -- there is no
-// draft option at creation time, only via a later edit -- so this always
-// fires on create). Best-effort: called after the post already exists, a
-// failure here is logged but never undoes the create.
 func announceBlogPost(entry types.BlogCreateEntry) {
 	channelID := state.Config.Channels.BlogAnnouncements
 
@@ -37,10 +34,6 @@ func announceBlogPost(entry types.BlogCreateEntry) {
 	}
 }
 
-// announceChangelogEntry posts to Channels.ChangelogAnnouncements when a new
-// changelog entry is created, but only if it was created published --
-// unlike blog posts, a changelog entry can be created as a draft. Best-
-// effort, same contract as announceBlogPost.
 func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 	if !entry.Published {
 		return
@@ -101,9 +94,6 @@ func projectLabel(project string) string {
 	}
 }
 
-// joinTruncated joins items with sep, cutting off (with a trailing "...")
-// before the result would exceed max -- Discord embed field values are
-// capped at 1024 characters.
 func joinTruncated(items []string, sep string, max int) string {
 	result := ""
 

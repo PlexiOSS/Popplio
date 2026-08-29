@@ -1,13 +1,10 @@
-// Package delete_all_user_alerts implements DELETE /users/{id}/alerts —
-// "Delete All User Alerts".
-//
-// Deletes all user alerts. Returns 204 on success
 package delete_all_user_alerts
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -35,7 +32,7 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	_, err := state.Pool.Exec(d.Context, "DELETE FROM alerts WHERE user_id = $1", d.Auth.ID)
+	err := db.New(state.Pool).DeleteAllUserAlerts(d.Context, d.Auth.ID)
 
 	if err != nil {
 		return resp.Err("Failed to delete alerts", err, zap.String("userID", d.Auth.ID))

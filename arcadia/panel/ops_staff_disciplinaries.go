@@ -1,36 +1,19 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package panel
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// Disciplinary types: the punishments that can be issued, and the permission
-// limits each one imposes while it is active.
-//
-// An additory type adds its limits to what the member already has; a
-// non-additory one replaces them, which is what makes it a punishment. See
-// resolveWithDisciplinaries in arcadia/impls/auth.go.
-
-type disciplinaryTypeRow struct {
-	ID             string    `db:"id"`
-	Name           string    `db:"name"`
-	Description    string    `db:"description"`
-	SelfAssignable bool      `db:"self_assignable"`
-	PermLimits     []string  `db:"perm_limits"`
-	Additory       bool      `db:"additory"`
-	NeedsApproval  bool      `db:"needs_approval"`
-	MaxExpiry      *float64  `db:"max_expiry"`
-	CreatedAt      time.Time `db:"created_at"`
-}
 
 func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpdateStaffDisciplinaryType) (response, error) {
 	_, userPerms, err := authorize(ctx, q.LoginToken)
@@ -41,15 +24,7 @@ func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpda
 
 	switch {
 	case q.Action.ListDisciplinaryTypes != nil:
-		// No permission check.
-		rows, err := state.Pool.Query(ctx,
-			"SELECT id, name, description, self_assignable, perm_limits, additory, needs_approval, EXTRACT(epoch FROM max_expiry) AS max_expiry, created_at FROM staff_disciplinary_types ORDER BY created_at DESC")
-
-		if err != nil {
-			return response{}, newError(err)
-		}
-
-		typeRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[disciplinaryTypeRow])
+		typeRows, err := db.New(state.Pool).ListStaffDisciplinaryTypes(ctx)
 
 		if err != nil {
 			return response{}, newError(err)
@@ -66,8 +41,8 @@ func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpda
 				PermLimits:     types.NonNilStrings(t.PermLimits),
 				Additory:       t.Additory,
 				NeedsApproval:  t.NeedsApproval,
-				MaxExpiry:      t.MaxExpiry,
-				CreatedAt:      types.NewTimestamp(t.CreatedAt),
+				MaxExpiry:      numericToFloat64Ptr(t.MaxExpiry),
+				CreatedAt:      types.NewTimestamp(t.CreatedAt.Time),
 			})
 		}
 
@@ -87,9 +62,16 @@ func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpda
 			return writeText(http.StatusForbidden, fmt.Sprintf("You do not have permission to edit the following perms: %s", err)), nil
 		}
 
-		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO staff_disciplinary_types (id, name, description, self_assignable, perm_limits, additory, needs_approval, max_expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, make_interval(secs => $8))",
-			action.ID, action.Name, action.Description, action.SelfAssignable, action.PermLimits, action.Additory, action.NeedsApproval, action.MaxExpiry)
+		err := db.New(state.Pool).InsertStaffDisciplinaryType(ctx, db.InsertStaffDisciplinaryTypeParams{
+			ID:             action.ID,
+			Name:           action.Name,
+			Description:    action.Description,
+			SelfAssignable: action.SelfAssignable,
+			PermLimits:     types.NonNilStrings(action.PermLimits),
+			Additory:       action.Additory,
+			NeedsApproval:  action.NeedsApproval,
+			Secs:           float8FromPtr(action.MaxExpiry),
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -111,15 +93,28 @@ func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpda
 			return writeText(http.StatusForbidden, fmt.Sprintf("You do not have permission to edit the following perms: %s", err)), nil
 		}
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM staff_disciplinary_types WHERE id = $1", action.ID); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountStaffDisciplinaryTypeByID(ctx, action.ID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		_, err = state.Pool.Exec(ctx,
-			"UPDATE staff_disciplinary_types SET name = $1, description = $2, self_assignable = $3, perm_limits = $4, additory = $5, needs_approval = $6, max_expiry = make_interval(secs => $7) WHERE id = $8",
-			action.Name, action.Description, action.SelfAssignable, action.PermLimits, action.Additory, action.NeedsApproval, action.MaxExpiry, action.ID)
+		err = queries.UpdateStaffDisciplinaryType(ctx, db.UpdateStaffDisciplinaryTypeParams{
+			Name:           action.Name,
+			Description:    action.Description,
+			SelfAssignable: action.SelfAssignable,
+			PermLimits:     types.NonNilStrings(action.PermLimits),
+			Additory:       action.Additory,
+			NeedsApproval:  action.NeedsApproval,
+			Secs:           float8FromPtr(action.MaxExpiry),
+			ID:             action.ID,
+		})
 
 		if err != nil {
 			return response{}, newError(err)
@@ -133,13 +128,19 @@ func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpda
 
 		id := q.Action.DeleteDisciplinaryType.ID
 
-		if resp, err := requireRow(ctx, "SELECT COUNT(*) FROM staff_disciplinary_types WHERE id = $1", id); err != nil {
-			return response{}, err
-		} else if resp != nil {
+		queries := db.New(state.Pool)
+
+		exists, err := queries.CountStaffDisciplinaryTypeByID(ctx, id)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		if resp := requireExists(exists); resp != nil {
 			return *resp, nil
 		}
 
-		if _, err := state.Pool.Exec(ctx, "DELETE FROM staff_disciplinary_types WHERE id = $1", id); err != nil {
+		if err := queries.DeleteStaffDisciplinaryType(ctx, id); err != nil {
 			return response{}, newError(err)
 		}
 
@@ -147,4 +148,18 @@ func (s *Server) updateStaffDisciplinaryType(ctx context.Context, q *types.QUpda
 	default:
 		return response{}, errStatus(http.StatusBadRequest, "No disciplinary type action was specified")
 	}
+}
+
+func numericToFloat64Ptr(n pgtype.Numeric) *float64 {
+	if !n.Valid {
+		return nil
+	}
+
+	f, err := n.Float64Value()
+
+	if err != nil || !f.Valid {
+		return nil
+	}
+
+	return &f.Float64
 }

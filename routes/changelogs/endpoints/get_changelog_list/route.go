@@ -7,24 +7,18 @@ package get_changelog_list
 
 import (
 	"net/http"
-	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	changelogColsArr = dbutil.GetCols(types.ChangelogEntry{})
-	changelogCols    = strings.Join(changelogColsArr, ",")
 )
 
 func Docs() *docs.Doc {
@@ -45,24 +39,33 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	var project *string
+	var project pgtype.Text
 
 	if v := r.URL.Query().Get("project"); v != "" {
-		project = &v
+		project = pgtype.Text{String: v, Valid: true}
 	}
 
-	rows, err := state.Pool.Query(d.Context,
-		"SELECT "+changelogCols+" FROM changelogs WHERE published = true AND ($1::text IS NULL OR project = $1) ORDER BY created_at DESC",
-		project)
+	rows, err := db.New(state.Pool).GetChangelogList(d.Context, project)
 
 	if err != nil {
 		return resp.Err("Error while fetching changelog entries [db query]", err)
 	}
 
-	entries, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.ChangelogEntry])
-
-	if err != nil {
-		return resp.Err("Error while fetching changelog entries [collect]", err)
+	entries := make([]types.ChangelogEntry, len(rows))
+	for i, row := range rows {
+		entries[i] = types.ChangelogEntry{
+			Itag:             row.Itag,
+			Project:          row.Project,
+			Version:          row.Version,
+			Added:            row.Added,
+			Updated:          row.Updated,
+			Fixed:            row.Fixed,
+			Removed:          row.Removed,
+			ExtraDescription: row.ExtraDescription,
+			Prerelease:       row.Prerelease,
+			CreatedBy:        row.CreatedBy,
+			CreatedAt:        row.CreatedAt.Time,
+		}
 	}
 
 	for i := range entries {

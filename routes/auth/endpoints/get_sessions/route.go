@@ -5,26 +5,20 @@
 package get_sessions
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/PlexiOSS/Keel/dbutil"
 	"popplio/api/resp"
 	"popplio/validators"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-)
-
-var (
-	sessionCols = strings.Join(dbutil.GetCols(types.Session{}), ", ")
 )
 
 func Docs() *docs.Doc {
@@ -61,22 +55,27 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	targetType = strings.TrimSuffix(targetType, "s")
 
-	rows, err := state.Pool.Query(d.Context, "SELECT "+sessionCols+" FROM api_sessions WHERE target_id = $1 AND target_type = $2", targetId, targetType)
+	rows, err := db.New(state.Pool).GetSessions(d.Context, db.GetSessionsParams{
+		TargetID:   targetId,
+		TargetType: targetType,
+	})
 
 	if err != nil {
 		return resp.Err("Error while getting user tokens", err)
 	}
 
-	defer rows.Close()
-
-	tokens, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[types.Session])
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return resp.NotFound("No sessions found")
-	}
-
-	if err != nil {
-		return resp.Err("Error while getting user sessions", err)
+	tokens := make([]*types.Session, len(rows))
+	for i, row := range rows {
+		tokens[i] = &types.Session{
+			ID:         row.ID,
+			Name:       row.Name,
+			CreatedAt:  row.CreatedAt.Time,
+			Type:       row.Type,
+			TargetType: row.TargetType,
+			TargetID:   row.TargetID,
+			PermLimits: row.PermLimits,
+			Expiry:     row.Expiry.Time,
+		}
 	}
 
 	return uapi.HttpResponse{

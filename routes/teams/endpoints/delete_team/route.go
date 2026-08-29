@@ -1,17 +1,15 @@
-// Package delete_team implements DELETE /teams/{tid} — "Delete Team".
-//
-// Deletes the team. Requires the 'Owner' permission. Returns a 204 on
-// success
 package delete_team
 
 import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -38,15 +36,20 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var teamId = chi.URLParam(r, "tid")
 
+	var teamUUID pgtype.UUID
+	if err := teamUUID.Scan(teamId); err != nil {
+		return resp.BadRequest("Invalid team ID")
+	}
+
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
 		return resp.Err("Error beginning transaction", err, zap.String("tid", teamId))
 	}
 
-	var botCount int
+	q := db.New(tx)
 
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM bots WHERE team_owner = $1", teamId).Scan(&botCount)
+	botCount, err := q.CountBotsByTeamOwner(d.Context, teamUUID)
 
 	if err != nil {
 		return resp.Err("Error getting bot count [db count]", err, zap.String("tid", teamId))
@@ -56,9 +59,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("You cannot delete a team with bots in it")
 	}
 
-	var serverCount int
-
-	err = tx.QueryRow(d.Context, "SELECT COUNT(*) FROM servers WHERE team_owner = $1", teamId).Scan(&serverCount)
+	serverCount, err := q.CountServersByTeamOwner(d.Context, teamUUID)
 
 	if err != nil {
 		return resp.Err("Error getting server count [db count]", err, zap.String("tid", teamId))
@@ -68,13 +69,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("You cannot delete a team with servers in it")
 	}
 
-	_, err = tx.Exec(d.Context, "DELETE FROM team_members WHERE team_id = $1", teamId)
+	err = q.DeleteTeamMembers(d.Context, teamUUID)
 
 	if err != nil {
 		return resp.Err("Error deleting team members", err, zap.String("tid", teamId))
 	}
 
-	_, err = tx.Exec(d.Context, "DELETE FROM teams WHERE id = $1", teamId)
+	err = q.DeleteTeam(d.Context, teamId)
 
 	if err != nil {
 		return resp.Err("Error deleting team", err, zap.String("tid", teamId))

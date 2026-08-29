@@ -8,6 +8,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 
@@ -40,16 +41,14 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	name := chi.URLParam(r, "id")
 
-	var about string
-	var userId string
-	err := state.Pool.QueryRow(d.Context, "SELECT about, user_id FROM users WHERE user_id = $1", name).Scan(&about, &userId)
+	row, err := db.New(state.Pool).GetUserAboutAndID(d.Context, name)
 
 	if err != nil {
 		state.Logger.Error("Failed to get user seo", zap.Error(err), zap.String("user_id", name))
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
-	user, err := dovewing.GetUser(d.Context, userId, state.DovewingPlatformDiscord)
+	user, err := dovewing.GetUser(d.Context, row.UserID, state.DovewingPlatformDiscord)
 
 	if err != nil {
 		return resp.Err("Failed to get user seo", err, zap.String("user_id", name))
@@ -59,7 +58,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		ID:     user.ID,
 		Name:   user.DisplayName,
 		Avatar: user.Avatar,
-		Short:  about,
+		Short:  row.About.String,
 	}
 
 	return uapi.HttpResponse{

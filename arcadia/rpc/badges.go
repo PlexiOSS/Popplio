@@ -6,6 +6,7 @@ import (
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/state"
 )
 
@@ -21,9 +22,11 @@ func assignBadgeSet(ctx context.Context, m *types.RPCAssignBadge, h Handle, assi
 		return Success{}, err
 	}
 
-	var badgeExists bool
+	q := db.New(state.Pool)
 
-	if err := state.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM badges WHERE id = $1)", m.BadgeID).Scan(&badgeExists); err != nil {
+	badgeExists, err := q.CountBadgeByID(ctx, m.BadgeID)
+
+	if err != nil {
 		return Success{}, err
 	}
 
@@ -32,17 +35,23 @@ func assignBadgeSet(ctx context.Context, m *types.RPCAssignBadge, h Handle, assi
 	}
 
 	if assign {
-		_, err := state.Pool.Exec(ctx,
-			"INSERT INTO entity_badges (target_type, target_id, badge_id, reason, awarded_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (target_type, target_id, badge_id) DO UPDATE SET reason = $4, awarded_by = $5, created_at = NOW()",
-			h.TargetType.String(), m.TargetID, m.BadgeID, m.Reason, h.UserID)
+		err := q.UpsertEntityBadge(ctx, db.UpsertEntityBadgeParams{
+			TargetType: h.TargetType.String(),
+			TargetID:   m.TargetID,
+			BadgeID:    m.BadgeID,
+			Reason:     m.Reason,
+			AwardedBy:  h.UserID,
+		})
 
 		if err != nil {
 			return Success{}, err
 		}
 	} else {
-		_, err := state.Pool.Exec(ctx,
-			"DELETE FROM entity_badges WHERE target_type = $1 AND target_id = $2 AND badge_id = $3",
-			h.TargetType.String(), m.TargetID, m.BadgeID)
+		err := q.DeleteEntityBadge(ctx, db.DeleteEntityBadgeParams{
+			TargetType: h.TargetType.String(),
+			TargetID:   m.TargetID,
+			BadgeID:    m.BadgeID,
+		})
 
 		if err != nil {
 			return Success{}, err

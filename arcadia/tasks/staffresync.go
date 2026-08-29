@@ -8,15 +8,30 @@ import (
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
+
+// stringsToUUIDs converts canonical UUID strings (as produced by
+// impls.UUIDString/UUIDStrings) back into pgtype.UUID for query params
+// against uuid[] columns.
+func stringsToUUIDs(ids []string) ([]pgtype.UUID, error) {
+	out := make([]pgtype.UUID, len(ids))
+
+	for i, id := range ids {
+		if err := out[i].Scan(id); err != nil {
+			return nil, fmt.Errorf("invalid position id %q: %w", id, err)
+		}
+	}
+
+	return out, nil
+}
 
 type cachedPosition struct {
 	ID                 string
@@ -62,22 +77,9 @@ func StaffResync(ctx context.Context) error {
 
 	defer tx.Rollback(ctx)
 
-	rows, err := tx.Query(ctx, "SELECT id, name, role_id, index, perms, corresponding_roles FROM staff_positions")
+	txq := db.New(tx)
 
-	if err != nil {
-		return fmt.Errorf("Error while getting staff positions: %v", err)
-	}
-
-	type positionDBRow struct {
-		ID                 pgtype.UUID `db:"id"`
-		Name               string      `db:"name"`
-		RoleID             string      `db:"role_id"`
-		Index              int32       `db:"index"`
-		Perms              []string    `db:"perms"`
-		CorrespondingRoles []byte      `db:"corresponding_roles"`
-	}
-
-	positionRows, err := pgx.CollectRows(rows, pgx.RowToStructByName[positionDBRow])
+	positionRows, err := txq.GetAllStaffPositions(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while getting staff positions: %v", err)
@@ -108,21 +110,7 @@ func StaffResync(ctx context.Context) error {
 		posByName[pos.Name] = pos
 	}
 
-	rows, err = tx.Query(ctx, "SELECT user_id, positions, perm_overrides, no_autosync, unaccounted FROM staff_members FOR UPDATE")
-
-	if err != nil {
-		return fmt.Errorf("Error while getting staff members: %v", err)
-	}
-
-	type staffRow struct {
-		UserID        string        `db:"user_id"`
-		Positions     []pgtype.UUID `db:"positions"`
-		PermOverrides []string      `db:"perm_overrides"`
-		NoAutosync    bool          `db:"no_autosync"`
-		Unaccounted   bool          `db:"unaccounted"`
-	}
-
-	staff, err := pgx.CollectRows(rows, pgx.RowToStructByName[staffRow])
+	staff, err := txq.GetAllStaffMembersForUpdate(ctx)
 
 	if err != nil {
 		return fmt.Errorf("Error while getting staff members: %v", err)
@@ -170,9 +158,15 @@ func StaffResync(ctx context.Context) error {
 
 		for _, posID := range dbPositions {
 			if _, ok := posByID[posID]; !ok {
-				_, err := tx.Exec(ctx,
-					"UPDATE staff_members SET positions = array_remove(positions, $1) WHERE user_id = $2",
-					posID, userID)
+				var posUUID pgtype.UUID
+				if err := posUUID.Scan(posID); err != nil {
+					return fmt.Errorf("invalid position id %q: %w", posID, err)
+				}
+
+				err := txq.RemoveStaffMemberPosition(ctx, db.RemoveStaffMemberPositionParams{
+					ArrayRemove: posUUID,
+					UserID:      userID,
+				})
 
 				if err != nil {
 					return fmt.Errorf("Error while removing staff member position: %v", err)
@@ -214,34 +208,43 @@ func StaffResync(ctx context.Context) error {
 		newPositionIDs := sortedKeys(rolePositions)
 		oldPositionIDs := sortedKeys(currentPositions)
 
-		var exists bool
-
-		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)", userID).Scan(&exists)
+		exists, err := txq.UserExistsCheck(ctx, userID)
 
 		if err != nil {
 			return fmt.Errorf("Error while checking if user exists: %v", err)
 		}
 
 		if !exists {
-			_, err := tx.Exec(ctx, "INSERT INTO users (user_id, api_token) VALUES ($1, $2)", userID, impls.GenRandom(512))
+			err := txq.InsertUserWithToken(ctx, db.InsertUserWithTokenParams{
+				UserID:   userID,
+				ApiToken: impls.GenRandom(512),
+			})
 
 			if err != nil {
 				return fmt.Errorf("Error while inserting user: %v", err)
 			}
 		}
 
+		newPositionUUIDs, err := stringsToUUIDs(newPositionIDs)
+
+		if err != nil {
+			return err
+		}
+
 		if isOnDB {
-			_, err = tx.Exec(ctx,
-				"UPDATE staff_members SET positions = $1, unaccounted = false WHERE user_id = $2",
-				newPositionIDs, userID)
+			err = txq.UpdateStaffMemberPositions(ctx, db.UpdateStaffMemberPositionsParams{
+				Positions: newPositionUUIDs,
+				UserID:    userID,
+			})
 
 			if err != nil {
 				return fmt.Errorf("Error while updating staff member positions: %v", err)
 			}
 		} else {
-			_, err = tx.Exec(ctx,
-				"INSERT INTO staff_members (user_id, positions) VALUES ($1, $2)",
-				userID, newPositionIDs)
+			err = txq.InsertStaffMemberPositions(ctx, db.InsertStaffMemberPositionsParams{
+				UserID:    userID,
+				Positions: newPositionUUIDs,
+			})
 
 			if err != nil {
 				return fmt.Errorf("Error while inserting staff member positions: %v", err)
@@ -283,11 +286,11 @@ func StaffResync(ctx context.Context) error {
 		remove := len(overridePerms[userID]) == 0
 
 		if remove {
-			if _, err := tx.Exec(ctx, "DELETE FROM staff_members WHERE user_id = $1", userID); err != nil {
+			if err := txq.DeleteStaffMember(ctx, userID); err != nil {
 				return fmt.Errorf("Error while removing unaccounted staff member: %v", err)
 			}
 		} else {
-			_, err := tx.Exec(ctx, "UPDATE staff_members SET positions = '{}', unaccounted = true WHERE user_id = $1", userID)
+			err := txq.MarkStaffMemberUnaccounted(ctx, userID)
 
 			if err != nil {
 				return fmt.Errorf("Error while updating unaccounted staff member: %v", err)
