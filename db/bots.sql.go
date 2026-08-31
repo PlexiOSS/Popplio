@@ -1580,6 +1580,90 @@ func (q *Queries) GetRecentlyAddedIndexBots(ctx context.Context) ([]GetRecentlyA
 	return items, nil
 }
 
+const getSimilarBots = `-- name: GetSimilarBots :many
+WITH source_tags AS (
+    SELECT tags FROM bots WHERE bot_id = $1
+)
+SELECT b.bot_id, b.short, b.type, b.vanity_ref, b.approximate_votes, b.shards, b.library, b.invite_clicks, b.clicks, b.servers, b.nsfw, b.tags, b.premium, b.created_at, b.self_status, b.last_stats_post, b.supporter_badge, b.boosted_until, b.featured_until, b.spotlighted_until, b.vote_blitz_until
+FROM bots b, source_tags st
+WHERE (b.type = 'approved' OR b.type = 'certified')
+AND b.bot_id != $1
+AND b.tags && st.tags
+ORDER BY cardinality(ARRAY(SELECT unnest(b.tags) INTERSECT SELECT unnest(st.tags))) DESC, b.approximate_votes DESC
+LIMIT 6
+`
+
+type GetSimilarBotsRow struct {
+	BotID            string             `db:"bot_id" json:"bot_id"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	Shards           int32              `db:"shards" json:"shards"`
+	Library          string             `db:"library" json:"library"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Servers          int32              `db:"servers" json:"servers"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	SelfStatus       pgtype.Text        `db:"self_status" json:"self_status"`
+	LastStatsPost    pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
+}
+
+// Tag-overlap similarity: other approved/certified bots sharing at least
+// one tag with bot_id, ranked by how many tags they share (most first),
+// votes as the tiebreak. No ML/embeddings -- tags are the only structured
+// signal bots already carry, and it's cheap, deterministic, and explains
+// itself ("shares N tags with this bot").
+func (q *Queries) GetSimilarBots(ctx context.Context, botID string) ([]GetSimilarBotsRow, error) {
+	rows, err := q.db.Query(ctx, getSimilarBots, botID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSimilarBotsRow
+	for rows.Next() {
+		var i GetSimilarBotsRow
+		if err := rows.Scan(
+			&i.BotID,
+			&i.Short,
+			&i.Type,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.Shards,
+			&i.Library,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Servers,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.CreatedAt,
+			&i.SelfStatus,
+			&i.LastStatsPost,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+			&i.VoteBlitzUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSpotlightIndexBots = `-- name: GetSpotlightIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
 FROM bots WHERE (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9

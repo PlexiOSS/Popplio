@@ -152,6 +152,20 @@ WHERE (type = 'approved' OR type = 'certified') AND state = 'public'
 ORDER BY RANDOM()
 LIMIT 3;
 
+-- name: GetSimilarServers :many
+-- Tag-overlap similarity, mirroring GetSimilarBots -- see its comment.
+WITH source_tags AS (
+    SELECT tags FROM servers WHERE server_id = sqlc.arg('server_id')
+)
+SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes, s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until
+FROM servers s, source_tags st
+WHERE (s.type = 'approved' OR s.type = 'certified')
+AND s.state = 'public'
+AND s.server_id != sqlc.arg('server_id')
+AND s.tags && st.tags
+ORDER BY cardinality(ARRAY(SELECT unnest(s.tags) INTERSECT SELECT unnest(st.tags))) DESC, s.approximate_votes DESC
+LIMIT 6;
+
 -- name: GetFlatEmojis :many
 SELECT s.server_id AS server_id, s.name AS server_name, s.avatar AS server_avatar,
 	(e->>'id')::text AS id, (e->>'name')::text AS name, coalesce((e->>'animated')::boolean, false)::boolean AS animated, (e->>'url')::text AS url

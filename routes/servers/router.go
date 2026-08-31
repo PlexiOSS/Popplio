@@ -18,6 +18,7 @@ import (
 	"popplio/routes/servers/endpoints/get_server_seo"
 	"popplio/routes/servers/endpoints/get_servers_emojis"
 	"popplio/routes/servers/endpoints/get_servers_index"
+	"popplio/routes/servers/endpoints/get_similar_servers"
 	"popplio/routes/servers/endpoints/patch_server_settings"
 	"popplio/routes/servers/endpoints/post_server_stats"
 
@@ -151,6 +152,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_server_seo.Docs,
 		Handler: get_server_seo.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/similar",
+		OpId:    "get_similar_servers",
+		Method:  uapi.GET,
+		Docs:    get_similar_servers.Docs,
+		Handler: get_similar_servers.Route,
 	}.Route(r)
 
 	uapi.Route{

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET /votes/leaderboard` -- the most active voters, all-time, by total
+  upvotes cast across every entity. Public, unauthenticated,
+  `?limit=` (default 10, capped at 50). New `GetTopVoters` query,
+  deliberately not scoped to the current post-reset voting cycle (counts
+  every upvote ever cast, void or not) -- same lifetime-cumulative shape
+  as the existing `GetTopReviewers`/Top Reviewers Discord-role sync,
+  chosen so the board isn't wiped every time the monthly automated reset
+  runs.
 - Vote credit tiers (the votes -> credits ladder) for `server`, `team`,
   and `pack`, mirroring the existing bot ladder (25/50/100/200 votes ->
   2/5/10/20 cents). Redemption itself (`POST

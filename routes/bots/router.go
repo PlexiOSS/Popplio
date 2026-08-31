@@ -20,6 +20,7 @@ import (
 	"popplio/routes/bots/endpoints/get_bot_seo"
 	"popplio/routes/bots/endpoints/get_bots_index"
 	"popplio/routes/bots/endpoints/get_random_bots"
+	"popplio/routes/bots/endpoints/get_similar_bots"
 	"popplio/routes/bots/endpoints/patch_bot_settings"
 	"popplio/routes/bots/endpoints/patch_bot_team"
 	"popplio/routes/bots/endpoints/post_bot_stats"
@@ -98,6 +99,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_bot_seo.Docs,
 		Handler: get_bot_seo.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/similar",
+		OpId:    "get_similar_bots",
+		Method:  uapi.GET,
+		Docs:    get_similar_bots.Docs,
+		Handler: get_similar_bots.Route,
 	}.Route(r)
 
 	uapi.Route{

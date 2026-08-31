@@ -237,6 +237,23 @@ WHERE (type = 'approved' OR type = 'certified')
 ORDER BY RANDOM()
 LIMIT 6;
 
+-- name: GetSimilarBots :many
+-- Tag-overlap similarity: other approved/certified bots sharing at least
+-- one tag with bot_id, ranked by how many tags they share (most first),
+-- votes as the tiebreak. No ML/embeddings -- tags are the only structured
+-- signal bots already carry, and it's cheap, deterministic, and explains
+-- itself ("shares N tags with this bot").
+WITH source_tags AS (
+    SELECT tags FROM bots WHERE bot_id = sqlc.arg('bot_id')
+)
+SELECT b.bot_id, b.short, b.type, b.vanity_ref, b.approximate_votes, b.shards, b.library, b.invite_clicks, b.clicks, b.servers, b.nsfw, b.tags, b.premium, b.created_at, b.self_status, b.last_stats_post, b.supporter_badge, b.boosted_until, b.featured_until, b.spotlighted_until, b.vote_blitz_until
+FROM bots b, source_tags st
+WHERE (b.type = 'approved' OR b.type = 'certified')
+AND b.bot_id != sqlc.arg('bot_id')
+AND b.tags && st.tags
+ORDER BY cardinality(ARRAY(SELECT unnest(b.tags) INTERSECT SELECT unnest(st.tags))) DESC, b.approximate_votes DESC
+LIMIT 6;
+
 -- name: GetIndexBotsPaged :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
 FROM bots

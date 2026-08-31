@@ -1385,6 +1385,83 @@ func (q *Queries) GetServersWithEmojisShown(ctx context.Context) ([]string, erro
 	return items, nil
 }
 
+const getSimilarServers = `-- name: GetSimilarServers :many
+WITH source_tags AS (
+    SELECT tags FROM servers WHERE server_id = $1
+)
+SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes, s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until
+FROM servers s, source_tags st
+WHERE (s.type = 'approved' OR s.type = 'certified')
+AND s.state = 'public'
+AND s.server_id != $1
+AND s.tags && st.tags
+ORDER BY cardinality(ARRAY(SELECT unnest(s.tags) INTERSECT SELECT unnest(st.tags))) DESC, s.approximate_votes DESC
+LIMIT 6
+`
+
+type GetSimilarServersRow struct {
+	ServerID         string             `db:"server_id" json:"server_id"`
+	Name             string             `db:"name" json:"name"`
+	Avatar           string             `db:"avatar" json:"avatar"`
+	TotalMembers     int32              `db:"total_members" json:"total_members"`
+	OnlineMembers    int32              `db:"online_members" json:"online_members"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	State            string             `db:"state" json:"state"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+}
+
+// Tag-overlap similarity, mirroring GetSimilarBots -- see its comment.
+func (q *Queries) GetSimilarServers(ctx context.Context, serverID string) ([]GetSimilarServersRow, error) {
+	rows, err := q.db.Query(ctx, getSimilarServers, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSimilarServersRow
+	for rows.Next() {
+		var i GetSimilarServersRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.Name,
+			&i.Avatar,
+			&i.TotalMembers,
+			&i.OnlineMembers,
+			&i.Short,
+			&i.Type,
+			&i.State,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSpotlightIndexServers = `-- name: GetSpotlightIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
 FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9
