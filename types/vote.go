@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
 // @ci table=entity_votes
@@ -93,4 +95,10 @@ type EntityVoteRedeemLogSummary struct {
 	TotalCredits     int                    `json:"total_credits" description:"The total amount of credits available"`
 	AvailableCredits int                    `json:"available_credits" description:"The total amount of credits that can be redeemed"`
 	RedeemedCredits  int                    `json:"redeemed_credits" description:"The total amount of credits that have been redeemed"`
+}
+
+// One row of the voter leaderboard
+type VoterLeaderboardEntry struct {
+	User  *dovetypes.PlatformUser `json:"user" description:"The voter"`
+	Votes int                     `json:"votes" description:"The voter's all-time upvote count, across every entity"`
 }

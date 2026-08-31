@@ -148,3 +148,17 @@ SELECT target_id, target_type, created_at, redeemed_at, id, redeemed_credits, cr
 FROM entity_vote_redeem_logs
 WHERE target_id = $1 AND target_type = $2
 ORDER BY created_at DESC;
+
+-- name: GetTopVoters :many
+-- All-time, not scoped to the current post-reset cycle -- deliberately
+-- counts every upvote a user has ever cast (void or not), same "lifetime
+-- cumulative, no time window" shape as GetTopReviewers. Filtering to
+-- void = false would wipe most of the board every time the monthly
+-- automated reset runs, which defeats the point of recognizing a
+-- consistently active voter.
+SELECT author, COUNT(*) AS vote_count
+FROM entity_votes
+WHERE upvote = true
+GROUP BY author
+ORDER BY vote_count DESC
+LIMIT $1;

@@ -15,6 +15,7 @@ import (
 	"popplio/routes/votes/endpoints/get_vote_captcha_challenge"
 	"popplio/routes/votes/endpoints/get_vote_credit_tiers"
 	"popplio/routes/votes/endpoints/get_vote_redeem_logs"
+	"popplio/routes/votes/endpoints/get_voter_leaderboard"
 	"popplio/routes/votes/endpoints/get_votes_user_list"
 	"popplio/routes/votes/endpoints/redeem_vote_credits"
 	"popplio/validators"
@@ -39,6 +40,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_general_vote_credit_tiers.Docs,
 		Handler: get_general_vote_credit_tiers.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/votes/leaderboard",
+		OpId:    "get_voter_leaderboard",
+		Method:  uapi.GET,
+		Docs:    get_voter_leaderboard.Docs,
+		Handler: get_voter_leaderboard.Route,
 	}.Route(r)
 
 	uapi.Route{

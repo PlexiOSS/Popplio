@@ -300,6 +300,46 @@ func (q *Queries) GetTeamVoteStatus(ctx context.Context, id string) (GetTeamVote
 	return i, err
 }
 
+const getTopVoters = `-- name: GetTopVoters :many
+SELECT author, COUNT(*) AS vote_count
+FROM entity_votes
+WHERE upvote = true
+GROUP BY author
+ORDER BY vote_count DESC
+LIMIT $1
+`
+
+type GetTopVotersRow struct {
+	Author    string `db:"author" json:"author"`
+	VoteCount int64  `db:"vote_count" json:"vote_count"`
+}
+
+// All-time, not scoped to the current post-reset cycle -- deliberately
+// counts every upvote a user has ever cast (void or not), same "lifetime
+// cumulative, no time window" shape as GetTopReviewers. Filtering to
+// void = false would wipe most of the board every time the monthly
+// automated reset runs, which defeats the point of recognizing a
+// consistently active voter.
+func (q *Queries) GetTopVoters(ctx context.Context, limit int32) ([]GetTopVotersRow, error) {
+	rows, err := q.db.Query(ctx, getTopVoters, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTopVotersRow
+	for rows.Next() {
+		var i GetTopVotersRow
+		if err := rows.Scan(&i.Author, &i.VoteCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserEntityVotesPage = `-- name: GetUserEntityVotesPage :many
 SELECT itag, target_id, target_type, author, upvote, void, void_reason, voided_at, created_at, vote_num, credit_redeem, immutable
 FROM entity_votes
