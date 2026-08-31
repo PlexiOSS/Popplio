@@ -7,8 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-08-31
+
 ### Added
 
+- A new "Server Templates" route group for user-submitted Discord server
+  template listings (`discord.com/template/<code>`): `PUT
+  /users/{id}/server-templates` (create), `GET /server-templates/@all`
+  (paginated, filterable by `tags`/`owner`), `GET /server-templates/{id}`,
+  `DELETE /users/{id}/server-templates/{id}` (owner-only). New
+  `server_templates` table. Same trust model as packs -- no staff review
+  queue, owner creates/deletes directly. A submission's `name` is pulled
+  from Discord's own public, unauthenticated `GET
+  /guilds/templates/{code}` at creation time (confirmed no bot token or
+  auth needed), which is also what actually validates the code -- Popplio
+  itself does no format-checking beyond length bounds.
+- `GET /bots/{id}/similar` and `GET /servers/{id}/similar` -- other
+  approved/certified (and, for servers, publicly listed) entries sharing
+  at least one tag, ranked by how many tags they share, votes as the
+  tiebreak. New `GetSimilarBots`/`GetSimilarServers` queries (tag-overlap
+  via `unnest`/`INTERSECT`, no ML/embeddings -- tags are the only
+  structured signal these already carry, and it's cheap, deterministic,
+  and explains itself). No matches just means an empty list, not an
+  error.
 - `GET /votes/leaderboard` -- the most active voters, all-time, by total
   upvotes cast across every entity. Public, unauthenticated,
   `?limit=` (default 10, capped at 50). New `GetTopVoters` query,

@@ -384,6 +384,19 @@ type Server struct {
 	SpotlightedUntil       pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
 }
 
+type ServerTemplate struct {
+	ID         string             `db:"id" json:"id"`
+	Code       string             `db:"code" json:"code"`
+	Name       string             `db:"name" json:"name"`
+	Short      string             `db:"short" json:"short"`
+	Tags       []string           `db:"tags" json:"tags"`
+	Nsfw       bool               `db:"nsfw" json:"nsfw"`
+	Owner      string             `db:"owner" json:"owner"`
+	UsageCount int32              `db:"usage_count" json:"usage_count"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type ShopCoupon struct {
 	ID                string             `db:"id" json:"id"`
 	Code              string             `db:"code" json:"code"`

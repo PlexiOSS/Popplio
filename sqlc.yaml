@@ -83,6 +83,9 @@ sql:
           - column: "teams.id"
             go_type:
               type: "string"
+          - column: "server_templates.id"
+            go_type:
+              type: "string"
           - column: "teams.extra_links"
             go_type:
               type: "[]byte"

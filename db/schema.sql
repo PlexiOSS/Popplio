@@ -620,6 +620,24 @@ CREATE TABLE public.rpc_logs (
 
 
 --
+-- Name: server_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.server_templates (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    short text NOT NULL,
+    tags text[] DEFAULT '{}'::text[] NOT NULL,
+    nsfw boolean DEFAULT false NOT NULL,
+    owner text NOT NULL,
+    usage_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: servers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1444,6 +1462,14 @@ ALTER TABLE ONLY public.rpc_logs
 
 
 --
+-- Name: server_templates server_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.server_templates
+    ADD CONSTRAINT server_templates_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: servers servers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1821,6 +1847,20 @@ CREATE INDEX reports_status_idx ON public.reports USING btree (status);
 --
 
 CREATE INDEX reports_target_idx ON public.reports USING btree (target_type, target_id);
+
+
+--
+-- Name: server_templates_code_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX server_templates_code_key ON public.server_templates USING btree (code);
+
+
+--
+-- Name: server_templates_owner_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX server_templates_owner_idx ON public.server_templates USING btree (owner);
 
 
 --
