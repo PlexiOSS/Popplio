@@ -68,5 +68,17 @@ UPDATE packs SET name = $1, short = $2, tags = $3, bots = $4, servers = $5 WHERE
 SELECT url, name, short, pack_type, owner, tags, vote_banned
 FROM packs WHERE url = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text ORDER BY created_at;
 
+-- name: SearchPacksPublic :many
+SELECT url, name, short, pack_type, owner, tags, bots, servers, vote_banned
+FROM packs
+WHERE (sqlc.arg('query')::text = '' OR url = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text)
+AND (
+    cardinality(sqlc.arg('tags')::text[]) = 0
+    OR (sqlc.arg('tag_mode')::text = '@>' AND tags @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND tags && sqlc.arg('tags')::text[])
+)
+ORDER BY created_at DESC
+LIMIT 12;
+
 -- name: DeletePackEmojis :exec
 DELETE FROM pack_emojis WHERE pack_url = $1;

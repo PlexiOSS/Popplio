@@ -167,6 +167,17 @@ func (q *Queries) CountShopCouponByID(ctx context.Context, id string) (bool, err
 	return exists, err
 }
 
+const countShopCouponRedemptions = `-- name: CountShopCouponRedemptions :one
+SELECT COUNT(*) FROM shop_coupon_redemptions WHERE coupon_id = $1
+`
+
+func (q *Queries) CountShopCouponRedemptions(ctx context.Context, couponID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countShopCouponRedemptions, couponID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countShopItemBenefitByID = `-- name: CountShopItemBenefitByID :one
 SELECT EXISTS(SELECT 1 FROM shop_item_benefits WHERE id = $1)
 `
@@ -273,6 +284,25 @@ func (q *Queries) DeleteVoteCreditTier(ctx context.Context, id string) error {
 	return err
 }
 
+const getLastShopCouponRedemptionForTarget = `-- name: GetLastShopCouponRedemptionForTarget :one
+SELECT created_at FROM shop_coupon_redemptions
+WHERE coupon_id = $1 AND target_type = $2 AND target_id = $3
+ORDER BY created_at DESC LIMIT 1
+`
+
+type GetLastShopCouponRedemptionForTargetParams struct {
+	CouponID   string `db:"coupon_id" json:"coupon_id"`
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+}
+
+func (q *Queries) GetLastShopCouponRedemptionForTarget(ctx context.Context, arg GetLastShopCouponRedemptionForTargetParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLastShopCouponRedemptionForTarget, arg.CouponID, arg.TargetType, arg.TargetID)
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getPublicShopCoupons = `-- name: GetPublicShopCoupons :many
 SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, requirements, allowed_users, usable, target_types, cents
 FROM shop_coupons
@@ -350,6 +380,38 @@ func (q *Queries) GetRedeemableCreditBatches(ctx context.Context, arg GetRedeema
 		return nil, err
 	}
 	return items, nil
+}
+
+const getShopCouponByCode = `-- name: GetShopCouponByCode :one
+
+SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, requirements, allowed_users, usable, target_types, cents
+FROM shop_coupons
+WHERE code = $1
+`
+
+// Coupon redemption (purchase_shop_item route) -----------------------------
+func (q *Queries) GetShopCouponByCode(ctx context.Context, code string) (ShopCoupon, error) {
+	row := q.db.QueryRow(ctx, getShopCouponByCode, code)
+	var i ShopCoupon
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Public,
+		&i.MaxUses,
+		&i.CreatedAt,
+		&i.CreatedBy,
+		&i.LastUpdated,
+		&i.UpdatedBy,
+		&i.ReuseWaitDuration,
+		&i.Expiry,
+		&i.ApplicableItems,
+		&i.Requirements,
+		&i.AllowedUsers,
+		&i.Usable,
+		&i.TargetTypes,
+		&i.Cents,
+	)
+	return i, err
 }
 
 const getShopItemBenefits = `-- name: GetShopItemBenefits :many
@@ -540,6 +602,28 @@ func (q *Queries) InsertShopCoupon(ctx context.Context, arg InsertShopCouponPara
 		arg.AllowedUsers,
 		arg.Usable,
 		arg.TargetTypes,
+	)
+	return err
+}
+
+const insertShopCouponRedemption = `-- name: InsertShopCouponRedemption :exec
+INSERT INTO shop_coupon_redemptions (coupon_id, target_type, target_id, redeemed_by)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertShopCouponRedemptionParams struct {
+	CouponID   string `db:"coupon_id" json:"coupon_id"`
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+	RedeemedBy string `db:"redeemed_by" json:"redeemed_by"`
+}
+
+func (q *Queries) InsertShopCouponRedemption(ctx context.Context, arg InsertShopCouponRedemptionParams) error {
+	_, err := q.db.Exec(ctx, insertShopCouponRedemption,
+		arg.CouponID,
+		arg.TargetType,
+		arg.TargetID,
+		arg.RedeemedBy,
 	)
 	return err
 }

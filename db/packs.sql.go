@@ -446,6 +446,73 @@ func (q *Queries) InsertPackEmoji(ctx context.Context, arg InsertPackEmojiParams
 	return err
 }
 
+const searchPacksPublic = `-- name: SearchPacksPublic :many
+SELECT url, name, short, pack_type, owner, tags, bots, servers, vote_banned
+FROM packs
+WHERE ($1::text = '' OR url = $1::text OR name ILIKE $2::text)
+AND (
+    cardinality($3::text[]) = 0
+    OR ($4::text = '@>' AND tags @> $3::text[])
+    OR ($4::text = '&&' AND tags && $3::text[])
+)
+ORDER BY created_at DESC
+LIMIT 12
+`
+
+type SearchPacksPublicParams struct {
+	Query   string   `db:"query" json:"query"`
+	Pattern string   `db:"pattern" json:"pattern"`
+	Tags    []string `db:"tags" json:"tags"`
+	TagMode string   `db:"tag_mode" json:"tag_mode"`
+}
+
+type SearchPacksPublicRow struct {
+	Url        string   `db:"url" json:"url"`
+	Name       string   `db:"name" json:"name"`
+	Short      string   `db:"short" json:"short"`
+	PackType   string   `db:"pack_type" json:"pack_type"`
+	Owner      string   `db:"owner" json:"owner"`
+	Tags       []string `db:"tags" json:"tags"`
+	Bots       []string `db:"bots" json:"bots"`
+	Servers    []string `db:"servers" json:"servers"`
+	VoteBanned bool     `db:"vote_banned" json:"vote_banned"`
+}
+
+func (q *Queries) SearchPacksPublic(ctx context.Context, arg SearchPacksPublicParams) ([]SearchPacksPublicRow, error) {
+	rows, err := q.db.Query(ctx, searchPacksPublic,
+		arg.Query,
+		arg.Pattern,
+		arg.Tags,
+		arg.TagMode,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPacksPublicRow
+	for rows.Next() {
+		var i SearchPacksPublicRow
+		if err := rows.Scan(
+			&i.Url,
+			&i.Name,
+			&i.Short,
+			&i.PackType,
+			&i.Owner,
+			&i.Tags,
+			&i.Bots,
+			&i.Servers,
+			&i.VoteBanned,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchPacksQueue = `-- name: SearchPacksQueue :many
 SELECT url, name, short, pack_type, owner, tags, vote_banned
 FROM packs WHERE url = $1::text OR name ILIKE $2::text ORDER BY created_at

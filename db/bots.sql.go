@@ -1922,6 +1922,131 @@ func (q *Queries) ResubmitBot(ctx context.Context, botID string) error {
 	return err
 }
 
+const searchBotsPublic = `-- name: SearchBotsPublic :many
+SELECT bots.bot_id, bots.short, bots.type, bots.vanity_ref, bots.approximate_votes, bots.shards, bots.library,
+    bots.invite_clicks, bots.clicks, bots.servers, bots.nsfw, bots.tags, bots.premium, bots.created_at,
+    bots.self_status, bots.last_stats_post, bots.supporter_badge, bots.boosted_until, bots.featured_until,
+    bots.spotlighted_until, bots.vote_blitz_until
+FROM bots
+LEFT JOIN internal_user_cache__discord iucd ON bots.bot_id = iucd.id
+WHERE (bots.type = 'approved' OR bots.type = 'certified')
+AND ($1::int = 0 OR bots.servers >= $1::int)
+AND ($2::int = 0 OR bots.servers <= $2::int)
+AND ($3::int = 0 OR bots.approximate_votes >= $3::int)
+AND ($4::int = 0 OR bots.approximate_votes <= $4::int)
+AND ($5::int = 0 OR bots.shards >= $5::int)
+AND ($6::int = 0 OR bots.shards <= $6::int)
+AND (
+    cardinality($7::text[]) = 0
+    OR ($8::text = '@>' AND bots.tags @> $7::text[])
+    OR ($8::text = '&&' AND bots.tags && $7::text[])
+)
+AND (
+    $9::text = ''
+    OR bots.short @@ $9::text
+    OR bots.bot_id = $9::text
+    OR bots.client_id = $9::text
+    OR iucd.username @@ $9::text
+    OR iucd.username ILIKE $10::text
+)
+ORDER BY bots.approximate_votes DESC, bots.type DESC
+LIMIT 12
+`
+
+type SearchBotsPublicParams struct {
+	ServersFrom int32    `db:"servers_from" json:"servers_from"`
+	ServersTo   int32    `db:"servers_to" json:"servers_to"`
+	VotesFrom   int32    `db:"votes_from" json:"votes_from"`
+	VotesTo     int32    `db:"votes_to" json:"votes_to"`
+	ShardsFrom  int32    `db:"shards_from" json:"shards_from"`
+	ShardsTo    int32    `db:"shards_to" json:"shards_to"`
+	Tags        []string `db:"tags" json:"tags"`
+	TagMode     string   `db:"tag_mode" json:"tag_mode"`
+	Query       string   `db:"query" json:"query"`
+	Pattern     string   `db:"pattern" json:"pattern"`
+}
+
+type SearchBotsPublicRow struct {
+	BotID            string             `db:"bot_id" json:"bot_id"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	Shards           int32              `db:"shards" json:"shards"`
+	Library          string             `db:"library" json:"library"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Servers          int32              `db:"servers" json:"servers"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	SelfStatus       pgtype.Text        `db:"self_status" json:"self_status"`
+	LastStatsPost    pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
+}
+
+// Backs POST /list/search's "bot" target type. iucd is the Discord user
+// cache (internal_user_cache__discord) -- left-joined unconditionally so
+// bots with no cached user row still show up when there's no text query,
+// same as the raw-SQL version this replaced only inner-joining when needed.
+func (q *Queries) SearchBotsPublic(ctx context.Context, arg SearchBotsPublicParams) ([]SearchBotsPublicRow, error) {
+	rows, err := q.db.Query(ctx, searchBotsPublic,
+		arg.ServersFrom,
+		arg.ServersTo,
+		arg.VotesFrom,
+		arg.VotesTo,
+		arg.ShardsFrom,
+		arg.ShardsTo,
+		arg.Tags,
+		arg.TagMode,
+		arg.Query,
+		arg.Pattern,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchBotsPublicRow
+	for rows.Next() {
+		var i SearchBotsPublicRow
+		if err := rows.Scan(
+			&i.BotID,
+			&i.Short,
+			&i.Type,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.Shards,
+			&i.Library,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Servers,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.CreatedAt,
+			&i.SelfStatus,
+			&i.LastStatsPost,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+			&i.VoteBlitzUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchBotsQueue = `-- name: SearchBotsQueue :many
 SELECT bots.bot_id, bots.client_id, bots.type, bots.approximate_votes, bots.shards, bots.library, bots.invite_clicks, bots.clicks,
        bots.servers, bots.last_claimed, bots.claimed_by, bots.approval_note, bots.short, bots.invite,

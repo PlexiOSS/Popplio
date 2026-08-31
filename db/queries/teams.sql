@@ -91,7 +91,21 @@ SELECT COUNT(*) FROM servers WHERE team_owner = $1;
 
 -- name: SearchTeamsQueue :many
 SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned
-FROM teams WHERE id = sqlc.arg('query') OR name ILIKE sqlc.arg('pattern')::text ORDER BY created_at;
+FROM teams WHERE id::text = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text ORDER BY created_at;
+
+-- name: SearchTeamsPublic :many
+SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned, approximate_votes
+FROM teams
+WHERE (sqlc.arg('query')::text = '' OR id::text = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text)
+AND (
+    cardinality(sqlc.arg('tags')::text[]) = 0
+    OR (sqlc.arg('tag_mode')::text = '@>' AND tags @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND tags && sqlc.arg('tags')::text[])
+)
+AND (sqlc.arg('votes_from')::int = 0 OR approximate_votes >= sqlc.arg('votes_from')::int)
+AND (sqlc.arg('votes_to')::int = 0 OR approximate_votes <= sqlc.arg('votes_to')::int)
+ORDER BY approximate_votes DESC, created_at DESC
+LIMIT 12;
 
 -- name: DeleteTeamMembers :exec
 DELETE FROM team_members WHERE team_id = $1;

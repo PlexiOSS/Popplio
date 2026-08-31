@@ -19,7 +19,7 @@ type TagFilter struct {
 
 type SearchQuery struct {
 	Query        string       `json:"query"`
-	TargetTypes  []string     `json:"target_types"` // Defaults to 'bot' if unset
+	TargetTypes  []string     `json:"target_types"`
 	Servers      SearchFilter `json:"servers" msg:"Servers must be a valid filter"`
 	Votes        SearchFilter `json:"votes" msg:"Votes must be a valid filter"`
 	Shards       SearchFilter `json:"shards" msg:"Shards must be a valid filter"`
@@ -31,4 +31,6 @@ type SearchResponse struct {
 	TargetTypes []string      `json:"target_types"`
 	Bots        []IndexBot    `json:"bots,omitempty"`
 	Servers     []IndexServer `json:"servers,omitempty"`
+	Teams       []Team        `json:"teams,omitempty"`
+	Packs       []BotPack     `json:"packs,omitempty"`
 }

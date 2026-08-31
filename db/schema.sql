@@ -674,6 +674,20 @@ CREATE TABLE public.servers (
 
 
 --
+-- Name: shop_coupon_redemptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shop_coupon_redemptions (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    coupon_id text NOT NULL,
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    redeemed_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: shop_coupons; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1446,6 +1460,22 @@ ALTER TABLE ONLY public.shop_holds
 
 
 --
+-- Name: shop_coupon_redemptions shop_coupon_redemptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_coupon_redemptions
+    ADD CONSTRAINT shop_coupon_redemptions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shop_coupons shop_coupons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_coupons
+    ADD CONSTRAINT shop_coupons_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: shop_item_benefits shop_item_benefits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1815,6 +1845,20 @@ CREATE INDEX servers_short_fts_idx ON public.servers USING gin (to_tsvector('eng
 
 
 --
+-- Name: shop_coupon_redemptions_coupon_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shop_coupon_redemptions_coupon_id_idx ON public.shop_coupon_redemptions USING btree (coupon_id);
+
+
+--
+-- Name: shop_coupon_redemptions_target_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shop_coupon_redemptions_target_idx ON public.shop_coupon_redemptions USING btree (target_type, target_id);
+
+
+--
 -- Name: shop_purchases_target_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1976,6 +2020,14 @@ ALTER TABLE ONLY public.servers
 
 ALTER TABLE ONLY public.servers
     ADD CONSTRAINT servers_vanity_ref_fkey FOREIGN KEY (vanity_ref) REFERENCES public.vanity(itag) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: shop_coupon_redemptions shop_coupon_redemptions_coupon_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_coupon_redemptions
+    ADD CONSTRAINT shop_coupon_redemptions_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.shop_coupons(id) ON DELETE CASCADE;
 
 
 --

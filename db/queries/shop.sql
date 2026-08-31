@@ -116,6 +116,25 @@ UPDATE shop_coupons SET code = $1, public = $2, max_uses = $3, reuse_wait_durati
 -- name: DeleteShopCoupon :exec
 DELETE FROM shop_coupons WHERE id = $1;
 
+-- Coupon redemption (purchase_shop_item route) -----------------------------
+
+-- name: GetShopCouponByCode :one
+SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, requirements, allowed_users, usable, target_types, cents
+FROM shop_coupons
+WHERE code = $1;
+
+-- name: CountShopCouponRedemptions :one
+SELECT COUNT(*) FROM shop_coupon_redemptions WHERE coupon_id = $1;
+
+-- name: GetLastShopCouponRedemptionForTarget :one
+SELECT created_at FROM shop_coupon_redemptions
+WHERE coupon_id = $1 AND target_type = $2 AND target_id = $3
+ORDER BY created_at DESC LIMIT 1;
+
+-- name: InsertShopCouponRedemption :exec
+INSERT INTO shop_coupon_redemptions (coupon_id, target_type, target_id, redeemed_by)
+VALUES ($1, $2, $3, $4);
+
 -- name: ListVoteCreditTiers :many
 SELECT id, target_type, position, cents, votes, created_at FROM vote_credit_tiers ORDER BY position ASC;
 

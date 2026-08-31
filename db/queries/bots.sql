@@ -8,6 +8,40 @@ SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invi
 FROM bots
 WHERE bot_id = $1;
 
+-- name: SearchBotsPublic :many
+-- Backs POST /list/search's "bot" target type. iucd is the Discord user
+-- cache (internal_user_cache__discord) -- left-joined unconditionally so
+-- bots with no cached user row still show up when there's no text query,
+-- same as the raw-SQL version this replaced only inner-joining when needed.
+SELECT bots.bot_id, bots.short, bots.type, bots.vanity_ref, bots.approximate_votes, bots.shards, bots.library,
+    bots.invite_clicks, bots.clicks, bots.servers, bots.nsfw, bots.tags, bots.premium, bots.created_at,
+    bots.self_status, bots.last_stats_post, bots.supporter_badge, bots.boosted_until, bots.featured_until,
+    bots.spotlighted_until, bots.vote_blitz_until
+FROM bots
+LEFT JOIN internal_user_cache__discord iucd ON bots.bot_id = iucd.id
+WHERE (bots.type = 'approved' OR bots.type = 'certified')
+AND (sqlc.arg('servers_from')::int = 0 OR bots.servers >= sqlc.arg('servers_from')::int)
+AND (sqlc.arg('servers_to')::int = 0 OR bots.servers <= sqlc.arg('servers_to')::int)
+AND (sqlc.arg('votes_from')::int = 0 OR bots.approximate_votes >= sqlc.arg('votes_from')::int)
+AND (sqlc.arg('votes_to')::int = 0 OR bots.approximate_votes <= sqlc.arg('votes_to')::int)
+AND (sqlc.arg('shards_from')::int = 0 OR bots.shards >= sqlc.arg('shards_from')::int)
+AND (sqlc.arg('shards_to')::int = 0 OR bots.shards <= sqlc.arg('shards_to')::int)
+AND (
+    cardinality(sqlc.arg('tags')::text[]) = 0
+    OR (sqlc.arg('tag_mode')::text = '@>' AND bots.tags @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND bots.tags && sqlc.arg('tags')::text[])
+)
+AND (
+    sqlc.arg('query')::text = ''
+    OR bots.short @@ sqlc.arg('query')::text
+    OR bots.bot_id = sqlc.arg('query')::text
+    OR bots.client_id = sqlc.arg('query')::text
+    OR iucd.username @@ sqlc.arg('query')::text
+    OR iucd.username ILIKE sqlc.arg('pattern')::text
+)
+ORDER BY bots.approximate_votes DESC, bots.type DESC
+LIMIT 12;
+
 -- name: GetBotsDueForModerationScan :many
 SELECT bot_id, short, long
 FROM bots

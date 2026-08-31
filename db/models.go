@@ -403,6 +403,15 @@ type ShopCoupon struct {
 	Cents             pgtype.Float8      `db:"cents" json:"cents"`
 }
 
+type ShopCouponRedemption struct {
+	ID         pgtype.UUID        `db:"id" json:"id"`
+	CouponID   string             `db:"coupon_id" json:"coupon_id"`
+	TargetType string             `db:"target_type" json:"target_type"`
+	TargetID   string             `db:"target_id" json:"target_id"`
+	RedeemedBy string             `db:"redeemed_by" json:"redeemed_by"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type ShopHold struct {
 	TargetID   string             `db:"target_id" json:"target_id"`
 	TargetType string             `db:"target_type" json:"target_type"`

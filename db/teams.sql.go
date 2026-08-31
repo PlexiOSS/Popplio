@@ -680,9 +680,78 @@ func (q *Queries) PromoteTeamMemberToOwner(ctx context.Context, arg PromoteTeamM
 	return err
 }
 
+const searchTeamsPublic = `-- name: SearchTeamsPublic :many
+SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned, approximate_votes
+FROM teams
+WHERE ($1::text = '' OR id::text = $1::text OR name ILIKE $2::text)
+AND (
+    cardinality($3::text[]) = 0
+    OR ($4::text = '@>' AND tags @> $3::text[])
+    OR ($4::text = '&&' AND tags && $3::text[])
+)
+AND ($5::int = 0 OR approximate_votes >= $5::int)
+AND ($6::int = 0 OR approximate_votes <= $6::int)
+ORDER BY approximate_votes DESC, created_at DESC
+LIMIT 12
+`
+
+type SearchTeamsPublicParams struct {
+	Query     string   `db:"query" json:"query"`
+	Pattern   string   `db:"pattern" json:"pattern"`
+	Tags      []string `db:"tags" json:"tags"`
+	TagMode   string   `db:"tag_mode" json:"tag_mode"`
+	VotesFrom int32    `db:"votes_from" json:"votes_from"`
+	VotesTo   int32    `db:"votes_to" json:"votes_to"`
+}
+
+type SearchTeamsPublicRow struct {
+	ID               string   `db:"id" json:"id"`
+	Name             string   `db:"name" json:"name"`
+	Short            string   `db:"short" json:"short"`
+	Tags             []string `db:"tags" json:"tags"`
+	Nsfw             bool     `db:"nsfw" json:"nsfw"`
+	VoteBanned       bool     `db:"vote_banned" json:"vote_banned"`
+	ApproximateVotes int32    `db:"approximate_votes" json:"approximate_votes"`
+}
+
+func (q *Queries) SearchTeamsPublic(ctx context.Context, arg SearchTeamsPublicParams) ([]SearchTeamsPublicRow, error) {
+	rows, err := q.db.Query(ctx, searchTeamsPublic,
+		arg.Query,
+		arg.Pattern,
+		arg.Tags,
+		arg.TagMode,
+		arg.VotesFrom,
+		arg.VotesTo,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchTeamsPublicRow
+	for rows.Next() {
+		var i SearchTeamsPublicRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Short,
+			&i.Tags,
+			&i.Nsfw,
+			&i.VoteBanned,
+			&i.ApproximateVotes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchTeamsQueue = `-- name: SearchTeamsQueue :many
 SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned
-FROM teams WHERE id = $1 OR name ILIKE $2::text ORDER BY created_at
+FROM teams WHERE id::text = $1::text OR name ILIKE $2::text ORDER BY created_at
 `
 
 type SearchTeamsQueueParams struct {

@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/db"
@@ -26,7 +27,8 @@ import (
 )
 
 type PurchaseShopItem struct {
-	ItemID string `json:"item_id" validate:"required" msg:"Item ID is required."`
+	ItemID     string `json:"item_id" validate:"required" msg:"Item ID is required."`
+	CouponCode string `json:"coupon_code" description:"An optional coupon code to apply to this purchase"`
 }
 
 var (
@@ -36,7 +38,7 @@ var (
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Purchase Shop Item",
-		Description: "Spends an entity's earned vote credits on a shop item. Returns a 204 on success.",
+		Description: "Spends an entity's earned vote credits on a shop item, optionally discounted by a coupon code. Returns a 204 on success.",
 		Req:         PurchaseShopItem{},
 		Params: []docs.Parameter{
 			{
@@ -117,6 +119,48 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	itemCents := int(math.Round(item.Cents))
 
+	var coupon *db.ShopCoupon
+
+	if payload.CouponCode != "" {
+		c, err := db.New(state.Pool).GetShopCouponByCode(d.Context, payload.CouponCode)
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			return resp.BadRequest("Invalid coupon code")
+		}
+
+		if err != nil {
+			return resp.Err("Failed to look up coupon", err)
+		}
+
+		if !c.Usable {
+			return resp.BadRequest("This coupon is no longer usable")
+		}
+
+		if c.Expiry.Valid && time.Now().After(c.CreatedAt.Time.Add(time.Duration(c.Expiry.Int32)*time.Hour)) {
+			return resp.BadRequest("This coupon has expired")
+		}
+
+		if len(c.ApplicableItems) > 0 && !slices.Contains(c.ApplicableItems, item.ID) {
+			return resp.BadRequest("This coupon can't be used on this item")
+		}
+
+		if len(c.TargetTypes) > 0 && !slices.Contains(c.TargetTypes, targetType) {
+			return resp.BadRequest("This coupon can't be used for a " + targetType)
+		}
+
+		if len(c.AllowedUsers) > 0 && !slices.Contains(c.AllowedUsers, d.Auth.ID) {
+			return resp.BadRequest("This coupon isn't available to you")
+		}
+
+		if c.Cents.Valid {
+			itemCents = int(math.Round(c.Cents.Float64))
+		} else {
+			itemCents = 0
+		}
+
+		coupon = &c
+	}
+
 	tx, err := state.Pool.Begin(d.Context)
 
 	if err != nil {
@@ -126,6 +170,40 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	defer tx.Rollback(d.Context)
 
 	q := db.New(tx)
+
+	if coupon != nil {
+		if coupon.MaxUses.Valid {
+			uses, err := q.CountShopCouponRedemptions(d.Context, coupon.ID)
+
+			if err != nil {
+				return resp.Err("Failed to check coupon usage", err)
+			}
+
+			if uses >= int64(coupon.MaxUses.Int32) {
+				return resp.BadRequest("This coupon has reached its usage limit")
+			}
+		}
+
+		if coupon.ReuseWaitDuration.Valid {
+			last, err := q.GetLastShopCouponRedemptionForTarget(d.Context, db.GetLastShopCouponRedemptionForTargetParams{
+				CouponID:   coupon.ID,
+				TargetType: targetType,
+				TargetID:   targetID,
+			})
+
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return resp.Err("Failed to check coupon reuse cooldown", err)
+			}
+
+			if err == nil {
+				waitUntil := last.Time.Add(time.Duration(coupon.ReuseWaitDuration.Int32) * time.Hour)
+
+				if time.Now().Before(waitUntil) {
+					return resp.BadRequest("This coupon can't be reused yet for this " + targetType)
+				}
+			}
+		}
+	}
 
 	summary, err := votes.EntityGetVoteRedeemLogsSummary(d.Context, tx, targetID, targetType)
 
@@ -176,11 +254,24 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		TargetType: targetType,
 		TargetID:   targetID,
 		ItemID:     item.ID,
-		Cents:      item.Cents,
+		Cents:      float64(itemCents),
 	})
 
 	if err != nil {
 		return resp.ErrBody("An error occurred while logging the purchase", "An error occurred while logging the purchase.", err)
+	}
+
+	if coupon != nil {
+		err = q.InsertShopCouponRedemption(d.Context, db.InsertShopCouponRedemptionParams{
+			CouponID:   coupon.ID,
+			TargetType: targetType,
+			TargetID:   targetID,
+			RedeemedBy: d.Auth.ID,
+		})
+
+		if err != nil {
+			return resp.ErrBody("An error occurred while logging the coupon redemption", "An error occurred while logging the coupon redemption.", err)
+		}
 	}
 
 	for _, benefitID := range item.Benefits {

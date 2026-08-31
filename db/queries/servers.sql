@@ -8,6 +8,33 @@ SELECT server_id, name, avatar, total_members, online_members, short, type, stat
 FROM servers
 WHERE server_id = $1;
 
+-- name: SearchServersPublic :many
+-- Backs POST /list/search's "server" target type.
+SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes,
+    invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
+FROM servers
+WHERE (type = 'approved' OR type = 'certified')
+AND state = 'public'
+AND (sqlc.arg('members_from')::int = 0 OR total_members >= sqlc.arg('members_from')::int)
+AND (sqlc.arg('members_to')::int = 0 OR total_members <= sqlc.arg('members_to')::int)
+AND (sqlc.arg('votes_from')::int = 0 OR approximate_votes >= sqlc.arg('votes_from')::int)
+AND (sqlc.arg('votes_to')::int = 0 OR approximate_votes <= sqlc.arg('votes_to')::int)
+AND (
+    cardinality(sqlc.arg('tags')::text[]) = 0
+    OR (sqlc.arg('tag_mode')::text = '@>' AND tags @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND tags && sqlc.arg('tags')::text[])
+)
+AND (
+    sqlc.arg('query')::text = ''
+    OR name ILIKE sqlc.arg('pattern')::text
+    OR name @@ sqlc.arg('query')::text
+    OR short @@ sqlc.arg('query')::text
+    OR server_id = sqlc.arg('query')::text
+)
+GROUP BY server_id
+ORDER BY approximate_votes DESC, type DESC
+LIMIT 12;
+
 -- name: GetIndexServersByTeamMembership :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
 FROM servers

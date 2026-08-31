@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-08-30
+
+### Added
+
+- `POST /list/search` now covers teams and packs, not just bots and
+  servers. New `SearchTeamsPublic`/`SearchPacksPublic` queries back the
+  `team`/`pack` target types, with the same query/tag-filter/vote-range
+  shape as bots and servers already had (packs sort by creation date
+  rather than votes -- pack vote counts were never kept in a materialized
+  column the way bots/servers/teams are, so there's nothing cheap to sort
+  by). Arcadia's staff search already covered team/pack; the public
+  endpoint just hadn't caught up.
+- Shop coupons can now actually be redeemed. `POST
+  /{target_type}/{target_id}/shop/purchase` takes an optional
+  `coupon_code`, checked against usability, expiry, applicable items,
+  target types, allowed users, a global max-uses cap, and a per-target
+  reuse cooldown (new `shop_coupon_redemptions` table, migrated onto a
+  `shop_coupons` table that -- turns out -- never had a primary key
+  either, added in the same migration). A coupon either overrides the
+  item's cost or zeroes it out entirely, matching `ShopCoupon.Cents`'s own
+  doc comment. The catalog/admin side of coupons has existed for a while;
+  there was just nowhere to spend one until now. Deliberately not
+  enforced: the coupon's `requirements` field, whose semantics were never
+  defined anywhere in the codebase -- flagged rather than guessed at.
+
+### Changed
+
+- `search_list` (`POST /list/search`) was the last real holdout from the
+  sqlc migration -- its dynamic, reflection-built column lists and
+  Go-templated `WHERE`/`JOIN` clauses have been replaced with static sqlc
+  queries (`SearchBotsPublic`, `SearchServersPublic`), using the same
+  "always bind the arg, let an empty/zero value no-op the clause" trick
+  the new team/pack search queries above needed. Verified against prod:
+  identical result sets for every query shape the old template supported,
+  run side by side.
+- A purchase's logged `cents` (`shop_purchases`) now reflects what was
+  actually charged after a coupon discount, not the item's list price.
+
+### Fixed
+
+- `SearchTeamsQueue` (Arcadia's staff search) compared `teams.id` (uuid)
+  directly against its search-box input with no cast -- harmless for a
+  pasted team ID, but Postgres rejects the bind outright for any other
+  text before the query's own `OR name ILIKE ...` branch ever gets a
+  chance to match, so a staff member typing a plain name search would
+  500. Cast to `::text` on both sides, matching the fix already applied
+  to `RecomputeApproximateVotes`'s equivalent join in 1.7.0.
+
 ## [1.7.0] - 2026-08-29
 
 ### Added

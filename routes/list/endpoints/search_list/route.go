@@ -1,79 +1,37 @@
 // Package search_list implements POST /list/search — "Search List".
 //
-// Searches the list returning a list of bots/servers that match the query
+// Searches the list returning a list of bots/servers/teams/packs that match
+// the query
 package search_list
 
 import (
-	_ "embed"
 	"net/http"
 	"strings"
-	"text/template"
 
 	"popplio/api/resp"
-
-	"github.com/PlexiOSS/Keel/dbutil"
+	"popplio/db"
 	botAssets "popplio/routes/bots/assets"
+	packAssets "popplio/routes/packs/assets"
 	serverAssets "popplio/routes/servers/assets"
+	teamAssets "popplio/routes/teams/assets"
 	"popplio/state"
 	"popplio/types"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
-	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-playground/validator/v10"
 )
 
-var (
-	indexBotColsArr           = dbutil.GetCols(types.IndexBot{})
-	indexBotColsWithPrefixArr = func() []string {
-		// Prefix all columns with bots.
-		var cols []string
-
-		for _, col := range indexBotColsArr {
-			cols = append(cols, "bots."+col)
-		}
-
-		return cols
-	}()
-
-	indexBotColsWithPrefix = strings.Join(indexBotColsWithPrefixArr, ",")
-
-	indexServerColsArr = dbutil.GetCols(types.IndexServer{})
-	indexServerCols    = strings.Join(indexServerColsArr, ",")
-
-	compiledMessages = uapi.CompileValidationErrors(types.SearchQuery{})
-)
-
-var (
-	//go:embed sql/bots.tmpl
-	botsSql        string
-	botSqlTemplate *template.Template
-
-	//go:embed sql/servers.tmpl
-	serversSql        string
-	serverSqlTemplate *template.Template
-)
-
-type searchSqlTemplateCtx struct {
-	Query          string
-	TagMode        types.TagMode
-	Cols           string
-	PlatformTables []string
-}
-
-func Setup() {
-	botSqlTemplate = template.Must(template.New("sqlA").Parse(botsSql))
-	serverSqlTemplate = template.Must(template.New("sqlB").Parse(serversSql))
-}
+var compiledMessages = uapi.CompileValidationErrors(types.SearchQuery{})
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Search List",
-		Description: "Searches the list returning a list of bots/servers that match the query",
+		Description: "Searches the list returning a list of bots/servers/teams/packs that match the query",
 		Req:         types.SearchQuery{},
 		Resp:        types.SearchResponse{},
 	}
@@ -120,57 +78,59 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	sr := types.SearchResponse{}
+	tagMode := string(payload.TagFilter.TagMode)
+	pattern := "%" + strings.ToLower(payload.Query) + "%"
+	lowerQuery := strings.ToLower(payload.Query)
+	q := db.New(state.Pool)
 
 	for _, targetType := range payload.TargetTypes {
 		switch targetType {
 		case "bot":
 			sr.TargetTypes = append(sr.TargetTypes, "bot")
-			sqlString := &strings.Builder{}
 
-			err = botSqlTemplate.Execute(sqlString, searchSqlTemplateCtx{
-				Query:   payload.Query,
-				TagMode: payload.TagFilter.TagMode,
-				Cols:    indexBotColsWithPrefix, // We need to prefix the columns with bots. to avoid ambiguity
-				PlatformTables: []string{
-					dovewing.TableName(state.DovewingPlatformDiscord),
-				},
+			rows, err := q.SearchBotsPublic(d.Context, db.SearchBotsPublicParams{
+				ServersFrom: int32(payload.Servers.From),
+				ServersTo:   int32(payload.Servers.To),
+				VotesFrom:   int32(payload.Votes.From),
+				VotesTo:     int32(payload.Votes.To),
+				ShardsFrom:  int32(payload.Shards.From),
+				ShardsTo:    int32(payload.Shards.To),
+				Tags:        payload.TagFilter.Tags,
+				TagMode:     tagMode,
+				Query:       lowerQuery,
+				Pattern:     pattern,
 			})
-
-			if err != nil {
-				return resp.Err("Failed to execute template", err, zap.String("sql", sqlString.String()))
-			}
-
-			args := []any{
-				payload.Servers.From,   // 1
-				payload.Servers.To,     // 2
-				payload.Votes.From,     // 3
-				payload.Votes.To,       // 4
-				payload.Shards.From,    // 5
-				payload.Shards.To,      // 6
-				payload.TagFilter.Tags, // 7
-			}
-
-			if payload.Query != "" {
-				args = append(args, strings.ToLower(payload.Query), "%"+strings.ToLower(payload.Query)+"%") // 8-9
-			}
-
-			state.Logger.Debug("SQL result", zap.String("sql", sqlString.String()), zap.String("targetType", "bot"))
-
-			rows, err := state.Pool.Query(
-				d.Context,
-				sqlString.String(),
-				// Args
-				args...,
-			)
 
 			if err != nil {
 				return resp.ErrBody("Failed to query", "Error querying.", err, zap.String("targetType", "bot"))
 			}
 
-			bots, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexBot])
+			bots := make([]types.IndexBot, len(rows))
 
-			if err != nil {
-				return resp.ErrBody("Failed to collect rows [bots]", "Error collecting rows.", err, zap.String("sql", sqlString.String()))
+			for i, row := range rows {
+				bots[i] = types.IndexBot{
+					BotID:            row.BotID,
+					Short:            row.Short,
+					Type:             row.Type,
+					VanityRef:        row.VanityRef,
+					ApproximateVotes: int(row.ApproximateVotes),
+					Shards:           int(row.Shards),
+					Library:          row.Library,
+					InviteClick:      int(row.InviteClicks),
+					Clicks:           int(row.Clicks),
+					Servers:          int(row.Servers),
+					NSFW:             row.Nsfw,
+					Tags:             row.Tags,
+					Premium:          row.Premium,
+					CreatedAt:        row.CreatedAt,
+					SelfStatus:       row.SelfStatus,
+					LastStatsPost:    row.LastStatsPost,
+					SupporterBadge:   row.SupporterBadge,
+					BoostedUntil:     row.BoostedUntil,
+					FeaturedUntil:    row.FeaturedUntil,
+					SpotlightedUntil: row.SpotlightedUntil,
+					VoteBlitzUntil:   row.VoteBlitzUntil,
+				}
 			}
 
 			if err := botAssets.ResolveIndexBots(d.Context, bots); err != nil {
@@ -181,47 +141,45 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		case "server":
 			sr.TargetTypes = append(sr.TargetTypes, "server")
 
-			sqlString := &strings.Builder{}
-
-			err = serverSqlTemplate.Execute(sqlString, searchSqlTemplateCtx{
-				Query:   payload.Query,
-				TagMode: payload.TagFilter.TagMode,
-				Cols:    indexServerCols,
+			rows, err := q.SearchServersPublic(d.Context, db.SearchServersPublicParams{
+				MembersFrom: int32(payload.TotalMembers.From),
+				MembersTo:   int32(payload.TotalMembers.To),
+				VotesFrom:   int32(payload.Votes.From),
+				VotesTo:     int32(payload.Votes.To),
+				Tags:        payload.TagFilter.Tags,
+				TagMode:     tagMode,
+				Query:       lowerQuery,
+				Pattern:     pattern,
 			})
-
-			if err != nil {
-				return resp.Err("Failed to execute template", err, zap.String("sql", sqlString.String()))
-			}
-
-			args := []any{
-				payload.TotalMembers.From, // 1
-				payload.TotalMembers.To,   // 2
-				payload.Votes.From,        // 3
-				payload.Votes.To,          // 4
-				payload.TagFilter.Tags,    // 5
-			}
-
-			if payload.Query != "" {
-				args = append(args, "%"+strings.ToLower(payload.Query)+"%", strings.ToLower(payload.Query)) // 6-7
-			}
-
-			state.Logger.Debug("SQL result", zap.String("sql", sqlString.String()), zap.String("targetType", "server"))
-
-			rows, err := state.Pool.Query(
-				d.Context,
-				sqlString.String(),
-				// Args
-				args...,
-			)
 
 			if err != nil {
 				return resp.Err("Failed to query", err, zap.String("targetType", "server"))
 			}
 
-			servers, err := pgx.CollectRows(rows, pgx.RowToStructByName[types.IndexServer])
+			servers := make([]types.IndexServer, len(rows))
 
-			if err != nil {
-				return resp.Err("Failed to collect rows", err, zap.String("sql", sqlString.String()))
+			for i, row := range rows {
+				servers[i] = types.IndexServer{
+					ServerID:         row.ServerID,
+					Name:             row.Name,
+					Avatar:           row.Avatar,
+					TotalMembers:     int(row.TotalMembers),
+					OnlineMembers:    int(row.OnlineMembers),
+					Short:            row.Short,
+					Type:             row.Type,
+					State:            row.State,
+					VanityRef:        row.VanityRef,
+					ApproximateVotes: int(row.ApproximateVotes),
+					InviteClicks:     int(row.InviteClicks),
+					Clicks:           int(row.Clicks),
+					NSFW:             row.Nsfw,
+					Tags:             row.Tags,
+					Premium:          row.Premium,
+					SupporterBadge:   row.SupporterBadge,
+					BoostedUntil:     row.BoostedUntil,
+					FeaturedUntil:    row.FeaturedUntil,
+					SpotlightedUntil: row.SpotlightedUntil,
+				}
 			}
 
 			if err := serverAssets.ResolveIndexServers(d.Context, servers); err != nil {
@@ -229,6 +187,74 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 
 			sr.Servers = servers
+		case "team":
+			sr.TargetTypes = append(sr.TargetTypes, "team")
+
+			rows, err := q.SearchTeamsPublic(d.Context, db.SearchTeamsPublicParams{
+				Query:     payload.Query,
+				Pattern:   "%" + payload.Query + "%",
+				Tags:      payload.TagFilter.Tags,
+				TagMode:   tagMode,
+				VotesFrom: int32(payload.Votes.From),
+				VotesTo:   int32(payload.Votes.To),
+			})
+
+			if err != nil {
+				return resp.Err("Failed to query", err, zap.String("targetType", "team"))
+			}
+
+			teams := make([]types.Team, len(rows))
+
+			for i, row := range rows {
+				teams[i] = types.Team{
+					ID:               row.ID,
+					Name:             row.Name,
+					Short:            pgtype.Text{String: row.Short, Valid: true},
+					Tags:             row.Tags,
+					NSFW:             row.Nsfw,
+					VoteBanned:       row.VoteBanned,
+					ApproximateVotes: int(row.ApproximateVotes),
+				}
+			}
+
+			teamAssets.ResolveIndexTeams(teams)
+
+			sr.Teams = teams
+		case "pack":
+			sr.TargetTypes = append(sr.TargetTypes, "pack")
+
+			rows, err := q.SearchPacksPublic(d.Context, db.SearchPacksPublicParams{
+				Query:   payload.Query,
+				Pattern: "%" + payload.Query + "%",
+				Tags:    payload.TagFilter.Tags,
+				TagMode: tagMode,
+			})
+
+			if err != nil {
+				return resp.Err("Failed to query", err, zap.String("targetType", "pack"))
+			}
+
+			packs := make([]types.BotPack, len(rows))
+
+			for i, row := range rows {
+				packs[i] = types.BotPack{
+					Owner:      row.Owner,
+					Name:       row.Name,
+					Short:      row.Short,
+					URL:        row.Url,
+					PackType:   row.PackType,
+					Tags:       row.Tags,
+					Bots:       row.Bots,
+					Servers:    row.Servers,
+					VoteBanned: row.VoteBanned,
+				}
+
+				if err := packAssets.ResolveBotPack(d.Context, &packs[i]); err != nil {
+					return resp.ErrBody("Failed to resolve pack", "Error resolving pack.", err)
+				}
+			}
+
+			sr.Packs = packs
 		}
 	}
 

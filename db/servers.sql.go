@@ -1664,6 +1664,116 @@ func (q *Queries) RemoveServerPremium(ctx context.Context, serverID string) erro
 	return err
 }
 
+const searchServersPublic = `-- name: SearchServersPublic :many
+SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes,
+    invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
+FROM servers
+WHERE (type = 'approved' OR type = 'certified')
+AND state = 'public'
+AND ($1::int = 0 OR total_members >= $1::int)
+AND ($2::int = 0 OR total_members <= $2::int)
+AND ($3::int = 0 OR approximate_votes >= $3::int)
+AND ($4::int = 0 OR approximate_votes <= $4::int)
+AND (
+    cardinality($5::text[]) = 0
+    OR ($6::text = '@>' AND tags @> $5::text[])
+    OR ($6::text = '&&' AND tags && $5::text[])
+)
+AND (
+    $7::text = ''
+    OR name ILIKE $8::text
+    OR name @@ $7::text
+    OR short @@ $7::text
+    OR server_id = $7::text
+)
+GROUP BY server_id
+ORDER BY approximate_votes DESC, type DESC
+LIMIT 12
+`
+
+type SearchServersPublicParams struct {
+	MembersFrom int32    `db:"members_from" json:"members_from"`
+	MembersTo   int32    `db:"members_to" json:"members_to"`
+	VotesFrom   int32    `db:"votes_from" json:"votes_from"`
+	VotesTo     int32    `db:"votes_to" json:"votes_to"`
+	Tags        []string `db:"tags" json:"tags"`
+	TagMode     string   `db:"tag_mode" json:"tag_mode"`
+	Query       string   `db:"query" json:"query"`
+	Pattern     string   `db:"pattern" json:"pattern"`
+}
+
+type SearchServersPublicRow struct {
+	ServerID         string             `db:"server_id" json:"server_id"`
+	Name             string             `db:"name" json:"name"`
+	Avatar           string             `db:"avatar" json:"avatar"`
+	TotalMembers     int32              `db:"total_members" json:"total_members"`
+	OnlineMembers    int32              `db:"online_members" json:"online_members"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	State            string             `db:"state" json:"state"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+}
+
+// Backs POST /list/search's "server" target type.
+func (q *Queries) SearchServersPublic(ctx context.Context, arg SearchServersPublicParams) ([]SearchServersPublicRow, error) {
+	rows, err := q.db.Query(ctx, searchServersPublic,
+		arg.MembersFrom,
+		arg.MembersTo,
+		arg.VotesFrom,
+		arg.VotesTo,
+		arg.Tags,
+		arg.TagMode,
+		arg.Query,
+		arg.Pattern,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchServersPublicRow
+	for rows.Next() {
+		var i SearchServersPublicRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.Name,
+			&i.Avatar,
+			&i.TotalMembers,
+			&i.OnlineMembers,
+			&i.Short,
+			&i.Type,
+			&i.State,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchServersQueue = `-- name: SearchServersQueue :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
        approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
