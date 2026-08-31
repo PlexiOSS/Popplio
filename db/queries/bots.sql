@@ -195,6 +195,15 @@ SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invi
 FROM bots
 WHERE owner = $1;
 
+-- name: GetIndexBotsByTeamMembership :many
+-- A bot's owner and team_owner are mutually exclusive (TransferToTeam
+-- clears owner when setting team_owner), so this and GetIndexBotsByOwner
+-- never return the same row -- callers union both, same pattern
+-- GetIndexServersByTeamMembership already established for servers.
+SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
+FROM bots
+WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1);
+
 -- name: GetBotSEO :one
 SELECT short FROM bots WHERE bot_id = $1;
 

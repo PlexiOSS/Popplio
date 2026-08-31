@@ -1042,6 +1042,82 @@ func (q *Queries) GetIndexBotsByOwner(ctx context.Context, owner pgtype.Text) ([
 	return items, nil
 }
 
+const getIndexBotsByTeamMembership = `-- name: GetIndexBotsByTeamMembership :many
+SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
+FROM bots
+WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1)
+`
+
+type GetIndexBotsByTeamMembershipRow struct {
+	BotID            string             `db:"bot_id" json:"bot_id"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	Shards           int32              `db:"shards" json:"shards"`
+	Library          string             `db:"library" json:"library"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Servers          int32              `db:"servers" json:"servers"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	SelfStatus       pgtype.Text        `db:"self_status" json:"self_status"`
+	LastStatsPost    pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
+}
+
+// A bot's owner and team_owner are mutually exclusive (TransferToTeam
+// clears owner when setting team_owner), so this and GetIndexBotsByOwner
+// never return the same row -- callers union both, same pattern
+// GetIndexServersByTeamMembership already established for servers.
+func (q *Queries) GetIndexBotsByTeamMembership(ctx context.Context, userID string) ([]GetIndexBotsByTeamMembershipRow, error) {
+	rows, err := q.db.Query(ctx, getIndexBotsByTeamMembership, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetIndexBotsByTeamMembershipRow
+	for rows.Next() {
+		var i GetIndexBotsByTeamMembershipRow
+		if err := rows.Scan(
+			&i.BotID,
+			&i.Short,
+			&i.Type,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.Shards,
+			&i.Library,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Servers,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.CreatedAt,
+			&i.SelfStatus,
+			&i.LastStatsPost,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+			&i.VoteBlitzUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIndexBotsByTeamOwner = `-- name: GetIndexBotsByTeamOwner :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
 FROM bots

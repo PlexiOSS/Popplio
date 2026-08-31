@@ -107,9 +107,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to get user bots [db fetch]", err, zap.String("userID", user.ID))
 	}
 
-	user.UserBots = make([]types.IndexBot, len(indexBotRows))
-	for i, row := range indexBotRows {
-		user.UserBots[i] = types.IndexBot{
+	teamBotRows, err := q.GetIndexBotsByTeamMembership(d.Context, user.ID)
+
+	if err != nil {
+		return resp.Err("Failed to get user team bots [db fetch]", err, zap.String("userID", user.ID))
+	}
+
+	user.UserBots = make([]types.IndexBot, 0, len(indexBotRows)+len(teamBotRows))
+
+	for _, row := range indexBotRows {
+		user.UserBots = append(user.UserBots, types.IndexBot{
 			BotID:            row.BotID,
 			Short:            row.Short,
 			Type:             row.Type,
@@ -131,16 +138,39 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			FeaturedUntil:    row.FeaturedUntil,
 			SpotlightedUntil: row.SpotlightedUntil,
 			VoteBlitzUntil:   row.VoteBlitzUntil,
-		}
+		})
 	}
 
-	// Resolve the userbots concurrently, since each bot's resolution is independent
+	for _, row := range teamBotRows {
+		user.UserBots = append(user.UserBots, types.IndexBot{
+			BotID:            row.BotID,
+			Short:            row.Short,
+			Type:             row.Type,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			Shards:           int(row.Shards),
+			Library:          row.Library,
+			InviteClick:      int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			Servers:          int(row.Servers),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			CreatedAt:        row.CreatedAt,
+			SelfStatus:       row.SelfStatus,
+			LastStatsPost:    row.LastStatsPost,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+			VoteBlitzUntil:   row.VoteBlitzUntil,
+		})
+	}
+
 	if err := botAssets.ResolveIndexBots(d.Context, user.UserBots); err != nil {
 		return resp.ErrBody("Error resolving indexbot", "An error occurred while resolving index bot.", err)
 	}
 
-	// Servers, like bots, but exclusively team-owned there's no direct
-	// `owner` column on servers, so this is always via team membership.
 	indexServerRows, err := q.GetIndexServersByTeamMembership(d.Context, user.ID)
 
 	if err != nil {
@@ -176,18 +206,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error resolving indexserver", "An error occurred while resolving index server.", err)
 	}
 
-	// Get user teams
-	// Teams the user is a member in
 	teamIdRows, err := q.GetUserTeamIDs(d.Context, user.ID)
 
 	if err != nil {
 		return resp.Err("Error while getting user teams [db fetch]", err, zap.String("userID", user.ID))
 	}
 
-	// Ensure this always marshals as `[]` rather than `null` when the user
-	// isn't on any teams — a nil Go slice serializes to JSON null, which
-	// crashes frontend consumers that call .length/.map on it without a
-	// null check.
 	user.UserTeams = []types.Team{}
 
 	for _, tidRaw := range teamIdRows {
@@ -236,9 +260,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.Err("Error while getting team entities", err, zap.String("teamID", tid), zap.String("userID", user.ID))
 		}
 
-		// Votes is db:"-" (resolved in application code, not scanned from the
-		// row above) — without this, every team embedded here would silently
-		// report 0 votes instead of the real count that GET /teams/{id} shows.
 		eto.Votes, err = votes.EntityGetVoteCount(d.Context, state.Pool, tid, "team")
 
 		if err != nil {
@@ -248,7 +269,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		user.UserTeams = append(user.UserTeams, eto)
 	}
 
-	// Packs
 	packRows, err := q.GetUserPacksByOwner(d.Context, user.ID)
 
 	if err != nil {
@@ -279,7 +299,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Fetch staff status
 	positions, err := q.GetStaffPositionCount(d.Context, user.ID)
 
 	if !errors.Is(err, pgx.ErrNoRows) && err != nil {
