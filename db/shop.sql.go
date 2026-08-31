@@ -307,9 +307,15 @@ const getPublicShopCoupons = `-- name: GetPublicShopCoupons :many
 SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, requirements, allowed_users, usable, target_types, cents
 FROM shop_coupons
 WHERE public = true
+AND usable = true
+AND (expiry IS NULL OR created_at + make_interval(hours => expiry) > NOW())
+AND (max_uses IS NULL OR (SELECT COUNT(*) FROM shop_coupon_redemptions WHERE coupon_id = shop_coupons.id) < max_uses)
 ORDER BY created_at DESC
 `
 
+// Only coupons someone could actually redeem right now -- a disabled or
+// expired coupon showing up in a public "available offers" list would be
+// actively misleading, not just harmlessly stale.
 func (q *Queries) GetPublicShopCoupons(ctx context.Context) ([]ShopCoupon, error) {
 	rows, err := q.db.Query(ctx, getPublicShopCoupons)
 	if err != nil {

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `GetPublicShopCoupons` now filters out coupons that aren't usable, have
+  expired, or have already hit their max-use count -- a public "available
+  offers" listing built on it (Omniplex) showing a dead coupon as if it
+  were live would be actively misleading, not just harmlessly stale.
+
+### Fixed
+
+- `GET /users/{id}`'s `user_bots` only ever queried bots owned directly
+  (the `owner` column) -- a bot transferred to a team (`owner` cleared,
+  `team_owner` set) vanished from it entirely for every member of that
+  team, same bug `user_servers` would have if `GetIndexServersByTeamMembership`
+  didn't already exist for servers. Added the missing
+  `GetIndexBotsByTeamMembership` query and unioned it in, same as servers.
+  Directly affects Omniplex's shop page, which sources its bot/server
+  picker from this field.
+
 ## [1.7.1] - 2026-08-30
 
 ### Added
