@@ -7,12 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Vote credit tiers (the votes -> credits ladder) for `server`, `team`,
+  and `pack`, mirroring the existing bot ladder (25/50/100/200 votes ->
+  2/5/10/20 cents). Redemption itself (`POST
+  /{target_type}/{target_id}/votes/credits`) was already fully generic
+  code-wise; there just weren't any `vote_credit_tiers` rows for anything
+  but bot, so every non-bot "convert votes" flow -- including the
+  already-shipped server one -- silently computed 0 credits regardless of
+  real vote count. Found while building the team/pack credits UI in
+  Omniplex; fixes server too, which predates that work.
+
 ### Changed
 
 - `GetPublicShopCoupons` now filters out coupons that aren't usable, have
   expired, or have already hit their max-use count -- a public "available
   offers" listing built on it (Omniplex) showing a dead coupon as if it
   were live would be actively misleading, not just harmlessly stale.
+- `EntityVoteInfo`'s `vote_credits` flag (advisory -- "does this target
+  type support vote credits") now reports `true` for `team`/`pack` too,
+  matching the tiers added above. Was hardcoded false for both regardless
+  of whether tiers existed.
 
 ### Fixed
 

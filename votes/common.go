@@ -16,9 +16,6 @@ import (
 	"github.com/PlexiOSS/Keel/dovewing"
 )
 
-// DbConn is an alias for db.DBTX (Query/QueryRow/Exec) -- kept as a name in
-// this package since every function here already took a DbConn parameter
-// before the sqlc conversion, and callers pass state.Pool/a tx either way.
 type DbConn = db.DBTX
 
 func GetDoubleVote() bool {
@@ -204,13 +201,16 @@ func EntityVoteInfo(ctx context.Context, c DbConn, targetId, targetType string) 
 		voteEntity.MultipleVotes = false
 		voteEntity.PerUser = 1
 	case "team":
+		voteEntity.VoteCredits = true
+
 		if GetDoubleVote() {
 			voteEntity.PerUser = 2
 			voteEntity.VoteTime = 6
 			voteEntity.WeekendBonus = true
 		}
 	case "pack":
-		// Packs cannot be premium yet
+		voteEntity.VoteCredits = true
+
 		if GetDoubleVote() {
 			voteEntity.WeekendBonus = true
 			voteEntity.PerUser = 2
@@ -248,14 +248,11 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 			Upvote:     row.Upvote,
 			Void:       row.Void,
 			VoidReason: row.VoidReason,
-			// types.EntityVote.VoidedAt is pgtype.Timestamp (no tz), but the
-			// real column is `timestamp with time zone` -- pre-existing
-			// mismatch, left as-is here rather than widening scope.
-			VoidedAt:  pgtype.Timestamp{Time: row.VoidedAt.Time, Valid: row.VoidedAt.Valid},
-			CreatedAt: row.CreatedAt.Time,
-			VoteNum:   int(row.VoteNum),
-			Credit:    row.CreditRedeem,
-			Immutable: row.Immutable,
+			VoidedAt:   pgtype.Timestamp{Time: row.VoidedAt.Time, Valid: row.VoidedAt.Valid},
+			CreatedAt:  row.CreatedAt.Time,
+			VoteNum:    int(row.VoteNum),
+			Credit:     row.CreditRedeem,
+			Immutable:  row.Immutable,
 		}
 	}
 
@@ -354,21 +351,6 @@ func EntityPostVote(ctx context.Context, c DbConn, targetType, targetId string) 
 	return nil
 }
 
-// RecomputeApproximateVotes recalculates every entity of targetType's
-// cached approximate_votes column from what's currently non-void in
-// entity_votes. Zeroes every row of that type first, then adds back
-// whatever's left (e.g. immutable votes that survive a reset) via the same
-// upvote-minus-downvote count EntityGetVoteCount uses per-entity -- done in
-// bulk here since this is meant for "every entity of a type at once"
-// operations (a full vote reset), not a single entity (use EntityPostVote
-// for that).
-//
-// The team variant casts teams.id (uuid) to text to compare against
-// entity_votes.target_id (text) -- the original raw-SQL version compared
-// them directly with no cast (`t.id = v.target_id`), which Postgres has no
-// "uuid = text" operator for and would have failed outright every time this
-// ran for targetType "team". Found via the schema-diff work this session,
-// not something this conversion itself introduced.
 func RecomputeApproximateVotes(ctx context.Context, c DbConn, targetType string) error {
 	q := db.New(c)
 
