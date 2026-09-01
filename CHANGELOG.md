@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   un-voided the votes this had already wrongly voided in prod (11 rows
   across 2 bots, confirmed via a read-only count before applying) and
   recomputed the affected `approximate_votes` columns.
+- Looking up a bot for submission (`GET /bots/{client_id}/meta`) crashed
+  the Add Bot confirmation screen with `TypeError: null is not an object
+  (evaluating 'T.flags.map')` whenever the lookup succeeded via Discord's
+  own RPC endpoint, the now-preferred path since 1.7.0. That endpoint
+  doesn't return flags or suggested tags/description (only the JAPI
+  fallback does), and the RPC-success branch of `CheckBot` left both
+  `Flags` and `Tags` unset -- a nil Go slice marshals to JSON `null`, not
+  `[]`, and the frontend called `.map()` on `flags` directly. Since RPC
+  succeeds for effectively every public bot, this was hitting most new
+  bot submissions, not an edge case. Both fields are now explicitly
+  defaulted to an empty slice on the RPC path. Audited for the same
+  pattern elsewhere in the backend (any struct built across multiple
+  fallback branches with an array field) -- `CheckBot` is the only place
+  this shape exists.
 
 ## [1.7.2] - 2026-08-31
 

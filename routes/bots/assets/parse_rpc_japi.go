@@ -103,11 +103,21 @@ func CheckBot(ctx context.Context, fallbackBotId, clientId string) (*types.Disco
 		}
 
 		metadata = &types.DiscordBotMeta{
-			BotID:       resolvedBotId,
-			ClientID:    clientId,
-			Name:        user.Username,
-			Avatar:      user.Avatar,
-			BotPublic:   rpcData.BotPublic,
+			BotID:     resolvedBotId,
+			ClientID:  clientId,
+			Name:      user.Username,
+			Avatar:    user.Avatar,
+			BotPublic: rpcData.BotPublic,
+			// Discord's RPC endpoint doesn't return flags or suggested
+			// tags/description (only JAPI does -- see Fallback's doc
+			// comment), but a nil Go slice marshals to JSON `null`, not
+			// `[]`, and the frontend calls .map() on both without a null
+			// guard. Defaulted explicitly so this path returns the same
+			// shape the JAPI-fallback path does, just with fewer fields
+			// populated, instead of a shape that crashes the confirmation
+			// screen the moment RPC (the now-preferred, common path) works.
+			Flags:       []string{},
+			Tags:        []string{},
 			FetchErrors: fetchErrors,
 			Fallback:    false,
 		}
