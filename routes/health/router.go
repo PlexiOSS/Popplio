@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	arcadiadclient "popplio/arcadia/dclient"
 	"popplio/db"
@@ -15,6 +16,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// checkTimeout bounds every health check independently of whatever timeout
+// (or lack of one) the caller's own request context carries. Every DB-backed
+// check below shares state.Pool with the rest of the application -- with no
+// bound here, a brief moment of real connection-pool contention leaves
+// Pool.Acquire blocking indefinitely, and it's the external monitor's own
+// client-side timeout that ends up deciding "down", often well before the
+// query would have actually succeeded. That produces exactly the
+// down-then-instantly-recovered flapping across multiple, otherwise
+// unrelated checks at once (they all queue on the same pool) instead of a
+// clean, fast, deterministic 503.
+const checkTimeout = 4 * time.Second
 
 const tagName = "Health"
 
@@ -103,7 +116,10 @@ func docsFor(name string) func() *docs.Doc {
 
 func handlerFor(check func(ctx context.Context) bool) func(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	return func(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-		if !check(d.Context) {
+		ctx, cancel := context.WithTimeout(d.Context, checkTimeout)
+		defer cancel()
+
+		if !check(ctx) {
 			return uapi.HttpResponse{Status: http.StatusServiceUnavailable}
 		}
 
