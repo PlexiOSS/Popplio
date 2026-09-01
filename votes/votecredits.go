@@ -23,7 +23,9 @@ func EntityGetVoteCreditsSummary(
 		return nil, fmt.Errorf("could not fetch vote credit tiers [row]: %w", err)
 	}
 
-	voteCount, err := EntityGetVoteCount(ctx, c, targetId, targetType)
+	// Redeemable, not the entity's public total -- a vote already cashed in
+	// by an earlier redemption must not be offered (or paid out) again.
+	voteCount, err := EntityGetRedeemableVoteCount(ctx, c, targetId, targetType)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch vote count: %w", err)
@@ -71,7 +73,8 @@ func EntityRedeemVoteCredits(
 		return fmt.Errorf("could not fetch vote credit tiers [row]: %w", err)
 	}
 
-	voteCount, err := EntityGetVoteCount(ctx, c, targetId, targetType)
+	// Redeemable, not the entity's public total -- see EntityGetVoteCreditsSummary.
+	voteCount, err := EntityGetRedeemableVoteCount(ctx, c, targetId, targetType)
 
 	if err != nil {
 		return fmt.Errorf("could not fetch vote count: %w", err)

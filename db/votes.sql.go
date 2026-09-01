@@ -34,6 +34,34 @@ func (q *Queries) CountEntityVotes(ctx context.Context, arg CountEntityVotesPara
 	return i, err
 }
 
+const countRedeemableEntityVotes = `-- name: CountRedeemableEntityVotes :one
+SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes
+FROM entity_votes
+WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL
+`
+
+type CountRedeemableEntityVotesParams struct {
+	TargetID   string `db:"target_id" json:"target_id"`
+	TargetType string `db:"target_type" json:"target_type"`
+}
+
+type CountRedeemableEntityVotesRow struct {
+	Upvotes   int64 `db:"upvotes" json:"upvotes"`
+	Downvotes int64 `db:"downvotes" json:"downvotes"`
+}
+
+// Same as CountEntityVotes, but additionally excludes votes that have
+// already been cashed in for credits (credit_redeem IS NOT NULL). Used only
+// by the vote-credit redemption flow -- an already-redeemed vote must not
+// count a second time toward a new redemption's total, even though it still
+// counts toward the entity's public vote total (CountEntityVotes).
+func (q *Queries) CountRedeemableEntityVotes(ctx context.Context, arg CountRedeemableEntityVotesParams) (CountRedeemableEntityVotesRow, error) {
+	row := q.db.QueryRow(ctx, countRedeemableEntityVotes, arg.TargetID, arg.TargetType)
+	var i CountRedeemableEntityVotesRow
+	err := row.Scan(&i.Upvotes, &i.Downvotes)
+	return i, err
+}
+
 const countUserEntityVotes = `-- name: CountUserEntityVotes :one
 SELECT COUNT(*) FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND author = $3
 `
@@ -187,7 +215,7 @@ func (q *Queries) GetRecentAutomatedVoteResetForUpdate(ctx context.Context) (pgt
 }
 
 const getRedeemableVoteItags = `-- name: GetRedeemableVoteItags :many
-SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false ORDER BY created_at ASC LIMIT $3
+SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL ORDER BY created_at ASC LIMIT $3
 `
 
 type GetRedeemableVoteItagsParams struct {
@@ -196,6 +224,10 @@ type GetRedeemableVoteItagsParams struct {
 	Limit      int32  `db:"limit" json:"limit"`
 }
 
+// credit_redeem IS NULL excludes votes some earlier redemption already
+// claimed -- without it, a vote stays eligible forever and a repeat
+// redemption call would claim (and pay out credits for) the same vote more
+// than once.
 func (q *Queries) GetRedeemableVoteItags(ctx context.Context, arg GetRedeemableVoteItagsParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, getRedeemableVoteItags, arg.TargetID, arg.TargetType, arg.Limit)
 	if err != nil {
@@ -703,7 +735,7 @@ func (q *Queries) RecomputeTeamApproximateVotes(ctx context.Context, targetType 
 }
 
 const redeemAllVotesForTarget = `-- name: RedeemAllVotesForTarget :exec
-UPDATE entity_votes SET credit_redeem = $1, void = true, void_reason = 'Vote credits redeemed' WHERE target_id = $2 AND target_type = $3 AND void = false
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE target_id = $2 AND target_type = $3 AND void = false AND credit_redeem IS NULL
 `
 
 type RedeemAllVotesForTargetParams struct {
@@ -712,13 +744,17 @@ type RedeemAllVotesForTargetParams struct {
 	TargetType   string      `db:"target_type" json:"target_type"`
 }
 
+// See RedeemVotesByItags -- same fix, same reasoning. credit_redeem IS NULL
+// in the WHERE clause is required now that redeeming no longer voids a vote:
+// without it, a vote already spent by an earlier redemption (void = false,
+// credit_redeem set) would still match "void = false" and get claimed again.
 func (q *Queries) RedeemAllVotesForTarget(ctx context.Context, arg RedeemAllVotesForTargetParams) error {
 	_, err := q.db.Exec(ctx, redeemAllVotesForTarget, arg.CreditRedeem, arg.TargetID, arg.TargetType)
 	return err
 }
 
 const redeemVotesByItags = `-- name: RedeemVotesByItags :exec
-UPDATE entity_votes SET credit_redeem = $1, void = true, void_reason = 'Vote credits redeemed' WHERE itag = ANY($2::uuid[])
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY($2::uuid[])
 `
 
 type RedeemVotesByItagsParams struct {
@@ -726,6 +762,15 @@ type RedeemVotesByItagsParams struct {
 	Itags        []pgtype.UUID `db:"itags" json:"itags"`
 }
 
+// Deliberately does NOT set void = true. A vote being spent on credits is
+// not the same event as a vote being reset/removed (VoidAllUnvoidedEntityVotes,
+// VoidEntityVotesForTarget, VoidAllEntityVotesForType all mean the latter) --
+// voiding a redeemed vote used to also drop it from the entity's public vote
+// count (every count query filters on void = false), silently deflating a
+// bot/server/team's vote total every time its owner cashed in credits.
+// credit_redeem (set here) is what actually marks a vote as spent; void_reason/
+// voided_at are kept purely as display metadata for the vote history UI, not
+// as a gate on anything.
 func (q *Queries) RedeemVotesByItags(ctx context.Context, arg RedeemVotesByItagsParams) error {
 	_, err := q.db.Exec(ctx, redeemVotesByItags, arg.CreditRedeem, arg.Itags)
 	return err
