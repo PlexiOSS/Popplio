@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Redeeming vote credits was silently deflating an entity's public vote
+  count. `RedeemVotesByItags`/`RedeemAllVotesForTarget` marked a redeemed
+  vote `void`, the same flag every vote-count query (public totals,
+  `approximate_votes`, leaderboards) filters out -- so a bot, server, or
+  team's real vote count dropped every time its owner cashed votes in for
+  shop credits, unrelated to any actual vote reset. Fixed at the source: a
+  redeemed vote is now tracked purely via `credit_redeem` (which still
+  correctly stops it from being redeemed a second time -- a new
+  `EntityGetRedeemableVoteCount`/`CountRedeemableEntityVotes` excludes
+  already-redeemed votes from a *new* redemption's math without hiding
+  them from the entity's public count). A data-repair migration
+  (`20260901025817_fix_vote_credit_redeem_incorrectly_voided_votes.sql`)
+  un-voided the votes this had already wrongly voided in prod (11 rows
+  across 2 bots, confirmed via a read-only count before applying) and
+  recomputed the affected `approximate_votes` columns.
+
 ## [1.7.2] - 2026-08-31
 
 ### Added
