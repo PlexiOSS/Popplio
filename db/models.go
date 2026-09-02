@@ -395,6 +395,15 @@ type ServerTemplate struct {
 	UsageCount int32              `db:"usage_count" json:"usage_count"`
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Channels   []byte             `db:"channels" json:"channels"`
+	Roles      []byte             `db:"roles" json:"roles"`
+}
+
+type ServerTemplateReaction struct {
+	TemplateID string             `db:"template_id" json:"template_id"`
+	UserID     string             `db:"user_id" json:"user_id"`
+	Liked      bool               `db:"liked" json:"liked"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type ShopCoupon struct {

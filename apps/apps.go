@@ -1,4 +1,5 @@
-// This contains the staff/dev/certification apps
+// Copyright (C) 2026 NodeByte LTD
+
 package apps
 
 import (
@@ -196,7 +197,7 @@ Some points to note:
 		ID:         "resubmit",
 		Info:       `Resubmit your denied bot to the list!`,
 		Name:       "Bot Resubmission",
-		Hidden:     true, // Mostly done by ibl next
+		Hidden:     true,
 		ExtraLogic: extraLogicResubmit,
 		Tags:       []string{"Resubmissions"},
 		Questions: []types.Question{
@@ -232,7 +233,7 @@ We do not guarantee that your ban appeal will be approved and your ban be lifted
 You can only have up to one ban appeal at any given point of time. Abusing the system will simply mean that you will not be unbanned and your ban appeal will be kept in queue.
 		`,
 		Name:        "Ban Appeal",
-		Hidden:      true, // We don't want it to be prominently shown
+		Hidden:      true,
 		ReviewLogic: reviewLogicBanAppeal,
 		Tags:        []string{"Ban Appeal"},
 		Channel: func() snowflake.ID {

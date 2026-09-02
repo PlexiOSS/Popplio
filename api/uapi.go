@@ -1,4 +1,5 @@
-// Binds onto eureka uapi
+// Copyright (C) 2026 NodeByte LTD
+
 package api
 
 import (
@@ -7,12 +8,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/PlexiOSS/Keel/urlutil"
 	"popplio/constants"
 	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/types"
+
+	"github.com/PlexiOSS/Keel/urlutil"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -27,7 +29,7 @@ type PermissionCheck struct {
 }
 
 const (
-	SESSION_EXPIRY       = 60 * 30 // 30 minutes
+	SESSION_EXPIRY       = 60 * 30
 	PERMISSION_CHECK_KEY = "permissionCheck"
 )
 
@@ -65,7 +67,6 @@ func (d DefaultResponder) New(err string, ctx map[string]string) any {
 	}
 }
 
-// Returns the permission limits of a user
 func PermLimits(d uapi.AuthData) []string {
 	if !d.Authorized {
 		return []string{}
@@ -74,14 +75,12 @@ func PermLimits(d uapi.AuthData) []string {
 	permLimits, ok := d.Data["perm_limits"].([]string)
 
 	if !ok {
-		// Panic rather than risk leaking sensitive information
 		panic("Could not assert perm limits as []string")
 	}
 
 	return permLimits
 }
 
-// Returns the permissions a user has on the provided entity
 func EntityPerms(d uapi.AuthData) []string {
 	if !d.Authorized {
 		return []string{}
@@ -90,14 +89,12 @@ func EntityPerms(d uapi.AuthData) []string {
 	permLimits, ok := d.Data["entity_perms"].([]string)
 
 	if !ok {
-		// Panic rather than risk leaking sensitive information
 		panic("Could not assert perm limits as []string")
 	}
 
 	return permLimits
 }
 
-// Authorizes a request
 func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpResponse, bool) {
 	if len(r.Auth) == 0 {
 		return uapi.AuthData{}, uapi.HttpResponse{}, true
@@ -105,9 +102,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 	authHeader := req.Header.Get("Authorization")
 
-	// If there is no auth header, and auth is not optional, return unauthorized
-	//
-	// Note that we do not set X-Session-Invalid here because the session is not invalid, it just has not been sent (likely due to a client bug?)
 	if len(r.Auth) > 0 && authHeader == "" && !r.AuthOptional {
 		return uapi.AuthData{}, uapi.DefaultResponse(http.StatusUnauthorized), false
 	}
@@ -116,7 +110,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 	q := db.New(state.Pool)
 
-	// Before doing anything else, delete expired/old auths first
 	err := q.DeleteExpiredSessions(state.Context)
 
 	if err != nil {
@@ -124,9 +117,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 		return uapi.AuthData{}, uapi.DefaultResponse(http.StatusInternalServerError), false
 	}
 
-	// Get the prefix from the auth header, if any, by splitNing it into 2 parts
-	// The first part is the prefix, the second part is the token (if len == 2)
-	// Otherwise, prefix is empty
 	var authPrefix string
 	parts := strings.SplitN(authHeader, " ", 2)
 
@@ -135,7 +125,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 		authHeader = parts[1]
 	}
 
-	// Check if the anything at all exists with said API token
 	sess, err := q.GetSessionByToken(state.Context, authHeader)
 	sessId, targetId, targetType, permLimits := sess.ID, sess.TargetID, sess.TargetType, sess.PermLimits
 
@@ -170,7 +159,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 	state.Logger.Info("All auth types", zap.Any("auth", r.Auth))
 	for _, auth := range r.Auth {
-		// There are two cases, one with a URLVar (such as /bots/stats) and one without
 
 		if authData.Authorized {
 			break
@@ -191,13 +179,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				return uapi.AuthData{}, uapi.DefaultResponse(http.StatusInternalServerError), false
 			}
 
-			// Non-prod frontends (staging/beta/local dev, identified by the
-			// caller's Origin not matching the production frontend) are
-			// restricted to Bug Hunters (bypassing for instance owners so
-			// they can't lock themselves out of their own environment).
-			// users.bug_hunters is kept in sync with the Bug Hunter Discord
-			// role by SpecRoleSync, same source of truth everywhere it's
-			// used.
 			if urlutil.DifferentHost(req.Header.Get("Origin"), state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
 				return uapi.AuthData{}, uapi.HttpResponse{
@@ -287,7 +268,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 		}
 
 		if authData.Authorized {
-			// Now handle the URLVar
 			if auth.URLVar != "" {
 				state.Logger.Info("Checking URL variable against user ID from auth token", zap.String("URLVar", auth.URLVar))
 				gotUserId := chi.URLParam(req, auth.URLVar)
@@ -302,7 +282,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				}
 			}
 
-			// Banned users cannot use the API at all otherwise if not explicitly scoped to "ban_exempt"
 			if authData.Banned && auth.AllowedScope != "ban_exempt" {
 				return uapi.AuthData{}, uapi.HttpResponse{
 					Status: http.StatusForbidden,
@@ -372,7 +351,6 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				}, false
 			}
 
-			// Perform entity specific checks
 			err = AuthzEntityPermissionCheck(
 				req.Context(),
 				authData,
@@ -397,22 +375,6 @@ func Setup() {
 	uapi.SetupState(uapi.UAPIState{
 		Logger:    state.Logger,
 		Authorize: Authorize,
-		// The values here become the OpenAPI `security` requirement name for
-		// each documented auth type (see eureka's uapi.Route(), which builds
-		// docsObj.AuthType from this map). They must match the actual scheme
-		// names registered via docs.AddSecuritySchema in main.go ("User",
-		// "Bot") exactly, including case — previously this mapped each type
-		// to itself verbatim (lowercase "user"/"bot"), so every generated
-		// operation's security requirement referenced a scheme name that
-		// didn't exist in components.securitySchemes, silently breaking any
-		// tool that resolves the requirement against the registered schemes
-		// (e.g. fumadocs-openapi's playground, which crashes outright on the
-		// unresolved reference).
-		//
-		// "server" and "team" are left mapped to themselves: they're real,
-		// functioning auth types (Authorize() below fully supports them),
-		// but no matching security scheme has ever been registered for
-		// either, so there's nothing correct to map them to yet.
 		AuthTypeMap: func() map[string]string {
 			return map[string]string{
 				TargetTypeUser:   "User",
@@ -434,7 +396,6 @@ func Setup() {
 		DefaultResponder: DefaultResponder{},
 		BaseSanityCheck: func(r uapi.Route) error {
 			if len(r.Auth) > 0 {
-				// Check for permissionCheck
 				if _, ok := r.ExtData[PERMISSION_CHECK_KEY]; !ok {
 					return fmt.Errorf("%s not found in route.ExtData [%s]", PERMISSION_CHECK_KEY, r.OpId)
 				}

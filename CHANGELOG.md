@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Server templates now capture a preview of the source guild's channels
+  and roles at submission time (new `channels`/`roles` jsonb columns),
+  pulled from the same Discord template response that already supplied
+  the name -- it was always there, just discarded down to four fields.
+  Only the single-template fetch (`GET /server-templates/{id}`) populates
+  these; the browse list stays lean.
+- Server templates can now be liked/disliked and reviewed.
+  - Reactions are a new `server_template_reactions` table, one row per
+    (template, user): `PUT /users/{uid}/server-templates/{id}/reaction
+    ?liked=true|false` sets, switches, or (sending the same reaction
+    that's already active) clears a user's reaction, `GET` reads the
+    counts plus that user's own state. Deliberately not modeled as a vote
+    -- see the migration's own comment for why -- and counts are computed
+    live rather than cached, on purpose, given the vote-count incident
+    earlier today.
+  - Reviews reuse the existing generic `reviews` table -- `server_template`
+    is now a recognized `target_type` in `add_review`'s existence check,
+    same pattern as bot/server/team. No owner-review support for
+    templates; that's an owner-permission concept templates don't have.
+
 ### Fixed
 
 - Redeeming vote credits was silently deflating an entity's public vote

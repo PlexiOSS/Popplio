@@ -11,6 +11,8 @@ import (
 	"popplio/routes/servertemplates/endpoints/delete_server_template"
 	"popplio/routes/servertemplates/endpoints/get_all_server_templates"
 	"popplio/routes/servertemplates/endpoints/get_server_template"
+	"popplio/routes/servertemplates/endpoints/get_template_reaction"
+	"popplio/routes/servertemplates/endpoints/set_template_reaction"
 
 	"github.com/go-chi/chi/v5"
 
@@ -65,6 +67,31 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.DELETE,
 		Docs:    delete_server_template.Docs,
 		Handler: delete_server_template.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "uid",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{uid}/server-templates/{id}/reaction",
+		OpId:    "get_template_reaction",
+		Method:  uapi.GET,
+		Docs:    get_template_reaction.Docs,
+		Handler: get_template_reaction.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{uid}/server-templates/{id}/reaction",
+		OpId:    "set_template_reaction",
+		Method:  uapi.PUT,
+		Docs:    set_template_reaction.Docs,
+		Handler: set_template_reaction.Route,
 		Auth: []uapi.AuthType{
 			{
 				URLVar: "uid",

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package resp
 
 import (
@@ -18,11 +20,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-// setup wires up the two globals the helpers reach into — state.Logger, which
-// the 5xx helpers write to, and uapi.State.Constants, which backs
-// uapi.DefaultResponse — and returns a sink holding everything logged.
-//
-// Both globals are restored when the test ends so ordering never matters.
 func setup(t *testing.T) *observer.ObservedLogs {
 	t.Helper()
 
@@ -49,8 +46,6 @@ func setup(t *testing.T) *observer.ObservedLogs {
 	return logs
 }
 
-// apiErrorMessage asserts the response body is a types.ApiError and returns its
-// message.
 func apiErrorMessage(t *testing.T, res uapi.HttpResponse) string {
 	t.Helper()
 
@@ -62,8 +57,6 @@ func apiErrorMessage(t *testing.T, res uapi.HttpResponse) string {
 	return apiErr.Message
 }
 
-// Err must log the cause but must not leak it into the response body, which is
-// the whole reason handlers are expected to prefer it over ErrDetail.
 func TestErrLogsCauseAndReturnsGenericBody(t *testing.T) {
 	logs := setup(t)
 
@@ -106,8 +99,6 @@ func TestErrLogsCauseAndReturnsGenericBody(t *testing.T) {
 	}
 }
 
-// A nil cause is legal — some faults are conditions rather than error values —
-// and must not panic.
 func TestErrAcceptsNilCause(t *testing.T) {
 	logs := setup(t)
 
@@ -122,8 +113,6 @@ func TestErrAcceptsNilCause(t *testing.T) {
 	}
 }
 
-// ErrDetail logs exactly as Err does, but surfaces the reason to the caller as a
-// sentence.
 func TestErrDetailReturnsReasonAsBody(t *testing.T) {
 	logs := setup(t)
 
@@ -142,8 +131,6 @@ func TestErrDetailReturnsReasonAsBody(t *testing.T) {
 	}
 }
 
-// The 4xx helpers describe a caller mistake, so they return the message
-// verbatim and must stay out of the error log.
 func TestClientErrorsReturnMessageAndDoNotLog(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -179,8 +166,6 @@ func TestClientErrorsReturnMessageAndDoNotLog(t *testing.T) {
 	}
 }
 
-// The Retry-After header is the reason RateLimited exists, so it is the thing
-// most worth pinning down.
 func TestRateLimitedSetsRetryAfterHeader(t *testing.T) {
 	logs := setup(t)
 
@@ -227,8 +212,6 @@ func TestSuccessHelpers(t *testing.T) {
 
 	t.Run("OK", func(t *testing.T) {
 		res := OK(body)
-
-		// uapi treats a zero Status as 200.
 		if res.Status != 0 && res.Status != http.StatusOK {
 			t.Errorf("status = %d, want 0 or %d", res.Status, http.StatusOK)
 		}

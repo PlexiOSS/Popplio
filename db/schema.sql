@@ -633,7 +633,21 @@ CREATE TABLE public.server_templates (
     owner text NOT NULL,
     usage_count integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    channels jsonb DEFAULT '[]'::jsonb NOT NULL,
+    roles jsonb DEFAULT '[]'::jsonb NOT NULL
+);
+
+
+--
+-- Name: server_template_reactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.server_template_reactions (
+    template_id uuid NOT NULL,
+    user_id text NOT NULL,
+    liked boolean NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -1470,6 +1484,14 @@ ALTER TABLE ONLY public.server_templates
 
 
 --
+-- Name: server_template_reactions server_template_reactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.server_template_reactions
+    ADD CONSTRAINT server_template_reactions_pkey PRIMARY KEY (template_id, user_id);
+
+
+--
 -- Name: servers servers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2012,6 +2034,14 @@ ALTER TABLE ONLY public.packs
 
 ALTER TABLE ONLY public.pack_emojis
     ADD CONSTRAINT pack_emojis_pack_url_fkey FOREIGN KEY (pack_url) REFERENCES public.packs(url) ON DELETE CASCADE;
+
+
+--
+-- Name: server_template_reactions server_template_reactions_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.server_template_reactions
+    ADD CONSTRAINT server_template_reactions_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.server_templates(id) ON DELETE CASCADE;
 
 
 --

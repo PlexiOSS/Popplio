@@ -1,10 +1,9 @@
-// Package get_server_template implements GET /server-templates/{id} — "Get
-// Server Template".
-//
-// Gets a single server template by its internal ID
+// Copyright (C) 2026 NodeByte LTD
+
 package get_server_template
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -16,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -63,6 +63,23 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		CreatedAt:  row.CreatedAt.Time,
 		UpdatedAt:  row.UpdatedAt.Time,
 	}
+
+	if err := json.Unmarshal(row.Channels, &tmpl.Channels); err != nil {
+		state.Logger.Error("Error unmarshaling template channels", zap.Error(err), zap.String("id", id))
+	}
+
+	if err := json.Unmarshal(row.Roles, &tmpl.Roles); err != nil {
+		state.Logger.Error("Error unmarshaling template roles", zap.Error(err), zap.String("id", id))
+	}
+
+	counts, err := db.New(state.Pool).GetServerTemplateReactionCounts(d.Context, id)
+
+	if err != nil {
+		return resp.Err("Error while getting template reaction counts [db fetch]", err)
+	}
+
+	tmpl.Likes = int(counts.Likes)
+	tmpl.Dislikes = int(counts.Dislikes)
 
 	if err := assets.ResolveServerTemplate(d.Context, &tmpl); err != nil {
 		return resp.ErrDetail("Error resolving server template", err)

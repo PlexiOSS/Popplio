@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package apps
 
 import (
@@ -7,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
 	"popplio/teams"
 	"popplio/types"
+
+	"github.com/PlexiOSS/Keel/ptr"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
@@ -24,10 +27,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-// certBotOwnerIDs returns whoever should be treated as a bot's owner for
-// cert-role purposes: the direct owner if it's not team-owned, or every
-// member of its owning team otherwise — a bot is always one or the other,
-// never both (see the owner_team_oneof check constraint).
 func certBotOwnerIDs(ctx context.Context, botID string) ([]string, error) {
 	row, err := db.New(state.Pool).GetBotTeamAndOwner(ctx, botID)
 
@@ -46,8 +45,6 @@ func certBotOwnerIDs(ctx context.Context, botID string) ([]string, error) {
 	return teamMemberIDs(ctx, row.TeamOwner)
 }
 
-// certServerOwnerIDs returns every member of a server's owning team —
-// servers are always team-owned, there's no direct-owner equivalent.
 func certServerOwnerIDs(ctx context.Context, serverID string) ([]string, error) {
 	teamOwner, err := db.New(state.Pool).GetServerTeamOwner(ctx, serverID)
 
@@ -72,12 +69,6 @@ func teamMemberIDs(ctx context.Context, teamID pgtype.UUID) ([]string, error) {
 	return ids, nil
 }
 
-// grantCertOwnerRoles gives BotDeveloper/CertifiedDeveloper to every owner
-// ID who's actually a member of the main guild — used for both certified
-// bots and certified servers, since there's no separate server-owner role
-// convention. Best-effort throughout: an owner not being in the guild, or a
-// Discord API error, is logged rather than failing the caller, since role
-// grants are a side effect of certification, not a precondition for it.
 func grantCertOwnerRoles(ownerIDs []string) {
 	for _, ownerID := range ownerIDs {
 		uid, err := snowflake.Parse(ownerID)
@@ -105,15 +96,8 @@ var permBotResubmit = perms.EntityResubmitBots
 var permBotCertify = perms.EntityCertifyBots
 var permServerCertify = perms.EntityCertifyServers
 
-var ErrNoPersist = errors.New("no persist") // This error should be returned when the app should not be persisted to the database for review
+var ErrNoPersist = errors.New("no persist")
 
-// Certification used to require servers >= 100 AND unique clicks >= 30 —
-// both, no exceptions. That shut out bots/servers that were genuinely
-// strong on one metric (e.g. very high votes, modest server count) just
-// because they hadn't cleared every bar. It's now an OR across whichever
-// reach/engagement stat the listing actually has, each bar lowered to
-// match, plus a (new, but lenient) minimum listed-age floor so a
-// same-day submission can't certify off a launch-day traffic spike.
 const (
 	certMinBotServers    = 50
 	certMinServerMembers = 100
@@ -122,9 +106,6 @@ const (
 	certMinListedAge     = 3 * 24 * time.Hour
 )
 
-// checkCertStats applies the shared OR-of-three-metrics rule. reachLabel
-// names whatever reachMin is measured in ("servers" for bots, "members"
-// for servers) for the error message.
 func checkCertStats(reach, uniqueClicks, votes int64, reachLabel string, reachMin int64) error {
 	if reach >= reachMin || uniqueClicks >= certMinUniqueClicks || votes >= certMinVotes {
 		return nil
@@ -137,14 +118,13 @@ func checkCertStats(reach, uniqueClicks, votes int64, reachLabel string, reachMi
 }
 
 func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]string) error {
-	// Get the bot ID
+
 	botID, ok := answers["id"]
 
 	if !ok {
 		return errors.New("bot ID not found")
 	}
 
-	// Get the bot
 	botType, err := db.New(state.Pool).GetBotType(d.Context, botID)
 
 	if err != nil {
@@ -157,7 +137,6 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 		return fmt.Errorf("error getting user bot perms: %w", err)
 	}
 
-	// Check if user has TeamPermissionResubmitBots
 	if !entityPerms.Has(permBotResubmit) {
 		return errors.New("you do not have permission to resubmit bots")
 	}
@@ -166,7 +145,6 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 		return errors.New("bot is approved, pending or certified | state=" + botType)
 	}
 
-	// Set the bot type to pending
 	err = db.New(state.Pool).ResubmitBot(d.Context, botID)
 
 	if err != nil {
@@ -179,7 +157,6 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 		return fmt.Errorf("error getting discord user: %w", err)
 	}
 
-	// Send an embed to the bot logs channel
 	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 		Content: state.Config.Meta.UrgentMentions,
 		Embeds: []discord.Embed{
@@ -211,18 +188,16 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 		return fmt.Errorf("error sending embed to bot logs channel: %w", err)
 	}
 
-	return nil // Should it be ErrNoPersist?
+	return nil
 }
 
 func extraLogicCert(d uapi.RouteData, p types.Position, answers map[string]string) error {
-	// Get the bot ID
 	botID, ok := answers["id"]
 
 	if !ok {
 		return errors.New("bot ID not found")
 	}
 
-	// Get the bot
 	row, err := db.New(state.Pool).GetBotCertStats(d.Context, botID)
 
 	if err != nil {
@@ -239,7 +214,6 @@ func extraLogicCert(d uapi.RouteData, p types.Position, answers map[string]strin
 		return fmt.Errorf("error getting user bot perms: %w", err)
 	}
 
-	// Check if user has TeamPermissionCertifyBots
 	if !entityPerms.Has(permBotCertify) {
 		return errors.New("you do not have permission to certify bots")
 	}
@@ -256,14 +230,13 @@ func extraLogicCert(d uapi.RouteData, p types.Position, answers map[string]strin
 }
 
 func extraLogicCertServer(d uapi.RouteData, p types.Position, answers map[string]string) error {
-	// Get the server ID
+
 	serverID, ok := answers["id"]
 
 	if !ok {
 		return errors.New("server ID not found")
 	}
 
-	// Get the server
 	row, err := db.New(state.Pool).GetServerCertStats(d.Context, serverID)
 
 	if err != nil {
@@ -297,7 +270,6 @@ func extraLogicCertServer(d uapi.RouteData, p types.Position, answers map[string
 
 func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
 	if approve {
-		// Unban user
 
 		if len(reason) > 384 {
 			return errors.New("reason must be less than 384 characters")
@@ -319,7 +291,6 @@ func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason strin
 			return err
 		}
 	} else {
-		// Denial is always possible
 		return nil
 	}
 
@@ -328,7 +299,6 @@ func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason strin
 
 func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
 	if approve {
-		// Get the bot ID
 		botID, ok := resp.Answers["id"]
 
 		if !ok {
@@ -341,7 +311,6 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 			return fmt.Errorf("error parsing bot ID: %w", err)
 		}
 
-		// Get the bot
 		botType, err := db.New(state.Pool).GetBotType(d.Context, botID)
 
 		if err != nil {
@@ -349,41 +318,29 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 		}
 
 		if botType == "certified" {
-			return nil // Just approve the review
+			return nil
 		}
 
 		if botType != "approved" {
 			return errors.New("bot is not approved | state=" + botType + ". Please deny the certification until approved")
 		}
 
-		// Set the bot type to certified
 		err = db.New(state.Pool).CertifyBot(d.Context, botID)
 
 		if err != nil {
 			return fmt.Errorf("error setting bot type to certified: %w", err)
 		}
 
-		// Give the bot its own role. Best-effort: the bot might not be a
-		// member of the main guild, which shouldn't block certification
-		// from actually persisting — this used to return an error here,
-		// which meant the caller (manage_app) never ran the UPDATE apps
-		// SET state = 'approved' below it, leaving the app stuck "pending"
-		// forever even though the bot was already certified in the bots
-		// table.
 		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, botIdSnow, state.Config.Roles.CertBot); err != nil {
 			state.Logger.Warn("Failed to give certified bot role to bot", zap.String("bot_id", botID), zap.Error(err))
 		}
 
-		// Give the owner(s) their developer roles too — this used to be a
-		// fully manual step (ibb!getbotroles), so an owner who never ran
-		// the command never got anything.
 		if ownerIDs, err := certBotOwnerIDs(d.Context, botID); err != nil {
 			state.Logger.Warn("Failed to resolve bot owners for cert role grant", zap.String("bot_id", botID), zap.Error(err))
 		} else {
 			grantCertOwnerRoles(ownerIDs)
 		}
 
-		// Send an embed to the bot logs channel
 		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 			Embeds: []discord.Embed{
 				{
@@ -412,7 +369,6 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 			return fmt.Errorf("error sending embed to bot logs channel, but successfully certified bot: %w", err)
 		}
 	} else {
-		// Denial is always possible
 		return nil
 	}
 
@@ -421,14 +377,12 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 
 func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
 	if approve {
-		// Get the server ID
 		serverID, ok := resp.Answers["id"]
 
 		if !ok {
 			return errors.New("server ID not found")
 		}
 
-		// Get the server
 		serverType, err := db.New(state.Pool).GetServerType(d.Context, serverID)
 
 		if err != nil {
@@ -436,32 +390,25 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 		}
 
 		if serverType == "certified" {
-			return nil // Just approve the review
+			return nil
 		}
 
 		if serverType != "approved" {
 			return errors.New("server is not approved | state=" + serverType + ". Please deny the certification until approved")
 		}
 
-		// Set the server type to certified
 		err = db.New(state.Pool).CertifyServer(d.Context, serverID)
 
 		if err != nil {
 			return fmt.Errorf("error setting server type to certified: %w", err)
 		}
 
-		// A listed server isn't itself a member of the main guild the way a
-		// bot is, so there's no server-equivalent of the CertBot role to
-		// grant here — but its owner(s) still get the same developer roles
-		// a certified bot's owner would, reusing that convention rather
-		// than inventing a separate server-owner role.
 		if ownerIDs, err := certServerOwnerIDs(d.Context, serverID); err != nil {
 			state.Logger.Warn("Failed to resolve server owners for cert role grant", zap.String("server_id", serverID), zap.Error(err))
 		} else {
 			grantCertOwnerRoles(ownerIDs)
 		}
 
-		// Send an embed to the bot logs channel
 		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 			Embeds: []discord.Embed{
 				{
@@ -490,7 +437,6 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 			return fmt.Errorf("error sending embed to bot logs channel, but successfully certified server: %w", err)
 		}
 	} else {
-		// Denial is always possible
 		return nil
 	}
 
@@ -511,7 +457,6 @@ func reviewLogicStaff(d uapi.RouteData, resp types.AppResponse, reason string, a
 			return err
 		}
 
-		// DM the user
 		dmchan, err := state.Discord.Rest().CreateDMChannel(userId)
 
 		if err != nil {
@@ -552,7 +497,6 @@ func reviewLogicStaff(d uapi.RouteData, resp types.AppResponse, reason string, a
 			return nil
 		}
 
-		// Attempt to DM the user on denial
 		dmchan, err := state.Discord.Rest().CreateDMChannel(userId)
 
 		if err != nil {

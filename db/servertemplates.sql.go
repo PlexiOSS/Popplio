@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countServerTemplateByCode = `-- name: CountServerTemplateByCode :one
@@ -15,6 +17,17 @@ SELECT EXISTS(SELECT 1 FROM server_templates WHERE code = $1)
 
 func (q *Queries) CountServerTemplateByCode(ctx context.Context, code string) (bool, error) {
 	row := q.db.QueryRow(ctx, countServerTemplateByCode, code)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const countServerTemplateByID = `-- name: CountServerTemplateByID :one
+SELECT EXISTS(SELECT 1 FROM server_templates WHERE id = $1)
+`
+
+func (q *Queries) CountServerTemplateByID(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, countServerTemplateByID, id)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -48,10 +61,13 @@ func (q *Queries) DeleteServerTemplate(ctx context.Context, id string) error {
 }
 
 const getServerTemplateByID = `-- name: GetServerTemplateByID :one
-SELECT id, code, name, short, tags, nsfw, owner, usage_count, created_at, updated_at
+SELECT id, code, name, short, tags, nsfw, owner, usage_count, created_at, updated_at, channels, roles
 FROM server_templates WHERE id = $1
 `
 
+// The single-fetch (detail page) query only -- channels/roles are a
+// meaningful chunk of JSON per row, so the list query below deliberately
+// doesn't select them; a browse grid has no use for them.
 func (q *Queries) GetServerTemplateByID(ctx context.Context, id string) (ServerTemplate, error) {
 	row := q.db.QueryRow(ctx, getServerTemplateByID, id)
 	var i ServerTemplate
@@ -66,6 +82,8 @@ func (q *Queries) GetServerTemplateByID(ctx context.Context, id string) (ServerT
 		&i.UsageCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Channels,
+		&i.Roles,
 	)
 	return i, err
 }
@@ -97,7 +115,20 @@ type GetServerTemplatesPagedParams struct {
 	Owner  string   `db:"owner" json:"owner"`
 }
 
-func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemplatesPagedParams) ([]ServerTemplate, error) {
+type GetServerTemplatesPagedRow struct {
+	ID         string             `db:"id" json:"id"`
+	Code       string             `db:"code" json:"code"`
+	Name       string             `db:"name" json:"name"`
+	Short      string             `db:"short" json:"short"`
+	Tags       []string           `db:"tags" json:"tags"`
+	Nsfw       bool               `db:"nsfw" json:"nsfw"`
+	Owner      string             `db:"owner" json:"owner"`
+	UsageCount int32              `db:"usage_count" json:"usage_count"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemplatesPagedParams) ([]GetServerTemplatesPagedRow, error) {
 	rows, err := q.db.Query(ctx, getServerTemplatesPaged,
 		arg.Limit,
 		arg.Offset,
@@ -108,9 +139,9 @@ func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemp
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ServerTemplate
+	var items []GetServerTemplatesPagedRow
 	for rows.Next() {
-		var i ServerTemplate
+		var i GetServerTemplatesPagedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Code,
@@ -134,8 +165,8 @@ func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemp
 }
 
 const insertServerTemplate = `-- name: InsertServerTemplate :one
-INSERT INTO server_templates (code, name, short, tags, nsfw, owner, usage_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO server_templates (code, name, short, tags, nsfw, owner, usage_count, channels, roles)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING id
 `
 
@@ -147,6 +178,8 @@ type InsertServerTemplateParams struct {
 	Nsfw       bool     `db:"nsfw" json:"nsfw"`
 	Owner      string   `db:"owner" json:"owner"`
 	UsageCount int32    `db:"usage_count" json:"usage_count"`
+	Channels   []byte   `db:"channels" json:"channels"`
+	Roles      []byte   `db:"roles" json:"roles"`
 }
 
 func (q *Queries) InsertServerTemplate(ctx context.Context, arg InsertServerTemplateParams) (string, error) {
@@ -158,6 +191,8 @@ func (q *Queries) InsertServerTemplate(ctx context.Context, arg InsertServerTemp
 		arg.Nsfw,
 		arg.Owner,
 		arg.UsageCount,
+		arg.Channels,
+		arg.Roles,
 	)
 	var id string
 	err := row.Scan(&id)

@@ -121,6 +121,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		if count == 0 {
 			return resp.BadRequest("Team not found")
 		}
+	case "server_template":
+		exists, err := q.CountServerTemplateByID(d.Context, targetId)
+
+		if err != nil {
+			return resp.Err("Failed to query server template count [db count]", err, zap.String("template_id", targetId))
+		}
+
+		if !exists {
+			return resp.BadRequest("Server template not found")
+		}
 	default:
 		return resp.Status(http.StatusNotImplemented, "Support for this target type has not been implemented yet")
 	}

@@ -1,7 +1,5 @@
-// Package delete_server_template implements DELETE
-// /users/{uid}/server-templates/{id} — "Delete Server Template".
-//
-// Deletes a server template. You must be the owner to delete it
+// Copyright (C) 2026 NodeByte LTD
+
 package delete_server_template
 
 import (

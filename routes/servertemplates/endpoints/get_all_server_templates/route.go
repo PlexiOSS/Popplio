@@ -1,8 +1,5 @@
-// Package get_all_server_templates implements GET /server-templates/@all —
-// "Get All Server Templates".
-//
-// Gets all server templates on the list, paginated, optionally filtered by
-// tag
+// Copyright (C) 2026 NodeByte LTD
+
 package get_all_server_templates
 
 import (

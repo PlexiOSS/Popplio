@@ -1,6 +1,9 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package add_server_template
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"popplio/api/resp"
@@ -77,6 +80,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(err.Error())
 	}
 
+	channelsJSON, err := json.Marshal(meta.Channels)
+
+	if err != nil {
+		return resp.Err("Error encoding template channels", err)
+	}
+
+	rolesJSON, err := json.Marshal(meta.Roles)
+
+	if err != nil {
+		return resp.Err("Error encoding template roles", err)
+	}
+
 	id, err := q.InsertServerTemplate(d.Context, db.InsertServerTemplateParams{
 		Code:       payload.Code,
 		Name:       meta.Name,
@@ -85,6 +100,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		Nsfw:       payload.NSFW,
 		Owner:      d.Auth.ID,
 		UsageCount: meta.UsageCount,
+		Channels:   channelsJSON,
+		Roles:      rolesJSON,
 	})
 
 	if err != nil {
