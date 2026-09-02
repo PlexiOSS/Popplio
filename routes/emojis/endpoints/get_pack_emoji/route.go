@@ -70,6 +70,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error querying dovewing for owner user", err)
 	}
 
+	var vanityCode string
+
+	v, err := q.ResolveVanityByTargetID(d.Context, row.ID)
+
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return resp.Err("Error while resolving vanity", err)
+	}
+
+	if err == nil {
+		vanityCode = v.Code
+	}
+
 	return uapi.HttpResponse{
 		Json: types.PackEmojiDetail{
 			ID:        row.ID,
@@ -81,6 +93,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			PackURL:   row.PackUrl,
 			PackName:  pack.Name,
 			Owner:     owner,
+			Vanity:    vanityCode,
 		},
 	}
 }

@@ -43,7 +43,7 @@ ORDER BY bots.approximate_votes DESC, bots.type DESC
 LIMIT 12;
 
 -- name: GetBotsDueForModerationScan :many
-SELECT bot_id, short, long
+SELECT bot_id, short, long, nsfw
 FROM bots
 WHERE type IN ('approved', 'certified', 'pending')
 AND (moderation_checked_at IS NULL OR moderation_checked_at < NOW() - INTERVAL '7 days')

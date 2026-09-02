@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Pack emojis and stickers can now have a vanity URL, the same short-code
+  system bots/servers/teams already use: `PATCH /pack_emoji/{id}/vanity`
+  and `PATCH /pack_sticker/{id}/vanity` set one, `GET /{code}` and
+  `GET /emojis/{id}` / `GET /stickers/{id}` both resolve it, gated by the
+  same generic entity-permission check as every other vanity-settable
+  entity -- for pack emojis/stickers that resolves to whoever owns the
+  owning pack, since packs are single-owner and don't have their own team
+  permissions yet. Packs themselves already had a short, user-chosen `url`
+  slug from day one and were never part of this gap.
+
+### Fixed
+
+- OpenAI moderation was flagging bots/servers that honestly declared
+  themselves NSFW (via the platform's own `nsfw` field) for having, well,
+  NSFW content in their description -- filing an automated report and
+  showing a "Moderation flagged" badge to reviewers for content that was
+  never undeclared to begin with. New `moderation.EffectiveResult`
+  exempts the `sexual` category specifically (and only that one --
+  `sexual/minors` and every other category still flags regardless of any
+  NSFW label) when the entity is NSFW-declared, applied at submission
+  time, on the periodic re-scan, and as a one-time repair against 3 bots
+  already sitting with a stale false-positive flag in prod (confirmed via
+  a read-only query first: all three had `sexual` as their only category,
+  and staff had already manually dismissed the auto-filed reports against
+  them more than once each -- this had been a recurring false alarm).
+
 ## [1.8.0] - 2026-09-01
 
 ### Added

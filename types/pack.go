@@ -97,6 +97,10 @@ type PackEmojiDetail struct {
 	PackURL   string                  `json:"pack_url"`
 	PackName  string                  `json:"pack_name"`
 	Owner     *dovetypes.PlatformUser `json:"owner"`
+	// Vanity is the emoji's own short vanity code, if the owner has set one
+	// (via PATCH /pack_emoji/{id}/vanity). Empty when unset -- unlike
+	// bots/servers/teams, pack emojis aren't required to have one.
+	Vanity string `json:"vanity"`
 }
 
 // PackStickerDetail is PackEmojiDetail's counterpart for GET /stickers/{id}.
@@ -110,4 +114,5 @@ type PackStickerDetail struct {
 	PackURL   string                  `json:"pack_url"`
 	PackName  string                  `json:"pack_name"`
 	Owner     *dovetypes.PlatformUser `json:"owner"`
+	Vanity    string                  `json:"vanity"`
 }

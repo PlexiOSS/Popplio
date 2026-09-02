@@ -289,7 +289,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// Best-effort: a reviewer signal, not a gate. Never fails the submission.
 	if result, err := moderation.CheckText(d.Context, payload.Short, payload.Long); err != nil {
 		state.Logger.Error("Failed to run moderation check on new bot", zap.Error(err), zap.String("botID", payload.BotID))
-	} else if result.Flagged {
+	} else if result := moderation.EffectiveResult(result, payload.NSFW); result.Flagged {
 		if err := q.UpdateBotModerationResult(d.Context, db.UpdateBotModerationResultParams{
 			BotID:                payload.BotID,
 			ModerationFlagged:    result.Flagged,

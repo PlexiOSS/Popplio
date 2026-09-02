@@ -687,7 +687,7 @@ func (q *Queries) GetBotsDueForJapiUpdate(ctx context.Context) ([]string, error)
 }
 
 const getBotsDueForModerationScan = `-- name: GetBotsDueForModerationScan :many
-SELECT bot_id, short, long
+SELECT bot_id, short, long, nsfw
 FROM bots
 WHERE type IN ('approved', 'certified', 'pending')
 AND (moderation_checked_at IS NULL OR moderation_checked_at < NOW() - INTERVAL '7 days')
@@ -699,6 +699,7 @@ type GetBotsDueForModerationScanRow struct {
 	BotID string `db:"bot_id" json:"bot_id"`
 	Short string `db:"short" json:"short"`
 	Long  string `db:"long" json:"long"`
+	Nsfw  bool   `db:"nsfw" json:"nsfw"`
 }
 
 func (q *Queries) GetBotsDueForModerationScan(ctx context.Context, limit int32) ([]GetBotsDueForModerationScanRow, error) {
@@ -710,7 +711,12 @@ func (q *Queries) GetBotsDueForModerationScan(ctx context.Context, limit int32) 
 	var items []GetBotsDueForModerationScanRow
 	for rows.Next() {
 		var i GetBotsDueForModerationScanRow
-		if err := rows.Scan(&i.BotID, &i.Short, &i.Long); err != nil {
+		if err := rows.Scan(
+			&i.BotID,
+			&i.Short,
+			&i.Long,
+			&i.Nsfw,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

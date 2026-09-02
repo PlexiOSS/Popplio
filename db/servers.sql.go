@@ -1327,7 +1327,7 @@ func (q *Queries) GetServerVanityRef(ctx context.Context, serverID string) (pgty
 }
 
 const getServersDueForModerationScan = `-- name: GetServersDueForModerationScan :many
-SELECT server_id, short, long
+SELECT server_id, short, long, nsfw
 FROM servers
 WHERE type IN ('approved', 'certified', 'pending')
 AND (moderation_checked_at IS NULL OR moderation_checked_at < NOW() - INTERVAL '7 days')
@@ -1339,6 +1339,7 @@ type GetServersDueForModerationScanRow struct {
 	ServerID string `db:"server_id" json:"server_id"`
 	Short    string `db:"short" json:"short"`
 	Long     string `db:"long" json:"long"`
+	Nsfw     bool   `db:"nsfw" json:"nsfw"`
 }
 
 func (q *Queries) GetServersDueForModerationScan(ctx context.Context, limit int32) ([]GetServersDueForModerationScanRow, error) {
@@ -1350,7 +1351,12 @@ func (q *Queries) GetServersDueForModerationScan(ctx context.Context, limit int3
 	var items []GetServersDueForModerationScanRow
 	for rows.Next() {
 		var i GetServersDueForModerationScanRow
-		if err := rows.Scan(&i.ServerID, &i.Short, &i.Long); err != nil {
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.Short,
+			&i.Long,
+			&i.Nsfw,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

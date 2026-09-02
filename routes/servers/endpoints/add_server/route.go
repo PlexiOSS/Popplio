@@ -239,7 +239,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if result, err := moderation.CheckText(d.Context, payload.Short, payload.Long); err != nil {
 		state.Logger.Error("Failed to run moderation check on new server", zap.Error(err), zap.String("serverID", payload.ServerID))
-	} else if result.Flagged {
+	} else if result := moderation.EffectiveResult(result, payload.NSFW); result.Flagged {
 		if err := q.UpdateServerModerationResult(d.Context, db.UpdateServerModerationResultParams{
 			ServerID:             payload.ServerID,
 			ModerationFlagged:    result.Flagged,

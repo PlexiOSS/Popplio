@@ -66,6 +66,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	return uapi.HttpResponse{
-		Redirect: "/" + v.TargetType + "s/" + v.TargetID,
+		Redirect: redirectPath(v.TargetType) + "/" + v.TargetID,
+	}
+}
+
+// redirectPath maps a vanity's target_type to the frontend path it lives
+// under. Naive "+s" pluralization covers bot/server/team/pack; pack_emoji
+// and pack_sticker need a real mapping since they don't live under a
+// "pack_emojis"/"pack_stickers" path at all.
+func redirectPath(targetType string) string {
+	switch targetType {
+	case "pack_emoji":
+		return "/emojis"
+	case "pack_sticker":
+		return "/stickers"
+	default:
+		return "/" + targetType + "s"
 	}
 }

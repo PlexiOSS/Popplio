@@ -46,7 +46,7 @@ FROM servers
 WHERE team_owner = $1;
 
 -- name: GetServersDueForModerationScan :many
-SELECT server_id, short, long
+SELECT server_id, short, long, nsfw
 FROM servers
 WHERE type IN ('approved', 'certified', 'pending')
 AND (moderation_checked_at IS NULL OR moderation_checked_at < NOW() - INTERVAL '7 days')

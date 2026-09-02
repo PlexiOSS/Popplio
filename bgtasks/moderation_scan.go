@@ -17,6 +17,7 @@ type moderationScanRow struct {
 	ID    string
 	Short string
 	Long  string
+	NSFW  bool
 }
 
 func ModerationScan(ctx context.Context) error {
@@ -46,7 +47,7 @@ func scanBots(ctx context.Context) error {
 
 	due := make([]moderationScanRow, len(rows))
 	for i, row := range rows {
-		due[i] = moderationScanRow{ID: row.BotID, Short: row.Short, Long: row.Long}
+		due[i] = moderationScanRow{ID: row.BotID, Short: row.Short, Long: row.Long, NSFW: row.Nsfw}
 	}
 
 	for _, row := range due {
@@ -57,6 +58,8 @@ func scanBots(ctx context.Context) error {
 				zap.String("table", "bots"), zap.String("id", row.ID), zap.Error(err))
 			continue
 		}
+
+		result = moderation.EffectiveResult(result, row.NSFW)
 
 		if err := q.RecordBotModerationScan(ctx, db.RecordBotModerationScanParams{
 			BotID:                row.ID,
@@ -88,7 +91,7 @@ func scanServers(ctx context.Context) error {
 
 	due := make([]moderationScanRow, len(rows))
 	for i, row := range rows {
-		due[i] = moderationScanRow{ID: row.ServerID, Short: row.Short, Long: row.Long}
+		due[i] = moderationScanRow{ID: row.ServerID, Short: row.Short, Long: row.Long, NSFW: row.Nsfw}
 	}
 
 	for _, row := range due {
@@ -99,6 +102,8 @@ func scanServers(ctx context.Context) error {
 				zap.String("table", "servers"), zap.String("id", row.ID), zap.Error(err))
 			continue
 		}
+
+		result = moderation.EffectiveResult(result, row.NSFW)
 
 		if err := q.RecordServerModerationScan(ctx, db.RecordServerModerationScanParams{
 			ServerID:             row.ID,

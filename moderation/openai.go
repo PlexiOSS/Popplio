@@ -105,3 +105,22 @@ func CheckText(ctx context.Context, inputs ...string) (Result, error) {
 
 	return result, nil
 }
+
+func nsfwExemptCategory(category string) bool {
+	return category == "sexual"
+}
+
+func EffectiveResult(result Result, nsfwDeclared bool) Result {
+	if !nsfwDeclared {
+		return result
+	}
+
+	filtered := make([]string, 0, len(result.Categories))
+	for _, category := range result.Categories {
+		if !nsfwExemptCategory(category) {
+			filtered = append(filtered, category)
+		}
+	}
+
+	return Result{Flagged: len(filtered) > 0, Categories: filtered}
+}
