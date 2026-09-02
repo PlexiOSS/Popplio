@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Sticker Packs a fourth `pack_type` alongside bot/server/emoji,
+- Sticker Packs -- a fourth `pack_type` alongside bot/server/emoji,
   structurally identical to emoji packs (own `pack_stickers` table,
   owner-only permission model, `.zip` download support), for bundling
   animated-or-not sticker images the same way emoji packs already bundle
@@ -20,13 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /stickers/{id}` (a single item's own detail, resolved with its
   owning pack's identity and owner), and `POST /emojis/{id}/download` /
   `POST /stickers/{id}/download` (records an individual download and
-  returns the new total new `downloads` columns on `pack_emojis`/
+  returns the new total -- new `downloads` columns on `pack_emojis`/
   `pack_stickers`, separate from and not affected by downloading a whole
   pack as a `.zip`).
 - Server templates now capture a preview of the source guild's channels
   and roles at submission time (new `channels`/`roles` jsonb columns),
   pulled from the same Discord template response that already supplied
-  the name it was always there, just discarded down to four fields.
+  the name -- it was always there, just discarded down to four fields.
   Only the single-template fetch (`GET /server-templates/{id}`) populates
   these; the browse list stays lean.
 - Server templates can now be liked/disliked and reviewed.
@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     -- see the migration's own comment for why and counts are computed
     live rather than cached, on purpose, given the vote-count incident
     earlier today.
-  - Reviews reuse the existing generic `reviews` table `server_template`
+  - Reviews reuse the existing generic `reviews` table -- `server_template`
     is now a recognized `target_type` in `add_review`'s existence check,
     same pattern as bot/server/team. No owner-review support for
     templates; that's an owner-permission concept templates don't have.
@@ -48,11 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redeeming vote credits was silently deflating an entity's public vote
   count. `RedeemVotesByItags`/`RedeemAllVotesForTarget` marked a redeemed
   vote `void`, the same flag every vote-count query (public totals,
-  `approximate_votes`, leaderboards) filters out so a bot, server, or
+  `approximate_votes`, leaderboards) filters out -- so a bot, server, or
   team's real vote count dropped every time its owner cashed votes in for
   shop credits, unrelated to any actual vote reset. Fixed at the source: a
   redeemed vote is now tracked purely via `credit_redeem` (which still
-  correctly stops it from being redeemed a second time a new
+  correctly stops it from being redeemed a second time -- a new
   `EntityGetRedeemableVoteCount`/`CountRedeemableEntityVotes` excludes
   already-redeemed votes from a *new* redemption's math without hiding
   them from the entity's public count). A data-repair migration
@@ -66,13 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   own RPC endpoint, the now-preferred path since 1.7.0. That endpoint
   doesn't return flags or suggested tags/description (only the JAPI
   fallback does), and the RPC-success branch of `CheckBot` left both
-  `Flags` and `Tags` unset a nil Go slice marshals to JSON `null`, not
+  `Flags` and `Tags` unset -- a nil Go slice marshals to JSON `null`, not
   `[]`, and the frontend called `.map()` on `flags` directly. Since RPC
   succeeds for effectively every public bot, this was hitting most new
   bot submissions, not an edge case. Both fields are now explicitly
   defaulted to an empty slice on the RPC path. Audited for the same
   pattern elsewhere in the backend (any struct built across multiple
-  fallback branches with an array field) `CheckBot` is the only place
+  fallback branches with an array field) -- `CheckBot` is the only place
   this shape exists.
 
 ## [1.7.2] - 2026-08-31
