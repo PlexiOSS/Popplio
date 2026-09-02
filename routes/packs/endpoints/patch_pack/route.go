@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package patch_pack
 
 import (
@@ -22,12 +24,13 @@ import (
 var compiledMessages = uapi.CompileValidationErrors(PatchPack{})
 
 type PatchPack struct {
-	Name    string                 `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
-	Short   string                 `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
-	Tags    []string               `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	Bots    []string               `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
-	Servers []string               `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
-	Emojis  []types.PackEmojiInput `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
+	Name     string                   `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
+	Short    string                   `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
+	Tags     []string                 `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	Bots     []string                 `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
+	Servers  []string                 `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
+	Emojis   []types.PackEmojiInput   `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
+	Stickers []types.PackStickerInput `json:"stickers" validate:"omitempty,max=50,dive" msg:"There can be at most 50 stickers"`
 }
 
 func Docs() *docs.Doc {
@@ -102,6 +105,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	case types.PackTypeEmoji:
 		if len(payload.Emojis) == 0 {
 			return resp.BadRequest("An emoji pack must contain at least one emoji")
+		}
+	case types.PackTypeSticker:
+		if len(payload.Stickers) == 0 {
+			return resp.BadRequest("A sticker pack must contain at least one sticker")
 		}
 	}
 
@@ -180,6 +187,31 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 			if err != nil {
 				return resp.ErrBody("Failed to insert pack emoji [patch_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))
+			}
+		}
+	}
+
+	if packType == types.PackTypeSticker {
+		err = txQ.DeletePackStickers(d.Context, id)
+
+		if err != nil {
+			return resp.Err("Error while clearing existing pack stickers [db exec]", err, zap.String("id", id))
+		}
+
+		for i, sticker := range payload.Stickers {
+			err = txQ.InsertPackSticker(
+				d.Context,
+				db.InsertPackStickerParams{
+					ID:       sticker.ID,
+					PackUrl:  id,
+					Name:     sticker.Name,
+					Animated: sticker.Animated,
+					Position: int32(i),
+				},
+			)
+
+			if err != nil {
+				return resp.ErrBody("Failed to insert pack sticker [patch_pack]", "Failed to save one of the pack's stickers — the uploaded image may not exist yet.", err, zap.String("stickerId", sticker.ID))
 			}
 		}
 	}

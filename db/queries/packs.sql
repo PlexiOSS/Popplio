@@ -35,7 +35,28 @@ SELECT COUNT(*) FROM packs;
 SELECT COUNT(*) FROM packs WHERE pack_type = $1;
 
 -- name: GetPackEmojis :many
-SELECT id, name, animated, position FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC;
+SELECT id, name, animated, position, downloads FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC;
+
+-- name: GetPackEmojiByID :one
+-- Backs the standalone /emojis/{id} page -- globally addressable by ID
+-- alone (IDs are client-generated UUIDs, not scoped per-pack), no need to
+-- know the owning pack's URL up front.
+SELECT id, pack_url, name, animated, position, downloads, created_at FROM pack_emojis WHERE id = $1;
+
+-- name: IncrementPackEmojiDownloads :one
+UPDATE pack_emojis SET downloads = downloads + 1 WHERE id = $1 RETURNING downloads;
+
+-- name: GetAllPackEmojisPaged :many
+-- The flat /emojis browse page -- every emoji across every pack, newest
+-- first, with just enough of the owning pack to link back to it.
+SELECT e.id, e.name, e.animated, e.downloads, e.created_at, e.pack_url, p.name AS pack_name
+FROM pack_emojis e
+JOIN packs p ON p.url = e.pack_url
+ORDER BY e.created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountPackEmojis :one
+SELECT COUNT(*) FROM pack_emojis;
 
 -- name: GetPackSEO :one
 SELECT name, short FROM packs WHERE url = $1;

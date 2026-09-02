@@ -512,6 +512,22 @@ CREATE TABLE public.pack_emojis (
     name text NOT NULL,
     animated boolean DEFAULT false NOT NULL,
     "position" integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    downloads integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: pack_stickers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pack_stickers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    pack_url text NOT NULL,
+    name text NOT NULL,
+    animated boolean DEFAULT false NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    downloads integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -533,7 +549,7 @@ CREATE TABLE public.packs (
     vote_banned boolean DEFAULT false NOT NULL,
     servers text[] DEFAULT '{}'::text[] NOT NULL,
     pack_type text DEFAULT 'bot'::text NOT NULL,
-    CONSTRAINT packs_pack_type_check CHECK ((pack_type = ANY (ARRAY['bot'::text, 'server'::text, 'emoji'::text])))
+    CONSTRAINT packs_pack_type_check CHECK ((pack_type = ANY (ARRAY['bot'::text, 'server'::text, 'emoji'::text, 'sticker'::text])))
 );
 
 
@@ -1380,6 +1396,14 @@ ALTER TABLE ONLY public.pack_emojis
 
 
 --
+-- Name: pack_stickers pack_stickers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pack_stickers
+    ADD CONSTRAINT pack_stickers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: packs packages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1844,6 +1868,13 @@ CREATE INDEX pack_emojis_pack_url_idx ON public.pack_emojis USING btree (pack_ur
 
 
 --
+-- Name: pack_stickers_pack_url_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pack_stickers_pack_url_idx ON public.pack_stickers USING btree (pack_url);
+
+
+--
 -- Name: positions_card; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2034,6 +2065,14 @@ ALTER TABLE ONLY public.packs
 
 ALTER TABLE ONLY public.pack_emojis
     ADD CONSTRAINT pack_emojis_pack_url_fkey FOREIGN KEY (pack_url) REFERENCES public.packs(url) ON DELETE CASCADE;
+
+
+--
+-- Name: pack_stickers pack_stickers_pack_url_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pack_stickers
+    ADD CONSTRAINT pack_stickers_pack_url_fkey FOREIGN KEY (pack_url) REFERENCES public.packs(url) ON DELETE CASCADE;
 
 
 --

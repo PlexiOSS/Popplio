@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package add_pack
 
 import (
@@ -24,14 +26,15 @@ import (
 var compiledMessages = uapi.CompileValidationErrors(CreatePack{})
 
 type CreatePack struct {
-	Name     string                 `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
-	URL      string                 `json:"url" validate:"required,min=3,max=20,nospaces,notblank,alpha" msg:"URL must be between 3 and 20 characters without spaces and must be alphabetic"`
-	Short    string                 `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
-	Tags     []string               `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	PackType string                 `json:"pack_type" validate:"required,oneof=bot server emoji" msg:"pack_type must be one of bot, server, or emoji"`
-	Bots     []string               `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
-	Servers  []string               `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
-	Emojis   []types.PackEmojiInput `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
+	Name     string                   `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
+	URL      string                   `json:"url" validate:"required,min=3,max=20,nospaces,notblank,alpha" msg:"URL must be between 3 and 20 characters without spaces and must be alphabetic"`
+	Short    string                   `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
+	Tags     []string                 `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	PackType string                   `json:"pack_type" validate:"required,oneof=bot server emoji sticker" msg:"pack_type must be one of bot, server, emoji, or sticker"`
+	Bots     []string                 `json:"bots" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 bots without duplicates"`
+	Servers  []string                 `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
+	Emojis   []types.PackEmojiInput   `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
+	Stickers []types.PackStickerInput `json:"stickers" validate:"omitempty,max=50,dive" msg:"There can be at most 50 stickers"`
 }
 
 func Docs() *docs.Doc {
@@ -80,6 +83,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	case types.PackTypeEmoji:
 		if len(payload.Emojis) == 0 {
 			return resp.BadRequest("An emoji pack must contain at least one emoji")
+		}
+	case types.PackTypeSticker:
+		if len(payload.Stickers) == 0 {
+			return resp.BadRequest("A sticker pack must contain at least one sticker")
 		}
 	}
 
@@ -180,6 +187,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 		if err != nil {
 			return resp.ErrBody("Failed to insert pack emoji [add_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))
+		}
+	}
+
+	for i, sticker := range payload.Stickers {
+		err = txQ.InsertPackSticker(d.Context, db.InsertPackStickerParams{
+			ID:       sticker.ID,
+			PackUrl:  payload.URL,
+			Name:     sticker.Name,
+			Animated: sticker.Animated,
+			Position: int32(i),
+		})
+
+		if err != nil {
+			return resp.ErrBody("Failed to insert pack sticker [add_pack]", "Failed to save one of the pack's stickers — the uploaded image may not exist yet.", err, zap.String("stickerId", sticker.ID))
 		}
 	}
 

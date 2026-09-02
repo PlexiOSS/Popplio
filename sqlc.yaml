@@ -1,3 +1,4 @@
+## Copyright (C) 2026 NodeByte LTD
 version: "2"
 sql:
   - engine: "postgresql"
@@ -78,6 +79,9 @@ sql:
             go_type:
               type: "[]byte"
           - column: "pack_emojis.id"
+            go_type:
+              type: "string"
+          - column: "pack_stickers.id"
             go_type:
               type: "string"
           - column: "teams.id"

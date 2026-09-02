@@ -277,6 +277,17 @@ type PackEmoji struct {
 	Animated  bool               `db:"animated" json:"animated"`
 	Position  int32              `db:"position" json:"position"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Downloads int32              `db:"downloads" json:"downloads"`
+}
+
+type PackSticker struct {
+	ID        string             `db:"id" json:"id"`
+	PackUrl   string             `db:"pack_url" json:"pack_url"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Position  int32              `db:"position" json:"position"`
+	Downloads int32              `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Partner struct {

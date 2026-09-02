@@ -22,6 +22,17 @@ func (q *Queries) CountPackByURL(ctx context.Context, url string) (int64, error)
 	return count, err
 }
 
+const countPackEmojis = `-- name: CountPackEmojis :one
+SELECT COUNT(*) FROM pack_emojis
+`
+
+func (q *Queries) CountPackEmojis(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPackEmojis)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPacks = `-- name: CountPacks :one
 SELECT COUNT(*) FROM packs
 `
@@ -60,6 +71,59 @@ DELETE FROM pack_emojis WHERE pack_url = $1
 func (q *Queries) DeletePackEmojis(ctx context.Context, packUrl string) error {
 	_, err := q.db.Exec(ctx, deletePackEmojis, packUrl)
 	return err
+}
+
+const getAllPackEmojisPaged = `-- name: GetAllPackEmojisPaged :many
+SELECT e.id, e.name, e.animated, e.downloads, e.created_at, e.pack_url, p.name AS pack_name
+FROM pack_emojis e
+JOIN packs p ON p.url = e.pack_url
+ORDER BY e.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type GetAllPackEmojisPagedParams struct {
+	Limit  int32 `db:"limit" json:"limit"`
+	Offset int32 `db:"offset" json:"offset"`
+}
+
+type GetAllPackEmojisPagedRow struct {
+	ID        string             `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Downloads int32              `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PackUrl   string             `db:"pack_url" json:"pack_url"`
+	PackName  string             `db:"pack_name" json:"pack_name"`
+}
+
+// The flat /emojis browse page -- every emoji across every pack, newest
+// first, with just enough of the owning pack to link back to it.
+func (q *Queries) GetAllPackEmojisPaged(ctx context.Context, arg GetAllPackEmojisPagedParams) ([]GetAllPackEmojisPagedRow, error) {
+	rows, err := q.db.Query(ctx, getAllPackEmojisPaged, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllPackEmojisPagedRow
+	for rows.Next() {
+		var i GetAllPackEmojisPagedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Animated,
+			&i.Downloads,
+			&i.CreatedAt,
+			&i.PackUrl,
+			&i.PackName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getAllPacks = `-- name: GetAllPacks :many
@@ -213,15 +277,48 @@ func (q *Queries) GetPackByURL(ctx context.Context, url string) (GetPackByURLRow
 	return i, err
 }
 
+const getPackEmojiByID = `-- name: GetPackEmojiByID :one
+SELECT id, pack_url, name, animated, position, downloads, created_at FROM pack_emojis WHERE id = $1
+`
+
+type GetPackEmojiByIDRow struct {
+	ID        string             `db:"id" json:"id"`
+	PackUrl   string             `db:"pack_url" json:"pack_url"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Position  int32              `db:"position" json:"position"`
+	Downloads int32              `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+// Backs the standalone /emojis/{id} page -- globally addressable by ID
+// alone (IDs are client-generated UUIDs, not scoped per-pack), no need to
+// know the owning pack's URL up front.
+func (q *Queries) GetPackEmojiByID(ctx context.Context, id string) (GetPackEmojiByIDRow, error) {
+	row := q.db.QueryRow(ctx, getPackEmojiByID, id)
+	var i GetPackEmojiByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.PackUrl,
+		&i.Name,
+		&i.Animated,
+		&i.Position,
+		&i.Downloads,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getPackEmojis = `-- name: GetPackEmojis :many
-SELECT id, name, animated, position FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC
+SELECT id, name, animated, position, downloads FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC
 `
 
 type GetPackEmojisRow struct {
-	ID       string `db:"id" json:"id"`
-	Name     string `db:"name" json:"name"`
-	Animated bool   `db:"animated" json:"animated"`
-	Position int32  `db:"position" json:"position"`
+	ID        string `db:"id" json:"id"`
+	Name      string `db:"name" json:"name"`
+	Animated  bool   `db:"animated" json:"animated"`
+	Position  int32  `db:"position" json:"position"`
+	Downloads int32  `db:"downloads" json:"downloads"`
 }
 
 func (q *Queries) GetPackEmojis(ctx context.Context, packUrl string) ([]GetPackEmojisRow, error) {
@@ -238,6 +335,7 @@ func (q *Queries) GetPackEmojis(ctx context.Context, packUrl string) ([]GetPackE
 			&i.Name,
 			&i.Animated,
 			&i.Position,
+			&i.Downloads,
 		); err != nil {
 			return nil, err
 		}
@@ -392,6 +490,17 @@ func (q *Queries) GetUserPacksByOwner(ctx context.Context, owner string) ([]GetU
 		return nil, err
 	}
 	return items, nil
+}
+
+const incrementPackEmojiDownloads = `-- name: IncrementPackEmojiDownloads :one
+UPDATE pack_emojis SET downloads = downloads + 1 WHERE id = $1 RETURNING downloads
+`
+
+func (q *Queries) IncrementPackEmojiDownloads(ctx context.Context, id string) (int32, error) {
+	row := q.db.QueryRow(ctx, incrementPackEmojiDownloads, id)
+	var downloads int32
+	err := row.Scan(&downloads)
+	return downloads, err
 }
 
 const insertPack = `-- name: InsertPack :exec

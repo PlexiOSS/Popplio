@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package main
 
 import (
@@ -25,6 +27,7 @@ import (
 	"popplio/routes/bots"
 	"popplio/routes/changelogs"
 	"popplio/routes/diagnostics"
+	"popplio/routes/emojis"
 	"popplio/routes/health"
 	"popplio/routes/list"
 	notifrouter "popplio/routes/notifications"
@@ -38,6 +41,7 @@ import (
 	"popplio/routes/servertemplates"
 	"popplio/routes/shop"
 	"popplio/routes/staff"
+	"popplio/routes/stickers"
 	"popplio/routes/tasks"
 	"popplio/routes/teams"
 	"popplio/routes/tickets"
@@ -164,6 +168,7 @@ func main() {
 		bots.Router{},
 		changelogs.Router{},
 		diagnostics.Router{},
+		emojis.Router{},
 		health.Router{},
 		list.Router{},
 		notifrouter.Router{},
@@ -177,6 +182,7 @@ func main() {
 		servertemplates.Router{},
 		shop.Router{},
 		staff.Router{},
+		stickers.Router{},
 		tasks.Router{},
 		teams.Router{},
 		tickets.Router{},

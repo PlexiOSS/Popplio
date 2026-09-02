@@ -1,4 +1,5 @@
-// Package assets resolves a bot pack into the bots it contains.
+// Copyright (C) 2026 NodeByte LTD
+
 package assets
 
 import (
@@ -27,14 +28,10 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 	}
 
 	pack.ResolvedOwner = ownerUser
-
-	// Ensure these always marshal as `[]` rather than `null` when the pack
-	// has no bots/servers/emojis — a nil Go slice serializes to JSON null,
-	// which crashes frontend consumers that call .length/.map on it without
-	// a null check.
 	pack.ResolvedBots = []types.IndexBot{}
 	pack.ResolvedServers = []types.IndexServer{}
 	pack.Emojis = []types.PackEmoji{}
+	pack.Stickers = []types.PackSticker{}
 
 	q := db.New(state.Pool)
 
@@ -74,7 +71,6 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 			VoteBlitzUntil:   row.VoteBlitzUntil,
 		}
 
-		// Resolve the bot
 		err = botassets.ResolveIndexBot(ctx, &bot)
 
 		if err != nil {
@@ -118,7 +114,6 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 			SpotlightedUntil: row.SpotlightedUntil,
 		}
 
-		// Resolve the server
 		err = serverassets.ResolveIndexServer(ctx, &server)
 
 		if err != nil {
@@ -139,14 +134,37 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 		emojis := make([]types.PackEmoji, len(rows))
 		for i, row := range rows {
 			emojis[i] = types.PackEmoji{
-				ID:       row.ID,
-				Name:     row.Name,
-				Animated: row.Animated,
-				Position: int(row.Position),
+				ID:        row.ID,
+				Name:      row.Name,
+				Animated:  row.Animated,
+				Position:  int(row.Position),
+				Downloads: int(row.Downloads),
 			}
 		}
 
 		pack.Emojis = emojis
+	}
+
+	if pack.PackType == types.PackTypeSticker {
+		rows, err := q.GetPackStickers(ctx, pack.URL)
+
+		if err != nil {
+			state.Logger.Error("Error querying pack_stickers table [db fetch]", zap.Error(err), zap.String("pack_url", pack.URL))
+			return fmt.Errorf("error querying pack_stickers table: %w", err)
+		}
+
+		stickers := make([]types.PackSticker, len(rows))
+		for i, row := range rows {
+			stickers[i] = types.PackSticker{
+				ID:        row.ID,
+				Name:      row.Name,
+				Animated:  row.Animated,
+				Position:  int(row.Position),
+				Downloads: int(row.Downloads),
+			}
+		}
+
+		pack.Stickers = stickers
 	}
 
 	pack.Votes, err = votes.EntityGetVoteCount(ctx, state.Pool, pack.URL, "pack")

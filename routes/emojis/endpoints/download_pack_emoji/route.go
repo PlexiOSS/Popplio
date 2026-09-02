@@ -1,35 +1,35 @@
 // Copyright (C) 2026 NodeByte LTD
 
-package get_pack_seo
+package download_pack_emoji
 
 import (
 	"errors"
 	"net/http"
 
 	"popplio/api/resp"
-
 	"popplio/db"
 	"popplio/state"
-	"popplio/types"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
-
-	"github.com/go-chi/chi/v5"
 )
+
+type DownloadResponse struct {
+	Downloads int `json:"downloads"`
+}
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
-		Summary:     "Get Pack SEO Info",
-		Description: "Gets the minimal SEO information about a pack for embed/search purposes. Used by v4 website for meta tags",
-		Resp:        types.SEO{},
+		Summary:     "Download Pack Emoji",
+		Description: "Records a single-emoji download and returns the new total. Returns 204 on success",
+		Resp:        DownloadResponse{},
 		Params: []docs.Parameter{
 			{
 				Name:        "id",
-				Description: "The packs ID, name or vanity",
+				Description: "The emoji's ID",
 				Required:    true,
 				In:          "path",
 				Schema:      docs.IdSchema,
@@ -41,24 +41,17 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	row, err := db.New(state.Pool).GetPackSEO(d.Context, id)
+	downloads, err := db.New(state.Pool).IncrementPackEmojiDownloads(d.Context, id)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	if err != nil {
-		return resp.Err("Failed to get pack seo", err, zap.String("url", id))
-	}
-
-	seoData := types.SEO{
-		ID:     id,
-		Name:   row.Name,
-		Avatar: "",
-		Short:  row.Short,
+		return resp.Err("Error while incrementing emoji downloads [db exec]", err)
 	}
 
 	return uapi.HttpResponse{
-		Json: seoData,
+		Json: DownloadResponse{Downloads: int(downloads)},
 	}
 }

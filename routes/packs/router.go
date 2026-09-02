@@ -1,6 +1,5 @@
-// Package packs mounts the "Packs" group of API routes.
-//
-// These API endpoints are related to IBL packs
+// Copyright (C) 2026 NodeByte LTD
+
 package packs
 
 import (
@@ -65,7 +64,7 @@ func (b Router) Routes(r *chi.Mux) {
 			},
 		},
 		ExtData: map[string]any{
-			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+			api.PERMISSION_CHECK_KEY: nil,
 		},
 	}.Route(r)
 
@@ -82,7 +81,7 @@ func (b Router) Routes(r *chi.Mux) {
 			},
 		},
 		ExtData: map[string]any{
-			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+			api.PERMISSION_CHECK_KEY: nil,
 		},
 	}.Route(r)
 
@@ -99,7 +98,7 @@ func (b Router) Routes(r *chi.Mux) {
 			},
 		},
 		ExtData: map[string]any{
-			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+			api.PERMISSION_CHECK_KEY: nil,
 		},
 	}.Route(r)
 }

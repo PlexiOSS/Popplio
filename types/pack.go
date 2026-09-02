@@ -6,20 +6,14 @@ import (
 	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
-// PackType enumerates what a pack bundles. Immutable once a pack is
-// created — bot/server/emoji packs are structurally different enough
-// (different content arrays entirely) that allowing a pack to change type
-// after creation would invite half-migrated rows; an owner who wants a
-// different type deletes and recreates instead.
 const (
-	PackTypeBot    = "bot"
-	PackTypeServer = "server"
-	PackTypeEmoji  = "emoji"
+	PackTypeBot     = "bot"
+	PackTypeServer  = "server"
+	PackTypeEmoji   = "emoji"
+	PackTypeSticker = "sticker"
 )
 
 // @ci table=packs, unfilled=1
-//
-// Represents a Bot Pack
 type BotPack struct {
 	Owner           string                  `db:"owner" json:"-" description:"The owner of the pack"`
 	ResolvedOwner   *dovetypes.PlatformUser `db:"-" json:"owner" ci:"internal" description:"The resolved owner of the pack"` // Owner must be resolved internally from the owner field
@@ -29,42 +23,91 @@ type BotPack struct {
 	Tags            []string                `db:"tags" json:"tags" description:"The pack's tags"`
 	URL             string                  `db:"url" json:"url" description:"The pack's URL"`
 	CreatedAt       time.Time               `db:"created_at" json:"created_at" description:"The pack's creation date"`
-	PackType        string                  `db:"pack_type" json:"pack_type" description:"What the pack bundles: bot, server, or emoji"`
+	PackType        string                  `db:"pack_type" json:"pack_type" description:"What the pack bundles: bot, server, emoji, or sticker"`
 	Bots            []string                `db:"bots" json:"bot_ids" description:"The pack's bot IDs (pack_type=bot only)"`
 	ResolvedBots    []IndexBot              `db:"-" json:"bots" ci:"internal" description:"The resolved bots in the pack"` // Bots must be resolved internally from their IDs
 	Servers         []string                `db:"servers" json:"server_ids" description:"The pack's server IDs (pack_type=server only)"`
 	ResolvedServers []IndexServer           `db:"-" json:"servers" ci:"internal" description:"The resolved servers in the pack"`                                   // Servers must be resolved internally from their IDs
 	Emojis          []PackEmoji             `db:"-" json:"emojis" ci:"internal" description:"The pack's emojis (pack_type=emoji only), resolved from pack_emojis"` // Emojis must be resolved internally from pack_emojis
+	Stickers        []PackSticker           `db:"-" json:"stickers" ci:"internal" description:"The pack's stickers (pack_type=sticker only), resolved from pack_stickers"`
 	VoteBanned      bool                    `db:"vote_banned" json:"vote_banned" description:"Whether the pack is banned from voting"`
 }
 
-// PackEmoji is a single emoji bundled into an emoji pack. Unlike
-// Server.Emojis (a live, periodically-resynced copy of a real guild's
-// emojis), a pack emoji is a durable asset uploaded specifically for the
-// pack — it has to keep working even if the source server that inspired it
-// stops syncing or leaves the platform entirely, so it can't be a live
-// reference into servers.emojis.
-//
-// Like bot/server banners, there is no asset URL field here — the image
-// lives at a deterministic CDN path the frontend builds itself from
-// (pack URL, emoji ID, animated), the same convention bannerUrl() already
-// uses. Popplio only needs to know the emoji exists.
 type PackEmoji struct {
-	ID       string `db:"id" json:"id" description:"The emoji's ID within the pack"`
-	Name     string `db:"name" json:"name" description:"The emoji's name/shortcode as shown in the pack"`
-	Animated bool   `db:"animated" json:"animated" description:"Whether the emoji is an animated GIF"`
-	Position int    `db:"position" json:"position" description:"Display order within the pack"`
+	ID        string `db:"id" json:"id" description:"The emoji's ID within the pack"`
+	Name      string `db:"name" json:"name" description:"The emoji's name/shortcode as shown in the pack"`
+	Animated  bool   `db:"animated" json:"animated" description:"Whether the emoji is an animated GIF"`
+	Position  int    `db:"position" json:"position" description:"Display order within the pack"`
+	Downloads int    `db:"downloads" json:"downloads" description:"How many times this specific emoji has been individually downloaded from its own page"`
 }
 
-// PackEmojiInput is a single emoji submitted at pack create/edit time. The
-// emoji image itself must already exist in the bucket by this point — the
-// client uploads each emoji first (keyed by ID, under the pack's URL) and
-// only then submits the pack with the IDs it used, so pack writes stay a
-// single atomic insert instead of a multi-step transaction reaching out to
-// storage. Shared between add_pack and patch_pack rather than duplicated,
-// since endpoint packages don't import each other in this codebase.
 type PackEmojiInput struct {
 	ID       string `json:"id" validate:"required,uuid" msg:"Each emoji needs a valid ID"`
 	Name     string `json:"name" validate:"required,min=1,max=32,notblank" msg:"Emoji names must be between 1 and 32 characters"`
 	Animated bool   `json:"animated"`
+}
+
+type PackSticker struct {
+	ID        string `db:"id" json:"id" description:"The sticker's ID within the pack"`
+	Name      string `db:"name" json:"name" description:"The sticker's name"`
+	Animated  bool   `db:"animated" json:"animated" description:"Whether the sticker is an animated GIF"`
+	Position  int    `db:"position" json:"position" description:"Display order within the pack"`
+	Downloads int    `db:"downloads" json:"downloads" description:"How many times this specific sticker has been individually downloaded from its own page"`
+}
+
+// PackStickerInput is PackEmojiInput's counterpart for sticker packs.
+type PackStickerInput struct {
+	ID       string `json:"id" validate:"required,uuid" msg:"Each sticker needs a valid ID"`
+	Name     string `json:"name" validate:"required,min=1,max=32,notblank" msg:"Sticker names must be between 1 and 32 characters"`
+	Animated bool   `json:"animated"`
+}
+
+// FlatPackEmoji is one row of the flat, sitewide GET /emojis/@all browse
+// feed -- PackEmoji plus just enough of its owning pack to link back to it.
+type FlatPackEmoji struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Animated  bool      `json:"animated"`
+	Downloads int       `json:"downloads"`
+	CreatedAt time.Time `json:"created_at"`
+	PackURL   string    `json:"pack_url"`
+	PackName  string    `json:"pack_name"`
+}
+
+// FlatPackSticker is FlatPackEmoji's counterpart for GET /stickers/@all.
+type FlatPackSticker struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Animated  bool      `json:"animated"`
+	Downloads int       `json:"downloads"`
+	CreatedAt time.Time `json:"created_at"`
+	PackURL   string    `json:"pack_url"`
+	PackName  string    `json:"pack_name"`
+}
+
+// PackEmojiDetail is GET /emojis/{id}'s response -- a single emoji plus its
+// owning pack's identity and the pack owner, resolved.
+type PackEmojiDetail struct {
+	ID        string                  `json:"id"`
+	Name      string                  `json:"name"`
+	Animated  bool                    `json:"animated"`
+	Position  int                     `json:"position"`
+	Downloads int                     `json:"downloads"`
+	CreatedAt time.Time               `json:"created_at"`
+	PackURL   string                  `json:"pack_url"`
+	PackName  string                  `json:"pack_name"`
+	Owner     *dovetypes.PlatformUser `json:"owner"`
+}
+
+// PackStickerDetail is PackEmojiDetail's counterpart for GET /stickers/{id}.
+type PackStickerDetail struct {
+	ID        string                  `json:"id"`
+	Name      string                  `json:"name"`
+	Animated  bool                    `json:"animated"`
+	Position  int                     `json:"position"`
+	Downloads int                     `json:"downloads"`
+	CreatedAt time.Time               `json:"created_at"`
+	PackURL   string                  `json:"pack_url"`
+	PackName  string                  `json:"pack_name"`
+	Owner     *dovetypes.PlatformUser `json:"owner"`
 }
