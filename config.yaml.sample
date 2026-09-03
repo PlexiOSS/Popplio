@@ -27,8 +27,8 @@ channels:
   system: 762958420277067786 # System Channel
   uptime: 1083108330442076292 # Uptime Channel
   staff_logs: 1186195848497999912 # Staff Logs Channel
-  blog_announcements: 1083108330442076292 # Blog Post Announcements
-  changelog_announcements: 1186195848497999912 # Changelog Announcements
+  blog_announcements: 0 # Channel a new (published) blog post is announced to. Announcements are skipped entirely when this is unset (optional)
+  changelog_announcements: 0 # Channel a new (published) changelog entry is announced to. Announcements are skipped entirely when this is unset (optional)
 
 roles:
   awaiting_staff: 1029058929361174678 # Awaiting Staff Role

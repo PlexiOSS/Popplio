@@ -18,6 +18,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   owning pack, since packs are single-owner and don't have their own team
   permissions yet. Packs themselves already had a short, user-chosen `url`
   slug from day one and were never part of this gap.
+- Pack emojis and stickers now get a vanity URL automatically the moment
+  they're uploaded, slugified from their own name -- bots/servers/teams
+  always worked this way; only pack emojis/stickers sat at "no vanity"
+  until an owner manually set one. A name collision gets a short
+  ID-derived suffix rather than failing. `GET /packs/{url}` (and by
+  extension every response embedding a pack's emoji/sticker list) now
+  also surfaces each item's current vanity code.
+- `PATCH /users/{uid}/server-templates/{id}` -- a server template's owner
+  can now update its description, tags, and NSFW flag after submitting
+  it. The template's name and code stay tied to Discord's own template
+  metadata and aren't part of this (never were independently settable),
+  and channels/roles stay as originally submitted for now -- re-syncing
+  those from Discord is a separate, larger feature.
+- Themes -- a new `themes` route group (`GET /themes/@all`, `GET
+  /themes/{id}`, `PUT /users/{id}/themes`, `DELETE
+  /users/{uid}/themes/{id}`) for Discord profile theme submissions: a
+  name plus two 6-digit hex colors and up to 3 categories from a fixed
+  list. No file upload, no team permissions -- a simply-owned entity,
+  closest in shape to pack emojis/stickers. Runs through the same
+  word-blacklist and OpenAI moderation checks as bot/server submissions.
+  New `hex6` validator tag for strict 6-digit hex colors (the built-in
+  `hexcolor` tag also accepts 3/4/8-digit forms, which a theme
+  shouldn't).
 
 ### Fixed
 

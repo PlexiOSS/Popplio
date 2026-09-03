@@ -25,6 +25,7 @@
 --   3. Re-add this header comment block (pg_dump overwrites it).
 --   4. go run github.com/sqlc-dev/sqlc/cmd/sqlc generate
 --
+--
 -- PostgreSQL database dump
 --
 
@@ -56,20 +57,6 @@ CREATE SCHEMA archive_cache_servers;
 --
 
 COMMENT ON SCHEMA archive_cache_servers IS 'Retired cache-server subsystem, archived out of public. Read-only snapshot; no application code references it. See exp/remove_cache_servers.sql.';
-
-
---
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
--- *not* creating schema, since initdb creates it
-
-
---
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON SCHEMA public IS '';
 
 
 --
@@ -134,6 +121,93 @@ CREATE TABLE archive_cache_servers.bots_cache_server_uninvitable (
 --
 
 COMMENT ON TABLE archive_cache_servers.bots_cache_server_uninvitable IS 'Snapshot of bots.cache_server_uninvitable taken when the column was dropped.';
+
+
+--
+-- Name: cache_server_bots; Type: TABLE; Schema: archive_cache_servers; Owner: -
+--
+
+CREATE TABLE archive_cache_servers.cache_server_bots (
+    guild_id text NOT NULL,
+    bot_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    added integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: cache_server_migrations; Type: TABLE; Schema: archive_cache_servers; Owner: -
+--
+
+CREATE TABLE archive_cache_servers.cache_server_migrations (
+    guild_id text NOT NULL,
+    migration_id text NOT NULL,
+    state text[] NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: cache_server_migrations_done; Type: TABLE; Schema: archive_cache_servers; Owner: -
+--
+
+CREATE TABLE archive_cache_servers.cache_server_migrations_done (
+    migration_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    states text[] DEFAULT '{}'::text[] NOT NULL
+);
+
+
+--
+-- Name: cache_server_oauth_md; Type: TABLE; Schema: archive_cache_servers; Owner: -
+--
+
+CREATE TABLE archive_cache_servers.cache_server_oauth_md (
+    owner_id text NOT NULL
+);
+
+
+--
+-- Name: cache_server_oauths; Type: TABLE; Schema: archive_cache_servers; Owner: -
+--
+
+CREATE TABLE archive_cache_servers.cache_server_oauths (
+    user_id text NOT NULL,
+    access_token text NOT NULL,
+    refresh_token text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    bot text DEFAULT 'doxycycline'::text NOT NULL
+);
+
+
+--
+-- Name: cache_servers; Type: TABLE; Schema: archive_cache_servers; Owner: -
+--
+
+CREATE TABLE archive_cache_servers.cache_servers (
+    guild_id text NOT NULL,
+    bots_role text NOT NULL,
+    system_bots_role text NOT NULL,
+    logs_channel text NOT NULL,
+    staff_role text NOT NULL,
+    welcome_channel text NOT NULL,
+    invite_code text NOT NULL,
+    name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    web_moderator_role text NOT NULL
+);
+
+
+--
+-- Name: __dp_mfa; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.__dp_mfa (
+    user_id text NOT NULL,
+    secret text,
+    domain text NOT NULL,
+    validated boolean DEFAULT false
+);
 
 
 --
@@ -409,7 +483,7 @@ CREATE TABLE public.entity_vote_redeem_logs (
 --
 
 CREATE TABLE public.entity_votes (
-    itag uuid DEFAULT public.uuid_generate_v4() CONSTRAINT entity_votes_id_not_null NOT NULL,
+    itag uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     target_id text NOT NULL,
     target_type text NOT NULL,
     author text NOT NULL,
@@ -575,7 +649,6 @@ CREATE TABLE public.partners (
     name text NOT NULL,
     short text NOT NULL,
     user_id text NOT NULL,
-    image text NOT NULL,
     links jsonb NOT NULL,
     type text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -636,6 +709,18 @@ CREATE TABLE public.rpc_logs (
 
 
 --
+-- Name: server_template_reactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.server_template_reactions (
+    template_id uuid NOT NULL,
+    user_id text NOT NULL,
+    liked boolean NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: server_templates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -652,18 +737,6 @@ CREATE TABLE public.server_templates (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     channels jsonb DEFAULT '[]'::jsonb NOT NULL,
     roles jsonb DEFAULT '[]'::jsonb NOT NULL
-);
-
-
---
--- Name: server_template_reactions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.server_template_reactions (
-    template_id uuid NOT NULL,
-    user_id text NOT NULL,
-    liked boolean NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -970,15 +1043,15 @@ CREATE TABLE public.staffpanel__authchain (
 
 CREATE TABLE public.tasks (
     task_id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    task_key text,
     task_name text NOT NULL,
     output jsonb,
     statuses jsonb[] DEFAULT '{}'::jsonb[] NOT NULL,
     for_user text,
-    allow_unauthenticated boolean DEFAULT false NOT NULL,
     expiry interval NOT NULL,
     state text DEFAULT 'pending'::text NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    allow_unauthenticated boolean DEFAULT false NOT NULL,
+    task_key text
 );
 
 
@@ -1015,6 +1088,21 @@ CREATE TABLE public.teams (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     service text DEFAULT 'api'::text NOT NULL
+);
+
+
+--
+-- Name: themes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.themes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    owner text NOT NULL,
+    name text NOT NULL,
+    primary_color text NOT NULL,
+    secondary_color text NOT NULL,
+    tags text[] NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -1109,10 +1197,10 @@ CREATE TABLE public.users (
 --
 
 CREATE TABLE public.vanity (
-    itag uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     target_id text NOT NULL,
     target_type text NOT NULL,
     code public.citext NOT NULL,
+    itag uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -1167,9 +1255,9 @@ CREATE TABLE public.webhooks (
     target_type text NOT NULL,
     url text NOT NULL,
     secret text NOT NULL,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
     broken boolean DEFAULT false NOT NULL,
     simple_auth boolean DEFAULT false NOT NULL,
-    created_at timestamp without time zone DEFAULT now() NOT NULL,
     event_whitelist text[] DEFAULT '{}'::text[] NOT NULL,
     name text DEFAULT 'My untitled webhook'::text NOT NULL,
     failed_requests integer DEFAULT 0 NOT NULL,
@@ -1185,6 +1273,46 @@ CREATE TABLE public.webhooks (
 
 ALTER TABLE ONLY archive_cache_servers.bots_cache_server_uninvitable
     ADD CONSTRAINT bots_cache_server_uninvitable_pkey PRIMARY KEY (bot_id);
+
+
+--
+-- Name: cache_server_bots cache_server_bots_bot_id_key; Type: CONSTRAINT; Schema: archive_cache_servers; Owner: -
+--
+
+ALTER TABLE ONLY archive_cache_servers.cache_server_bots
+    ADD CONSTRAINT cache_server_bots_bot_id_key UNIQUE (bot_id);
+
+
+--
+-- Name: cache_server_migrations_done cache_server_migrations_done_pkey; Type: CONSTRAINT; Schema: archive_cache_servers; Owner: -
+--
+
+ALTER TABLE ONLY archive_cache_servers.cache_server_migrations_done
+    ADD CONSTRAINT cache_server_migrations_done_pkey PRIMARY KEY (migration_id);
+
+
+--
+-- Name: cache_server_migrations cache_server_migrations_guild_id_migration_id_key; Type: CONSTRAINT; Schema: archive_cache_servers; Owner: -
+--
+
+ALTER TABLE ONLY archive_cache_servers.cache_server_migrations
+    ADD CONSTRAINT cache_server_migrations_guild_id_migration_id_key UNIQUE (guild_id, migration_id);
+
+
+--
+-- Name: cache_servers cache_servers_pkey; Type: CONSTRAINT; Schema: archive_cache_servers; Owner: -
+--
+
+ALTER TABLE ONLY archive_cache_servers.cache_servers
+    ADD CONSTRAINT cache_servers_pkey PRIMARY KEY (guild_id);
+
+
+--
+-- Name: cache_server_oauths user_bot; Type: CONSTRAINT; Schema: archive_cache_servers; Owner: -
+--
+
+ALTER TABLE ONLY archive_cache_servers.cache_server_oauths
+    ADD CONSTRAINT user_bot UNIQUE (user_id, bot);
 
 
 --
@@ -1500,14 +1628,6 @@ ALTER TABLE ONLY public.rpc_logs
 
 
 --
--- Name: server_templates server_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.server_templates
-    ADD CONSTRAINT server_templates_pkey PRIMARY KEY (id);
-
-
---
 -- Name: server_template_reactions server_template_reactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1516,19 +1636,19 @@ ALTER TABLE ONLY public.server_template_reactions
 
 
 --
+-- Name: server_templates server_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.server_templates
+    ADD CONSTRAINT server_templates_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: servers servers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.servers
     ADD CONSTRAINT servers_pkey PRIMARY KEY (server_id);
-
-
---
--- Name: shop_holds shop_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.shop_holds
-    ADD CONSTRAINT shop_holds_pkey PRIMARY KEY (id);
 
 
 --
@@ -1545,6 +1665,14 @@ ALTER TABLE ONLY public.shop_coupon_redemptions
 
 ALTER TABLE ONLY public.shop_coupons
     ADD CONSTRAINT shop_coupons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: shop_holds shop_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shop_holds
+    ADD CONSTRAINT shop_holds_pkey PRIMARY KEY (id);
 
 
 --
@@ -1628,22 +1756,6 @@ ALTER TABLE ONLY public.staff_positions
 
 
 --
--- Name: staff_template_types staff_template_types_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff_template_types
-    ADD CONSTRAINT staff_template_types_name_key UNIQUE (name);
-
-
---
--- Name: staff_template_types staff_template_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff_template_types
-    ADD CONSTRAINT staff_template_types_pkey PRIMARY KEY (id);
-
-
---
 -- Name: staff_templates staff_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1689,6 +1801,30 @@ ALTER TABLE ONLY public.team_members
 
 ALTER TABLE ONLY public.teams
     ADD CONSTRAINT teams_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: staff_template_types template_types_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_template_types
+    ADD CONSTRAINT template_types_name_key UNIQUE (name);
+
+
+--
+-- Name: staff_template_types template_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_template_types
+    ADD CONSTRAINT template_types_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: themes themes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.themes
+    ADD CONSTRAINT themes_pkey PRIMARY KEY (id);
 
 
 --
@@ -1793,14 +1929,6 @@ ALTER TABLE ONLY public.vote_credit_tiers
 
 ALTER TABLE ONLY public.webhook_logs
     ADD CONSTRAINT webhook_logs_pkey PRIMARY KEY (id);
-
-
---
--- Name: webhooks webhooks_target_id_target_type_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.webhooks
-    ADD CONSTRAINT webhooks_target_id_target_type_key UNIQUE (target_id, target_type);
 
 
 --
@@ -1959,6 +2087,13 @@ CREATE INDEX shop_purchases_target_idx ON public.shop_purchases USING btree (tar
 
 
 --
+-- Name: themes_owner_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX themes_owner_idx ON public.themes USING btree (owner);
+
+
+--
 -- Name: ur_uid_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1977,6 +2112,14 @@ CREATE INDEX web_api_tokens_expiry_token_id_target_type_target_id_type_p_idx ON 
 --
 
 CREATE INDEX webhook_logs_idx ON public.webhook_logs USING btree (user_id);
+
+
+--
+-- Name: cache_server_bots cache_server_bots_guild_id_fkey; Type: FK CONSTRAINT; Schema: archive_cache_servers; Owner: -
+--
+
+ALTER TABLE ONLY archive_cache_servers.cache_server_bots
+    ADD CONSTRAINT cache_server_bots_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES archive_cache_servers.cache_servers(guild_id) ON UPDATE CASCADE ON DELETE CASCADE;
 
 
 --
@@ -2044,6 +2187,14 @@ ALTER TABLE ONLY public.entity_votes
 
 
 --
+-- Name: partners fk_type; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.partners
+    ADD CONSTRAINT fk_type FOREIGN KEY (type) REFERENCES public.partner_types(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
 -- Name: bots owner_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2076,14 +2227,6 @@ ALTER TABLE ONLY public.pack_stickers
 
 
 --
--- Name: server_template_reactions server_template_reactions_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.server_template_reactions
-    ADD CONSTRAINT server_template_reactions_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.server_templates(id) ON DELETE CASCADE;
-
-
---
 -- Name: partners partners_bot_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2092,19 +2235,11 @@ ALTER TABLE ONLY public.partners
 
 
 --
--- Name: partners partners_type_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partners
-    ADD CONSTRAINT partners_type_fkey FOREIGN KEY (type) REFERENCES public.partner_types(id);
-
-
---
 -- Name: partners partners_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.partners
-    ADD CONSTRAINT partners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id);
+    ADD CONSTRAINT partners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON UPDATE CASCADE ON DELETE CASCADE;
 
 
 --
@@ -2113,6 +2248,14 @@ ALTER TABLE ONLY public.partners
 
 ALTER TABLE ONLY public.rpc_logs
     ADD CONSTRAINT rpc_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: server_template_reactions server_template_reactions_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.server_template_reactions
+    ADD CONSTRAINT server_template_reactions_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.server_templates(id) ON DELETE CASCADE;
 
 
 --
@@ -2200,7 +2343,7 @@ ALTER TABLE ONLY public.staff_onboardings
 --
 
 ALTER TABLE ONLY public.staff_templates
-    ADD CONSTRAINT staff_templates_type_fkey FOREIGN KEY (type) REFERENCES public.staff_template_types(id);
+    ADD CONSTRAINT staff_templates_type_fkey FOREIGN KEY (type) REFERENCES public.staff_template_types(id) ON UPDATE CASCADE ON DELETE CASCADE;
 
 
 --

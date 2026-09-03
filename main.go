@@ -44,6 +44,7 @@ import (
 	"popplio/routes/stickers"
 	"popplio/routes/tasks"
 	"popplio/routes/teams"
+	"popplio/routes/themes"
 	"popplio/routes/tickets"
 	"popplio/routes/users"
 	"popplio/routes/vanity"
@@ -185,6 +186,7 @@ func main() {
 		stickers.Router{},
 		tasks.Router{},
 		teams.Router{},
+		themes.Router{},
 		tickets.Router{},
 		users.Router{},
 		vanity.Router{},

@@ -133,12 +133,19 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 
 		emojis := make([]types.PackEmoji, len(rows))
 		for i, row := range rows {
+			vanity, err := ResolveVanityCode(ctx, q, row.ID)
+
+			if err != nil {
+				return fmt.Errorf("error resolving vanity for pack emoji %s: %w", row.ID, err)
+			}
+
 			emojis[i] = types.PackEmoji{
 				ID:        row.ID,
 				Name:      row.Name,
 				Animated:  row.Animated,
 				Position:  int(row.Position),
 				Downloads: int(row.Downloads),
+				Vanity:    vanity,
 			}
 		}
 
@@ -155,12 +162,19 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 
 		stickers := make([]types.PackSticker, len(rows))
 		for i, row := range rows {
+			vanity, err := ResolveVanityCode(ctx, q, row.ID)
+
+			if err != nil {
+				return fmt.Errorf("error resolving vanity for pack sticker %s: %w", row.ID, err)
+			}
+
 			stickers[i] = types.PackSticker{
 				ID:        row.ID,
 				Name:      row.Name,
 				Animated:  row.Animated,
 				Position:  int(row.Position),
 				Downloads: int(row.Downloads),
+				Vanity:    vanity,
 			}
 		}
 

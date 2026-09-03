@@ -34,3 +34,13 @@ AND (sqlc.arg('owner')::text = '' OR owner = sqlc.arg('owner'));
 
 -- name: DeleteServerTemplate :exec
 DELETE FROM server_templates WHERE id = $1;
+
+-- name: UpdateServerTemplate :exec
+-- Deliberately omits name -- it's pulled from Discord's own template
+-- metadata at submission time (see add_server_template), not
+-- independently settable, so it isn't part of what an owner can edit
+-- here. channels/roles are excluded too; re-syncing those from Discord
+-- is a separate, larger feature.
+UPDATE server_templates
+SET short = $2, tags = $3, nsfw = $4, updated_at = now()
+WHERE id = $1;

@@ -76,34 +76,34 @@ func (q *Queries) InsertVanity(ctx context.Context, arg InsertVanityParams) erro
 }
 
 const resolveVanityByCode = `-- name: ResolveVanityByCode :one
-SELECT itag, target_id, target_type, code, created_at FROM vanity WHERE code = $1
+SELECT target_id, target_type, code, itag, created_at FROM vanity WHERE code = $1
 `
 
 func (q *Queries) ResolveVanityByCode(ctx context.Context, code string) (Vanity, error) {
 	row := q.db.QueryRow(ctx, resolveVanityByCode, code)
 	var i Vanity
 	err := row.Scan(
-		&i.Itag,
 		&i.TargetID,
 		&i.TargetType,
 		&i.Code,
+		&i.Itag,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const resolveVanityByItag = `-- name: ResolveVanityByItag :one
-SELECT itag, target_id, target_type, code, created_at FROM vanity WHERE itag = $1
+SELECT target_id, target_type, code, itag, created_at FROM vanity WHERE itag = $1
 `
 
 func (q *Queries) ResolveVanityByItag(ctx context.Context, itag pgtype.UUID) (Vanity, error) {
 	row := q.db.QueryRow(ctx, resolveVanityByItag, itag)
 	var i Vanity
 	err := row.Scan(
-		&i.Itag,
 		&i.TargetID,
 		&i.TargetType,
 		&i.Code,
+		&i.Itag,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -111,7 +111,7 @@ func (q *Queries) ResolveVanityByItag(ctx context.Context, itag pgtype.UUID) (Va
 
 const resolveVanityByTargetID = `-- name: ResolveVanityByTargetID :one
 
-SELECT itag, target_id, target_type, code, created_at FROM vanity WHERE target_id = $1
+SELECT target_id, target_type, code, itag, created_at FROM vanity WHERE target_id = $1
 `
 
 // resolveImpl (popplio/routes/vanity/assets/resolve.go) picks one of three
@@ -122,10 +122,10 @@ func (q *Queries) ResolveVanityByTargetID(ctx context.Context, targetID string) 
 	row := q.db.QueryRow(ctx, resolveVanityByTargetID, targetID)
 	var i Vanity
 	err := row.Scan(
-		&i.Itag,
 		&i.TargetID,
 		&i.TargetType,
 		&i.Code,
+		&i.Itag,
 		&i.CreatedAt,
 	)
 	return i, err

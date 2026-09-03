@@ -4,13 +4,13 @@
 -- db/queries/payments.sql and db/queries/reports.sql.
 
 -- name: ResolveVanityByTargetID :one
-SELECT itag, target_id, target_type, code, created_at FROM vanity WHERE target_id = $1;
+SELECT target_id, target_type, code, itag, created_at FROM vanity WHERE target_id = $1;
 
 -- name: ResolveVanityByCode :one
-SELECT itag, target_id, target_type, code, created_at FROM vanity WHERE code = $1;
+SELECT target_id, target_type, code, itag, created_at FROM vanity WHERE code = $1;
 
 -- name: ResolveVanityByItag :one
-SELECT itag, target_id, target_type, code, created_at FROM vanity WHERE itag = $1;
+SELECT target_id, target_type, code, itag, created_at FROM vanity WHERE itag = $1;
 
 -- name: GetBotIDByClientID :one
 SELECT bot_id FROM bots WHERE client_id = $1;

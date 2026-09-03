@@ -39,6 +39,7 @@ type PackEmoji struct {
 	Animated  bool   `db:"animated" json:"animated" description:"Whether the emoji is an animated GIF"`
 	Position  int    `db:"position" json:"position" description:"Display order within the pack"`
 	Downloads int    `db:"downloads" json:"downloads" description:"How many times this specific emoji has been individually downloaded from its own page"`
+	Vanity    string `db:"-" json:"vanity" description:"The emoji's own short vanity code" ci:"internal"`
 }
 
 type PackEmojiInput struct {
@@ -53,6 +54,7 @@ type PackSticker struct {
 	Animated  bool   `db:"animated" json:"animated" description:"Whether the sticker is an animated GIF"`
 	Position  int    `db:"position" json:"position" description:"Display order within the pack"`
 	Downloads int    `db:"downloads" json:"downloads" description:"How many times this specific sticker has been individually downloaded from its own page"`
+	Vanity    string `db:"-" json:"vanity" description:"The sticker's own short vanity code" ci:"internal"`
 }
 
 // PackStickerInput is PackEmojiInput's counterpart for sticker packs.

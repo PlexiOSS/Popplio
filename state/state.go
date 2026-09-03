@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -59,6 +60,21 @@ var (
 	DovewingPlatformDiscord dovewing.Platform
 )
 
+var hex6Pattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// hex6 validates a strict 6-digit hex color with a leading `#` (e.g.
+// "#5865F2") -- go-playground/validator's built-in "hexcolor" tag also
+// accepts 3/4/8-digit forms, which a theme's primary/secondary color
+// shouldn't.
+func hex6(fl validator.FieldLevel) bool {
+	switch fl.Field().Kind() {
+	case reflect.String:
+		return hex6Pattern.MatchString(fl.Field().String())
+	default:
+		return false
+	}
+}
+
 func nonVulgar(fl validator.FieldLevel) bool {
 	switch fl.Field().Kind() {
 	case reflect.String:
@@ -76,6 +92,7 @@ func nonVulgar(fl validator.FieldLevel) bool {
 }
 
 func Setup() {
+	Validator.RegisterValidation("hex6", hex6)
 	Validator.RegisterValidation("nonvulgar", nonVulgar)
 	Validator.RegisterValidation("noxss", noXSS)
 	Validator.RegisterValidation("notblank", validators.NotBlank)

@@ -10,6 +10,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	packAssets "popplio/routes/packs/assets"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -188,6 +189,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		if err != nil {
 			return resp.ErrBody("Failed to insert pack emoji [add_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))
 		}
+
+		if err := packAssets.EnsureDefaultVanity(d.Context, txQ, emoji.ID, "pack_emoji", emoji.Name); err != nil {
+			return resp.ErrBody("Failed to set a default vanity for a pack emoji [add_pack]", "Failed to save one of the pack's emojis.", err, zap.String("emojiId", emoji.ID))
+		}
 	}
 
 	for i, sticker := range payload.Stickers {
@@ -201,6 +206,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 		if err != nil {
 			return resp.ErrBody("Failed to insert pack sticker [add_pack]", "Failed to save one of the pack's stickers — the uploaded image may not exist yet.", err, zap.String("stickerId", sticker.ID))
+		}
+
+		if err := packAssets.EnsureDefaultVanity(d.Context, txQ, sticker.ID, "pack_sticker", sticker.Name); err != nil {
+			return resp.ErrBody("Failed to set a default vanity for a pack sticker [add_pack]", "Failed to save one of the pack's stickers.", err, zap.String("stickerId", sticker.ID))
 		}
 	}
 

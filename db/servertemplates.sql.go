@@ -198,3 +198,31 @@ func (q *Queries) InsertServerTemplate(ctx context.Context, arg InsertServerTemp
 	err := row.Scan(&id)
 	return id, err
 }
+
+const updateServerTemplate = `-- name: UpdateServerTemplate :exec
+UPDATE server_templates
+SET short = $2, tags = $3, nsfw = $4, updated_at = now()
+WHERE id = $1
+`
+
+type UpdateServerTemplateParams struct {
+	ID    string   `db:"id" json:"id"`
+	Short string   `db:"short" json:"short"`
+	Tags  []string `db:"tags" json:"tags"`
+	Nsfw  bool     `db:"nsfw" json:"nsfw"`
+}
+
+// Deliberately omits name -- it's pulled from Discord's own template
+// metadata at submission time (see add_server_template), not
+// independently settable, so it isn't part of what an owner can edit
+// here. channels/roles are excluded too; re-syncing those from Discord
+// is a separate, larger feature.
+func (q *Queries) UpdateServerTemplate(ctx context.Context, arg UpdateServerTemplateParams) error {
+	_, err := q.db.Exec(ctx, updateServerTemplate,
+		arg.ID,
+		arg.Short,
+		arg.Tags,
+		arg.Nsfw,
+	)
+	return err
+}

@@ -58,6 +58,51 @@ type ArchiveCacheServersBotsCacheServerUninvitable struct {
 	ArchivedAt             pgtype.Timestamptz `db:"archived_at" json:"archived_at"`
 }
 
+type ArchiveCacheServersCacheServer struct {
+	GuildID          string             `db:"guild_id" json:"guild_id"`
+	BotsRole         string             `db:"bots_role" json:"bots_role"`
+	SystemBotsRole   string             `db:"system_bots_role" json:"system_bots_role"`
+	LogsChannel      string             `db:"logs_channel" json:"logs_channel"`
+	StaffRole        string             `db:"staff_role" json:"staff_role"`
+	WelcomeChannel   string             `db:"welcome_channel" json:"welcome_channel"`
+	InviteCode       string             `db:"invite_code" json:"invite_code"`
+	Name             pgtype.Text        `db:"name" json:"name"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	WebModeratorRole string             `db:"web_moderator_role" json:"web_moderator_role"`
+}
+
+type ArchiveCacheServersCacheServerBot struct {
+	GuildID   string             `db:"guild_id" json:"guild_id"`
+	BotID     string             `db:"bot_id" json:"bot_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Added     int32              `db:"added" json:"added"`
+}
+
+type ArchiveCacheServersCacheServerMigration struct {
+	GuildID     string             `db:"guild_id" json:"guild_id"`
+	MigrationID string             `db:"migration_id" json:"migration_id"`
+	State       []string           `db:"state" json:"state"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type ArchiveCacheServersCacheServerMigrationsDone struct {
+	MigrationID string             `db:"migration_id" json:"migration_id"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	States      []string           `db:"states" json:"states"`
+}
+
+type ArchiveCacheServersCacheServerOauth struct {
+	UserID       string             `db:"user_id" json:"user_id"`
+	AccessToken  string             `db:"access_token" json:"access_token"`
+	RefreshToken string             `db:"refresh_token" json:"refresh_token"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	Bot          string             `db:"bot" json:"bot"`
+}
+
+type ArchiveCacheServersCacheServerOauthMd struct {
+	OwnerID string `db:"owner_id" json:"owner_id"`
+}
+
 type AutomatedVoteReset struct {
 	ID        pgtype.UUID        `db:"id" json:"id"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
@@ -192,6 +237,13 @@ type Changelog struct {
 	Fixed            []string           `db:"fixed" json:"fixed"`
 }
 
+type DpMfa struct {
+	UserID    string      `db:"user_id" json:"user_id"`
+	Secret    pgtype.Text `db:"secret" json:"secret"`
+	Domain    string      `db:"domain" json:"domain"`
+	Validated pgtype.Bool `db:"validated" json:"validated"`
+}
+
 type EntityBadge struct {
 	Itag       pgtype.UUID        `db:"itag" json:"itag"`
 	TargetType string             `db:"target_type" json:"target_type"`
@@ -295,7 +347,6 @@ type Partner struct {
 	Name      string             `db:"name" json:"name"`
 	Short     string             `db:"short" json:"short"`
 	UserID    string             `db:"user_id" json:"user_id"`
-	Image     string             `db:"image" json:"image"`
 	Links     []byte             `db:"links" json:"links"`
 	Type      string             `db:"type" json:"type"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
@@ -585,15 +636,15 @@ type StaffpanelAuthchain struct {
 
 type Task struct {
 	TaskID               string           `db:"task_id" json:"task_id"`
-	TaskKey              pgtype.Text      `db:"task_key" json:"task_key"`
 	TaskName             string           `db:"task_name" json:"task_name"`
 	Output               map[string]any   `db:"output" json:"output"`
 	Statuses             []map[string]any `db:"statuses" json:"statuses"`
 	ForUser              pgtype.Text      `db:"for_user" json:"for_user"`
-	AllowUnauthenticated bool             `db:"allow_unauthenticated" json:"allow_unauthenticated"`
 	Expiry               pgtype.Interval  `db:"expiry" json:"expiry"`
 	State                string           `db:"state" json:"state"`
 	CreatedAt            pgtype.Timestamp `db:"created_at" json:"created_at"`
+	AllowUnauthenticated bool             `db:"allow_unauthenticated" json:"allow_unauthenticated"`
+	TaskKey              pgtype.Text      `db:"task_key" json:"task_key"`
 }
 
 type Team struct {
@@ -620,6 +671,16 @@ type TeamMember struct {
 	Mentionable bool               `db:"mentionable" json:"mentionable"`
 	DataHolder  bool               `db:"data_holder" json:"data_holder"`
 	Service     string             `db:"service" json:"service"`
+}
+
+type Theme struct {
+	ID             string             `db:"id" json:"id"`
+	Owner          string             `db:"owner" json:"owner"`
+	Name           string             `db:"name" json:"name"`
+	PrimaryColor   string             `db:"primary_color" json:"primary_color"`
+	SecondaryColor string             `db:"secondary_color" json:"secondary_color"`
+	Tags           []string           `db:"tags" json:"tags"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Ticket struct {
@@ -684,10 +745,10 @@ type UserReminder struct {
 }
 
 type Vanity struct {
-	Itag       pgtype.UUID        `db:"itag" json:"itag"`
 	TargetID   string             `db:"target_id" json:"target_id"`
 	TargetType string             `db:"target_type" json:"target_type"`
 	Code       string             `db:"code" json:"code"`
+	Itag       pgtype.UUID        `db:"itag" json:"itag"`
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -706,9 +767,9 @@ type Webhook struct {
 	TargetType     string           `db:"target_type" json:"target_type"`
 	Url            string           `db:"url" json:"url"`
 	Secret         string           `db:"secret" json:"secret"`
+	CreatedAt      pgtype.Timestamp `db:"created_at" json:"created_at"`
 	Broken         bool             `db:"broken" json:"broken"`
 	SimpleAuth     bool             `db:"simple_auth" json:"simple_auth"`
-	CreatedAt      pgtype.Timestamp `db:"created_at" json:"created_at"`
 	EventWhitelist []string         `db:"event_whitelist" json:"event_whitelist"`
 	Name           string           `db:"name" json:"name"`
 	FailedRequests int32            `db:"failed_requests" json:"failed_requests"`

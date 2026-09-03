@@ -8,6 +8,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	packAssets "popplio/routes/packs/assets"
 	"popplio/state"
 	"popplio/types"
 
@@ -70,16 +71,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error querying dovewing for owner user", err)
 	}
 
-	var vanityCode string
+	vanityCode, err := packAssets.ResolveVanityCode(d.Context, q, row.ID)
 
-	v, err := q.ResolveVanityByTargetID(d.Context, row.ID)
-
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil {
 		return resp.Err("Error while resolving vanity", err)
-	}
-
-	if err == nil {
-		vanityCode = v.Code
 	}
 
 	return uapi.HttpResponse{
