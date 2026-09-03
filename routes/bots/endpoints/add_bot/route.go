@@ -184,6 +184,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	// Check team owner here, to avoid a race condition
 	if payload.TeamOwner != "" {
+		// Holds the same advisory lock delete_team takes before its "does
+		// this team still have any bots/servers" checks -- without it, this
+		// insert and a concurrent delete_team call could interleave so that
+		// delete_team's count reads 0 right before this bot lands, and its
+		// ON DELETE CASCADE team_owner FK then silently deletes the bot
+		// this request just created along with the team.
+		if err := txq.LockTeamOwnership(d.Context, payload.TeamOwner); err != nil {
+			return resp.Err("Error acquiring team ownership lock", err, zap.String("userID", d.Auth.ID), zap.String("teamID", payload.TeamOwner), zap.String("botID", payload.BotID))
+		}
+
 		entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", payload.TeamOwner)
 
 		if err != nil {

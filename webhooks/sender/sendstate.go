@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package sender
 
 import (
@@ -11,49 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// webhookSendState is one delivery attempt to one webhook.
-//
-// It carries both the description of what is being sent and the mutable outcome
-// of sending it, because every step of a delivery — the SSRF check, the request
-// build, the response handling — needs to record its result against the same log
-// row.
 type webhookSendState struct {
-	// Event is the webhook event being delivered. It is also what a Discord
-	// webhook renders into an embed.
-	Event *events.WebhookResponse
-
-	// BadIntent marks this as a deliberately mis-authenticated probe.
-	//
-	// Popplio periodically sends a payload signed with a throwaway secret to
-	// check that the endpoint actually verifies signatures. For such a probe the
-	// outcomes invert: a 401/403 is success, and a 2xx means the endpoint is
-	// accepting unauthenticated payloads and is treated as broken.
-	BadIntent bool
-
-	// Webhook is the configured endpoint being delivered to.
-	Webhook *webhookData
-
-	// LogID is the webhook_logs row recording this attempt.
-	LogID string
-
-	// UserID is the user whose action triggered the webhook. Delivery outcomes
-	// are reported back to them as notifications.
-	UserID string
-
-	// Entity is the bot, server or team the webhook belongs to.
-	Entity WebhookEntity
-
-	// SendState is the terminal state of this attempt, set exactly once by
-	// cancelSend.
-	SendState string
-
-	// ResolvedIps caches the target's addresses so the bad-intent probe does not
-	// repeat the lookup — and, more importantly, so it cannot resolve to a
-	// different host than the one already vetted.
+	Event       *events.WebhookResponse
+	BadIntent   bool
+	Webhook     *webhookData
+	LogID       string
+	UserID      string
+	Entity      WebhookEntity
+	SendState   string
 	ResolvedIps []string
 }
 
-// logFields is the context every log line about this delivery carries.
 func (st *webhookSendState) logFields(extra ...zap.Field) []zap.Field {
 	return append([]zap.Field{
 		zap.String("logID", st.LogID),
@@ -63,11 +33,6 @@ func (st *webhookSendState) logFields(extra ...zap.Field) []zap.Field {
 	}, extra...)
 }
 
-// cancelSend records the terminal state of this attempt against its log row.
-//
-// The first call wins: a delivery reaches exactly one outcome, and a second call
-// means some path failed to return after already concluding, which is logged as
-// a warning rather than allowed to overwrite the real result.
 func (st *webhookSendState) cancelSend(saveState string) {
 	if saveState != "SUCCESS" {
 		state.Logger.Info("Cancelling webhook send", st.logFields()...)
@@ -98,11 +63,6 @@ func (st *webhookSendState) cancelSend(saveState string) {
 	}
 }
 
-// notify tells the triggering user how their webhook fared.
-//
-// A notification that cannot be delivered is logged and otherwise ignored: the
-// webhook delivery itself has already concluded, and failing it over an
-// undeliverable notification would misreport the outcome.
 func (st *webhookSendState) notify(alertType types.AlertType, title, message string) {
 	err := notifications.PushNotification(st.UserID, types.Alert{
 		Type:     alertType,
@@ -117,11 +77,6 @@ func (st *webhookSendState) notify(alertType types.AlertType, title, message str
 	}
 }
 
-// markFailed increments the failure counter on the entity's webhooks.
-//
-// Once the counter passes WebhookMaximumFailedRequests the webhook stops being
-// delivered to, so this is what eventually retires an endpoint that never
-// recovers.
 func (st *webhookSendState) markFailed() error {
 	return db.New(state.Pool).IncrementWebhookFailedRequests(state.Context, db.IncrementWebhookFailedRequestsParams{
 		TargetID:   st.Entity.EntityID,

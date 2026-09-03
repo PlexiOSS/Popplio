@@ -29,3 +29,11 @@ INSERT INTO vanity (target_id, target_type, code) VALUES ($1, $2, $3);
 
 -- name: UpdateVanityCode :exec
 UPDATE vanity SET code = $1 WHERE target_id = $2 AND target_type = $3;
+
+-- name: DeleteVanityByTarget :exec
+-- Cleans up a target's vanity row when the target itself is deleted --
+-- e.g. patch_pack removing a pack_emoji/pack_sticker from a pack, which
+-- otherwise leaves an orphaned vanity row permanently squatting its code
+-- (no FK/cascade exists between vanity and any target table by design,
+-- since vanity is generic across target types).
+DELETE FROM vanity WHERE target_id = $1 AND target_type = $2;

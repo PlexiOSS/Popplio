@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package sender
 
 import (
@@ -25,42 +27,24 @@ import (
 	"github.com/PlexiOSS/Keel/crypto"
 )
 
-// userAgent identifies Popplio to webhook endpoints.
 const userAgent = "Popplio/v8.0.0 (https://infinitybots.gg)"
 
-// dnsTimeout bounds the target hostname lookup. A webhook whose DNS is slow
-// should not hold a delivery slot open.
 const dnsTimeout = 5 * time.Second
 
-// webhookClient performs webhook deliveries. The timeout bounds how long a slow
-// or hostile endpoint can occupy a sender.
 var webhookClient = &http.Client{
 	Timeout: 30 * time.Second,
 }
 
-// Secret is a webhook's shared secret, used to authenticate payloads.
 type Secret struct {
 	Raw string
 }
 
-// Sign returns the hex-encoded HMAC-SHA512 of data under this secret.
 func (s Secret) Sign(data []byte) string {
 	h := hmac.New(sha512.New, []byte(s.Raw))
 	h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// resolveTarget resolves the webhook URL and rejects addresses Popplio must not
-// connect to.
-//
-// Webhook URLs are user-supplied, so delivering to one is a request to make an
-// outbound connection to an arbitrary host — the classic SSRF shape. Resolving
-// up front and caching the result on the send state means the addresses are
-// vetted once and reused, rather than re-resolved per attempt where a hostile
-// DNS server could answer differently the second time.
-//
-// Resolution is skipped when the state already carries addresses, which is how
-// the bad-intent probe inherits the vetted set from the delivery that spawned it.
 func (st *webhookSendState) resolveTarget(webhookURL string) error {
 	if len(st.ResolvedIps) == 0 {
 		parsed, err := url.ParseRequestURI(webhookURL)
@@ -93,23 +77,6 @@ func (st *webhookSendState) resolveTarget(webhookURL string) error {
 	return nil
 }
 
-// buildRequest constructs the outgoing POST for this delivery.
-//
-// Which secret is used depends on intent: a bad-intent probe signs with a
-// throwaway secret precisely so a correctly-implemented endpoint rejects it.
-//
-// Three wire protocols are supported, in priority order:
-//
-//   - hmac-auth (webhook.HmacAuth): the recommended protocol. Plain JSON body,
-//     signed with HMAC-SHA256 in X-Webhook-Signature as "sha256=<hex>" — the
-//     same shape as GitHub/Stripe webhooks.
-//   - simple-auth (webhook.SimpleAuth): plain JSON body with the raw secret in
-//     the Authorization header, for endpoints that cannot implement a
-//     signature check at all.
-//   - splashtail (the default when neither is set): the legacy protocol.
-//     Encrypts the payload and signs it with a nonce-chained HMAC, so neither
-//     the body nor a captured signature can be replayed. Kept only for
-//     webhooks that predate hmac-auth; new webhooks should not use it.
 func (st *webhookSendState) buildRequest(webhook *webhookData, data []byte) (*http.Request, error) {
 	secret := webhook.Secret
 
@@ -127,10 +94,6 @@ func (st *webhookSendState) buildRequest(webhook *webhookData, data []byte) (*ht
 	}
 }
 
-// buildHmacAuthRequest builds the recommended, easy-to-verify protocol: a
-// plain JSON body with an HMAC-SHA256 signature over it in
-// X-Webhook-Signature, formatted "sha256=<hex>" to match the header shape
-// GitHub and Stripe webhooks already use.
 func buildHmacAuthRequest(url, secret string, data []byte) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(state.Context, "POST", url, bytes.NewReader(data))
 
@@ -150,8 +113,6 @@ func buildHmacAuthRequest(url, secret string, data []byte) (*http.Request, error
 	return req, nil
 }
 
-// buildSimpleAuthRequest builds the legacy simple-auth protocol: a plain JSON
-// body with the raw secret sent as-is in the Authorization header.
 func buildSimpleAuthRequest(url, secret string, data []byte) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(state.Context, "POST", url, bytes.NewReader(data))
 
@@ -167,8 +128,6 @@ func buildSimpleAuthRequest(url, secret string, data []byte) (*http.Request, err
 	return req, nil
 }
 
-// buildSplashtailRequest builds the legacy default protocol: an encrypted
-// body with a nonce-chained HMAC across two headers. See sealPayload.
 func buildSplashtailRequest(url, secret string, data []byte) (*http.Request, error) {
 	postData, nonce, token, err := sealPayload(secret, data)
 
@@ -191,14 +150,6 @@ func buildSplashtailRequest(url, secret string, data []byte) (*http.Request, err
 	return req, nil
 }
 
-// sealPayload encrypts data and signs it under the splashtail protocol.
-//
-// The per-request nonce does double duty: it salts the AES key so the same
-// payload never encrypts identically twice, and it keys the outer HMAC so a
-// signature captured from one request cannot be replayed against another.
-//
-// Returns the hex-encoded ciphertext to send as the body, the nonce to publish
-// in the X-Webhook-Nonce header, and the signature for X-Webhook-Signature.
 func sealPayload(secret string, data []byte) (postData []byte, nonce, token string, err error) {
 	nonce = crypto.RandString(16)
 
@@ -225,8 +176,6 @@ func sealPayload(secret string, data []byte) (postData []byte, nonce, token stri
 
 	postData = []byte(hex.EncodeToString(gcm.Seal(aesNonce, aesNonce, data, nil)))
 
-	// Signed with the secret, then re-signed with the nonce, so verifying
-	// requires both.
 	inner := Secret{Raw: secret}.Sign(postData)
 	token = Secret{Raw: nonce}.Sign([]byte(inner))
 

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package types
 
 import (
@@ -28,19 +30,17 @@ type Position struct {
 	Hidden    bool           `json:"hidden"`
 	Closed    bool           `json:"closed"`
 	Cooldown  timex.Duration `json:"cooldown"`
-
-	// Internal fields
 	Channel             func() snowflake.ID                                                          `json:"-"`
 	ExtraLogic          func(d uapi.RouteData, p Position, answers map[string]string) error          `json:"-"`
-	PositionDescription func(d uapi.RouteData, p Position) string                                    `json:"-"` // Used for custom position descriptions
-	AllowedForBanned    bool                                                                         `json:"-"` // If true, banned users can apply for this position
-	BannedOnly          bool                                                                         `json:"-"` // If true, only banned users can apply for this position
-	ReviewLogic         func(d uapi.RouteData, resp AppResponse, reason string, approved bool) error `json:"-"` // If set, this function will be called when the position is reviewed. If it returns true, the app will be approved/denied
+	PositionDescription func(d uapi.RouteData, p Position) string                                    `json:"-"`
+	AllowedForBanned    bool                                                                         `json:"-"`
+	BannedOnly          bool                                                                         `json:"-"`
+	ReviewLogic         func(d uapi.RouteData, resp AppResponse, reason string, approved bool) error `json:"-"`
 }
 
 type AppMeta struct {
 	Positions []Position `json:"positions"`
-	Stable    bool       `json:"stable"` // Stable means that the list of apps is not pending big changes
+	Stable    bool       `json:"stable"`
 }
 
 type AppResponse struct {

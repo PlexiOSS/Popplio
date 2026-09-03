@@ -5,6 +5,191 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-09-03
+
+### Fixed
+
+- OpenAI moderation's `violence` category was flagging completely ordinary
+  game-bot descriptions. "Kill," "hunt," "battle," and "shoot" are
+  standard vocabulary for hunting/PvP/combat games (DuckHunt's own
+  description, "Ducks spawn... will you be able to kill them?", is
+  exactly this pattern), with no real-world harm signal behind any of
+  it. `violence` is now excluded from what counts as a moderation flag
+  entirely, for everyone, everywhere `CheckText` is called. This is
+  broader than the earlier NSFW-declared `sexual` exemption: it doesn't
+  depend on any per-entity setting, since the false-positive rate here
+  has nothing to do with NSFW status. `violence/graphic` is specific
+  enough to stay a real flag and is untouched. Repaired 8 bots that were
+  sitting flagged purely for `violence` under the old behavior.
+- `InsertAutoReport`'s `ON CONFLICT DO NOTHING` had no unique constraint
+  to actually land on (the PK is a random UUID, always unique), so every
+  periodic moderation re-scan that still flagged an unchanged bot/server
+  filed a brand-new duplicate report, even for something staff had
+  already reviewed and dismissed. Added a real partial unique index
+  (`target_type, target_id, reporter_id, description`, scoped to
+  `reporter_id = 'system:moderation'` so real user reports are never
+  deduplicated against each other) so the existing `ON CONFLICT DO
+  NOTHING` clause finally does what it always looked like it did.
+  Cleaned up 8 existing duplicate auto-reports as part of the migration.
+- `PUT /servers` (add server) was missing the team-auth mapping that
+  `PUT /bots` already had. A team-scoped API token submitting a server
+  without an explicit `team_owner` fell through to "no team yet," which
+  created a brand-new throwaway team *and* inserted a `team_members` row
+  whose `user_id` was actually the calling team's own UUID, not a real
+  Discord user. Fixed to match `add_bot`'s existing handling.
+- `PATCH /bots/{id}/settings` ran a Discord user lookup, needed only to
+  put a name/avatar on the mod-log embed, *before* the actual settings
+  update. If that lookup failed (deleted Discord account, a dovewing
+  hiccup, anything), the whole request failed and none of the edited
+  fields were saved, even fields with nothing to do with Discord's user
+  object. The update now runs first; the lookup is best-effort afterward
+  and degrades the embed, not the request. `PATCH /servers/{id}/settings`
+  had the safer ordering already, but a failure reading back the
+  name/avatar for its own embed still turned into a false-failure
+  response after the real update had already succeeded. Made
+  best-effort too, for the same reason.
+- Editing an emoji/sticker pack (`PATCH /users/{uid}/packs/{id}`) reset
+  every emoji/sticker's download count and upload date back to 0/now()
+  on *every* edit, even ones that didn't touch the item list at all.
+  The edit flow deletes and reinserts the whole item list, and the
+  insert never carried the old row's stats forward. Fixed to look up the
+  existing rows first and carry `downloads`/`created_at` through for any
+  item whose ID survives the edit; a genuinely new item still starts at
+  0/now() as before. Removing an item from a pack also now cleans up its
+  vanity row (nothing did before, permanently squatting the short code
+  and orphaning any link that used it).
+- New bots resolved via Discord's own RPC endpoint at submission (the
+  common, preferred path) were inserted with `servers = 0` regardless of
+  the bot's real guild count, since only the JAPI-fallback path was ever
+  populating that field. RPC's response is now parsed for it too, and
+  the periodic guild-count refresh (previously restricted to
+  approved/certified bots) now also covers pending/under_review ones, so
+  a submission sitting in the review queue doesn't show a stale/zero
+  count to reviewers for however long it takes to get approved.
+- A user leaving a team (`DELETE /teams/{tid}/members/{mid}` with
+  `mid` equal to their own ID) or editing their own `mentionable` flag
+  (`PATCH` on the same route) was rejected with a 403 unless they already
+  held `EntityRemoveMembers`/`EntityEditMembers` on the team. The
+  handlers' own self-exception logic was correct, but the router-level
+  permission check always evaluated the request against the team itself,
+  never against the caller acting on their own membership row, so the
+  self-exception was unreachable. Fixed by having the router route a
+  self-targeted request through the same authorization fast path already
+  used when a bot token acts on itself, without changing that shared
+  authorization function.
+- Three vote/coupon/team-ownership races, all fixed the same way: a
+  per-entity advisory lock (auto-released at transaction end) held before
+  the check-then-write that used to be able to race.
+  - Redeeming vote credits for the same target concurrently could double
+    (or triple, or...) count the same unclaimed votes across overlapping
+    requests.
+  - Redeeming the same shop coupon concurrently could exceed its
+    configured max-uses/reuse-wait limits.
+  - Two concurrent requests each stripping the Owner flag from a
+    different member of the same two-owner team could both read "2
+    owners, safe to remove" before either committed, leaving the team
+    with zero owners and permanently locked out of every
+    owner-gated action on it (including re-granting Owner). The same
+    lock is now also taken by `infernoplex`'s background team-cleanup
+    task, which removes members who've lost server access and had the
+    identical unguarded owner-count check.
+  - Casting a vote (`PUT /users/{uid}/{target_type}/{target_id}/votes`)
+    had the same shape of race on the per-user vote limits
+    (`PerUser`/`VoteTime`): two concurrent votes from the same user for
+    the same target could both pass the "haven't hit the limit yet"
+    check before either committed. Fixed with the same lock pattern,
+    scoped to (user, target) so unrelated users voting at the same time
+    are never serialized against each other.
+- `POST /teams` (create team) failed on every single call with a
+  foreign-key violation. It was inserting the new owner's
+  `team_members` row against the vanity row's own primary key instead of
+  the team's actual ID, two unrelated UUIDs that happened to share a
+  variable name at the call site.
+- A push notification's `webpush.SendNotification` failure was
+  dereferencing the HTTP response to check its status code even when the
+  send failed before getting a response at all (DNS/TLS/timeout), a
+  nil-pointer panic reachable from a background goroutine
+  (`votereminders.VrLoop`) with no recovery anywhere above it, able to
+  take down the whole process. Also: one subscribed device failing to
+  receive a notification used to abort delivery to all of that user's
+  *other* devices instead of just logging and moving on.
+- A webhook delivery attempt that failed early (a broken Discord webhook
+  URL, `SendDiscord` erroring, building the outbound request failing,
+  parsing its own log ID, saving the response) could return without ever
+  recording a terminal status against its `webhook_logs` row, leaving it
+  stuck at `PENDING` forever with no visibility in failure stats and no
+  retry (`PullPendingForAll` only re-scans pending rows once at process
+  startup). Every such path now guarantees a terminal status is recorded.
+- `infernoplex`'s invite-setup/update/delete wizards (`/update`,
+  `/delete`, the invite-URL modal flow) tracked an in-progress session by
+  Discord user ID alone. A user starting one of these flows in one
+  server, then starting it again in a second server before confirming or
+  cancelling the first, silently overwrote their only session slot.
+  Clicking a button on the first, still-visible message then acted on
+  the *second* server's data, with nothing shown to tell them which
+  server was actually about to be affected. Confirmed concretely for
+  `/delete`: confirming an old, unrelated-looking "Delete this server?"
+  prompt could delete a different server than the one on screen. Sessions
+  are now scoped per (user, server), and the delete-confirmation prompt
+  now names the server being deleted.
+- `infernoplex`'s periodic team-membership cleanup (removes a team member
+  once they lose Administrator on the Discord server backing the team)
+  had three compounding issues: it treated *any* Discord API error
+  (rate limits, 5xx, a transient network blip) as "this user left the
+  server" and removed them; it never checked whether removing an owner
+  would leave the team with zero owners; and for a team that owns more
+  than one server, it decided per (team, member, server) row instead of
+  once per (team, member) across every server the team owns, so losing
+  Administrator on just *one* of a team's servers could wipe a member's
+  entire team membership, including legitimate access via the team's
+  other servers. Fixed: only a confirmed "not a member" (HTTP 404)
+  counts as evidence the user left; anything ambiguous is skipped for
+  that run rather than acted on; the owner-count guard from
+  `delete_team_member` is now enforced here too; and admin status is
+  checked across every server the team owns before a removal decision is
+  made.
+- `infernoplex`'s periodic server-stats sync wrote `0` into a server's
+  NSFW channel count whenever the channel-list fetch failed transiently,
+  silently clobbering a previously-correct count with zero every 30
+  minutes until the next successful fetch. The count now stays untouched
+  on a failed fetch instead of being overwritten, and that failure (plus
+  a same-task emoji/sticker sync failure that was previously silent) is
+  now logged.
+- The staff panel's blog "create entry" action announced the new post to
+  Discord immediately on creation. Every newly created entry starts as
+  a draft (nothing sets it otherwise), so the announcement always linked
+  to a post nobody could actually see yet. The "update entry" action
+  already announces correctly, exactly once, on the actual
+  draft-to-published transition; create no longer announces at all, so a
+  new entry is only ever announced the first time it's published.
+- Adding a bot or server to an existing team and deleting that same team
+  could race: `delete_team` checked "does this team have any bots or
+  servers" before deleting, but nothing stopped a bot/server from being
+  added to the team in the window between that check and the delete, and
+  `bots.team_owner`/`servers.team_owner` are both `ON DELETE
+  CASCADE`, so the newly-added bot/server would be silently deleted
+  along with the team. Fixed with the same per-team advisory lock
+  pattern used for the ownership races above, taken by all three of
+  `add_bot`, `add_server`, and `delete_team`, so the two can no longer
+  interleave.
+- Resolving a server's invite (the setup wizard, and Sorbet's
+  `ResolveInvite` query) rejected every invite with any expiry at all;
+  only a genuinely permanent invite has ever been accepted. A
+  short-lived one was rejected with a message claiming an invite
+  expiring in 30+ days would work instead. It never did; that branch
+  always fell through to the same rejection either way. The message now
+  matches the actual, permanent-only requirement instead of implying a
+  duration would help.
+- A duplicate, unreachable check in the staff panel's own auth guard
+  (`EnsurePanelAuth`) was removed; harmless, but dead code that looked
+  like it was checking something it wasn't.
+
+### Changed
+
+- Discord's changelog-announcement ping is now Omniplex-specific. Every
+  project's changelog still posts to the configured channel when
+  published, but only an Omniplex release pings the configured role.
+
 ## [1.8.1] - 2026-09-02
 
 ### Added
@@ -14,28 +199,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `PATCH /pack_sticker/{id}/vanity` set one, `GET /{code}` and
   `GET /emojis/{id}` / `GET /stickers/{id}` both resolve it, gated by the
   same generic entity-permission check as every other vanity-settable
-  entity -- for pack emojis/stickers that resolves to whoever owns the
+  entity, for pack emojis/stickers that resolves to whoever owns the
   owning pack, since packs are single-owner and don't have their own team
   permissions yet. Packs themselves already had a short, user-chosen `url`
   slug from day one and were never part of this gap.
 - Pack emojis and stickers now get a vanity URL automatically the moment
-  they're uploaded, slugified from their own name -- bots/servers/teams
+  they're uploaded, slugified from their own name, bots/servers/teams
   always worked this way; only pack emojis/stickers sat at "no vanity"
   until an owner manually set one. A name collision gets a short
   ID-derived suffix rather than failing. `GET /packs/{url}` (and by
   extension every response embedding a pack's emoji/sticker list) now
   also surfaces each item's current vanity code.
-- `PATCH /users/{uid}/server-templates/{id}` -- a server template's owner
+- `PATCH /users/{uid}/server-templates/{id}`, a server template's owner
   can now update its description, tags, and NSFW flag after submitting
   it. The template's name and code stay tied to Discord's own template
   metadata and aren't part of this (never were independently settable),
-  and channels/roles stay as originally submitted for now -- re-syncing
+  and channels/roles stay as originally submitted for now, re-syncing
   those from Discord is a separate, larger feature.
-- Themes -- a new `themes` route group (`GET /themes/@all`, `GET
+- Themes, a new `themes` route group (`GET /themes/@all`, `GET
   /themes/{id}`, `PUT /users/{id}/themes`, `DELETE
   /users/{uid}/themes/{id}`) for Discord profile theme submissions: a
   name plus two 6-digit hex colors and up to 3 categories from a fixed
-  list. No file upload, no team permissions -- a simply-owned entity,
+  list. No file upload, no team permissions, a simply-owned entity,
   closest in shape to pack emojis/stickers. Runs through the same
   word-blacklist and OpenAI moderation checks as bot/server submissions.
   New `hex6` validator tag for strict 6-digit hex colors (the built-in
@@ -46,23 +231,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - OpenAI moderation was flagging bots/servers that honestly declared
   themselves NSFW (via the platform's own `nsfw` field) for having, well,
-  NSFW content in their description -- filing an automated report and
+  NSFW content in their description, filing an automated report and
   showing a "Moderation flagged" badge to reviewers for content that was
   never undeclared to begin with. New `moderation.EffectiveResult`
-  exempts the `sexual` category specifically (and only that one --
+  exempts the `sexual` category specifically (and only that one,
   `sexual/minors` and every other category still flags regardless of any
   NSFW label) when the entity is NSFW-declared, applied at submission
   time, on the periodic re-scan, and as a one-time repair against 3 bots
   already sitting with a stale false-positive flag in prod (confirmed via
   a read-only query first: all three had `sexual` as their only category,
   and staff had already manually dismissed the auto-filed reports against
-  them more than once each -- this had been a recurring false alarm).
+  them more than once each, this had been a recurring false alarm).
 
 ## [1.8.0] - 2026-09-01
 
 ### Added
 
-- Sticker Packs -- a fourth `pack_type` alongside bot/server/emoji,
+- Sticker Packs, a fourth `pack_type` alongside bot/server/emoji,
   structurally identical to emoji packs (own `pack_stickers` table,
   owner-only permission model, `.zip` download support), for bundling
   animated-or-not sticker images the same way emoji packs already bundle
@@ -73,13 +258,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /stickers/{id}` (a single item's own detail, resolved with its
   owning pack's identity and owner), and `POST /emojis/{id}/download` /
   `POST /stickers/{id}/download` (records an individual download and
-  returns the new total -- new `downloads` columns on `pack_emojis`/
+  returns the new total, new `downloads` columns on `pack_emojis`/
   `pack_stickers`, separate from and not affected by downloading a whole
   pack as a `.zip`).
 - Server templates now capture a preview of the source guild's channels
   and roles at submission time (new `channels`/`roles` jsonb columns),
   pulled from the same Discord template response that already supplied
-  the name -- it was always there, just discarded down to four fields.
+  the name, it was always there, just discarded down to four fields.
   Only the single-template fetch (`GET /server-templates/{id}`) populates
   these; the browse list stays lean.
 - Server templates can now be liked/disliked and reviewed.
@@ -87,11 +272,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (template, user): `PUT /users/{uid}/server-templates/{id}/reaction
     ?liked=true|false` sets, switches, or (sending the same reaction
     that's already active) clears a user's reaction, `GET` reads the
-    counts plus that user's own state. Deliberately not modeled as a vote
-    -- see the migration's own comment for why and counts are computed
-    live rather than cached, on purpose, given the vote-count incident
-    earlier today.
-  - Reviews reuse the existing generic `reviews` table -- `server_template`
+    counts plus that user's own state. Deliberately not modeled as a
+    vote (see the migration's own comment for why) and counts are
+    computed live rather than cached, on purpose, given the vote-count
+    incident earlier today.
+  - Reviews reuse the existing generic `reviews` table, `server_template`
     is now a recognized `target_type` in `add_review`'s existence check,
     same pattern as bot/server/team. No owner-review support for
     templates; that's an owner-permission concept templates don't have.
@@ -101,11 +286,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Redeeming vote credits was silently deflating an entity's public vote
   count. `RedeemVotesByItags`/`RedeemAllVotesForTarget` marked a redeemed
   vote `void`, the same flag every vote-count query (public totals,
-  `approximate_votes`, leaderboards) filters out -- so a bot, server, or
+  `approximate_votes`, leaderboards) filters out, so a bot, server, or
   team's real vote count dropped every time its owner cashed votes in for
   shop credits, unrelated to any actual vote reset. Fixed at the source: a
   redeemed vote is now tracked purely via `credit_redeem` (which still
-  correctly stops it from being redeemed a second time -- a new
+  correctly stops it from being redeemed a second time, a new
   `EntityGetRedeemableVoteCount`/`CountRedeemableEntityVotes` excludes
   already-redeemed votes from a *new* redemption's math without hiding
   them from the entity's public count). A data-repair migration
@@ -119,13 +304,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   own RPC endpoint, the now-preferred path since 1.7.0. That endpoint
   doesn't return flags or suggested tags/description (only the JAPI
   fallback does), and the RPC-success branch of `CheckBot` left both
-  `Flags` and `Tags` unset -- a nil Go slice marshals to JSON `null`, not
+  `Flags` and `Tags` unset, a nil Go slice marshals to JSON `null`, not
   `[]`, and the frontend called `.map()` on `flags` directly. Since RPC
   succeeds for effectively every public bot, this was hitting most new
   bot submissions, not an edge case. Both fields are now explicitly
   defaulted to an empty slice on the RPC path. Audited for the same
   pattern elsewhere in the backend (any struct built across multiple
-  fallback branches with an array field) -- `CheckBot` is the only place
+  fallback branches with an array field), `CheckBot` is the only place
   this shape exists.
 
 ## [1.7.2] - 2026-08-31
@@ -141,21 +326,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queue, owner creates/deletes directly. A submission's `name` is pulled
   from Discord's own public, unauthenticated `GET
   /guilds/templates/{code}` at creation time (confirmed no bot token or
-  auth needed), which is also what actually validates the code -- Popplio
+  auth needed), which is also what actually validates the code, Popplio
   itself does no format-checking beyond length bounds.
 - `GET /bots/{id}/similar` and `GET /servers/{id}/similar` other
   approved/certified (and, for servers, publicly listed) entries sharing
   at least one tag, ranked by how many tags they share, votes as the
   tiebreak. New `GetSimilarBots`/`GetSimilarServers` queries (tag-overlap
-  via `unnest`/`INTERSECT`, no ML/embeddings -- tags are the only
+  via `unnest`/`INTERSECT`, no ML/embeddings, tags are the only
   structured signal these already carry, and it's cheap, deterministic,
   and explains itself). No matches just means an empty list, not an
   error.
-- `GET /votes/leaderboard` -- the most active voters, all-time, by total
+- `GET /votes/leaderboard`, the most active voters, all-time, by total
   upvotes cast across every entity. Public, unauthenticated,
   `?limit=` (default 10, capped at 50). New `GetTopVoters` query,
   deliberately not scoped to the current post-reset voting cycle (counts
-  every upvote ever cast, void or not) -- same lifetime-cumulative shape
+  every upvote ever cast, void or not), same lifetime-cumulative shape
   as the existing `GetTopReviewers`/Top Reviewers Discord-role sync,
   chosen so the board isn't wiped every time the monthly automated reset
   runs.
@@ -164,18 +349,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2/5/10/20 cents). Redemption itself (`POST
   /{target_type}/{target_id}/votes/credits`) was already fully generic
   code-wise; there just weren't any `vote_credit_tiers` rows for anything
-  but bot, so every non-bot "convert votes" flow -- including the
-  already-shipped server one -- silently computed 0 credits regardless of
+  but bot, so every non-bot "convert votes" flow, including the
+  already-shipped server one, silently computed 0 credits regardless of
   real vote count. Found while building the team/pack credits UI in
   Omniplex; fixes server too, which predates that work.
 
 ### Changed
 
 - `GetPublicShopCoupons` now filters out coupons that aren't usable, have
-  expired, or have already hit their max-use count -- a public "available
+  expired, or have already hit their max-use count, a public "available
   offers" listing built on it (Omniplex) showing a dead coupon as if it
   were live would be actively misleading, not just harmlessly stale.
-- `EntityVoteInfo`'s `vote_credits` flag (advisory -- "does this target
+- `EntityVoteInfo`'s `vote_credits` flag (advisory, "does this target
   type support vote credits") now reports `true` for `team`/`pack` too,
   matching the tiers added above. Was hardcoded false for both regardless
   of whether tiers existed.
@@ -183,7 +368,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `GET /users/{id}`'s `user_bots` only ever queried bots owned directly
-  (the `owner` column) -- a bot transferred to a team (`owner` cleared,
+  (the `owner` column), a bot transferred to a team (`owner` cleared,
   `team_owner` set) vanished from it entirely for every member of that
   team, same bug `user_servers` would have if `GetIndexServersByTeamMembership`
   didn't already exist for servers. Added the missing
@@ -199,7 +384,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   servers. New `SearchTeamsPublic`/`SearchPacksPublic` queries back the
   `team`/`pack` target types, with the same query/tag-filter/vote-range
   shape as bots and servers already had (packs sort by creation date
-  rather than votes -- pack vote counts were never kept in a materialized
+  rather than votes, pack vote counts were never kept in a materialized
   column the way bots/servers/teams are, so there's nothing cheap to sort
   by). Arcadia's staff search already covered team/pack; the public
   endpoint just hadn't caught up.
@@ -208,18 +393,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `coupon_code`, checked against usability, expiry, applicable items,
   target types, allowed users, a global max-uses cap, and a per-target
   reuse cooldown (new `shop_coupon_redemptions` table, migrated onto a
-  `shop_coupons` table that -- turns out -- never had a primary key
+  `shop_coupons` table that, turns out, never had a primary key
   either, added in the same migration). A coupon either overrides the
   item's cost or zeroes it out entirely, matching `ShopCoupon.Cents`'s own
   doc comment. The catalog/admin side of coupons has existed for a while;
   there was just nowhere to spend one until now. Deliberately not
   enforced: the coupon's `requirements` field, whose semantics were never
-  defined anywhere in the codebase -- flagged rather than guessed at.
+  defined anywhere in the codebase, flagged rather than guessed at.
 
 ### Changed
 
 - `search_list` (`POST /list/search`) was the last real holdout from the
-  sqlc migration -- its dynamic, reflection-built column lists and
+  sqlc migration, its dynamic, reflection-built column lists and
   Go-templated `WHERE`/`JOIN` clauses have been replaced with static sqlc
   queries (`SearchBotsPublic`, `SearchServersPublic`), using the same
   "always bind the arg, let an empty/zero value no-op the clause" trick
@@ -232,7 +417,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `SearchTeamsQueue` (Arcadia's staff search) compared `teams.id` (uuid)
-  directly against its search-box input with no cast -- harmless for a
+  directly against its search-box input with no cast, harmless for a
   pasted team ID, but Postgres rejects the bind outright for any other
   text before the query's own `OR name ILIKE ...` branch ever gets a
   chance to match, so a staff member typing a plain name search would
@@ -276,17 +461,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Housekeeping pass over the sqlc migration's output: six pairs of
   `db/queries/*.sql` entries turned out to be byte-identical SQL under two
   different names (e.g. `CheckBadgeExists`/`CountBadgeByID`,
-  `ActivateBotPremium`/`ApplyBotPremiumDays`) -- each pair collapsed into
+  `ActivateBotPremium`/`ApplyBotPremiumDays`), each pair collapsed into
   one, callers repointed. Dropped a dead unexported method
   (`perms.Set.contains`, fully superseded by `Has`) and the three leftover
   `golang.org/x/exp/slices` imports (stdlib `slices` has covered this
   since Go 1.21; everywhere else in the module already used it), which let
   `go mod tidy` drop the now-unused direct dependency. `data/seed.iblseed`
-  -- a generated-and-forgotten artifact nothing in this repo reads -- is
+  (a generated-and-forgotten artifact nothing in this repo reads) is
   also gone and now gitignored.
 - `assets.CheckBot` (bot add/lookup) now tries Discord's own public
   application RPC endpoint first and only falls back to JAPI.rest as a
-  last resort, instead of the other way around -- JAPI going down or
+  last resort, instead of the other way around, JAPI going down or
   rate-limiting us used to take bot submission/lookup down with it, for
   data Discord already hands out for free. The JAPI request also now
   sends a descriptive `User-Agent` (confirmed with JAPI's own owner that
@@ -296,7 +481,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `true` if JAPI was needed, not RPC. One real cost: guild count,
   suggested description/tags, and flags only come from JAPI, so a bot
   added via the RPC-only happy path won't have them prefilled at
-  submission time -- guild count corrects itself on the bot's first
+  submission time, guild count corrects itself on the bot's first
   `POST /bots/{id}/stats`, and description/tags were always just
   submitter-editable suggestions, not stored as-is.
 
@@ -306,8 +491,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   coupons, badges, staff templates, staff disciplinary types, staff
   positions, blog entries, changelog entries) could silently write SQL
   `NULL` into a `NOT NULL` array column whenever a client omitted or
-  nulled an array field entirely -- e.g. creating a changelog entry with no
-  `"fixed"` key -- because the underlying `pgx` driver encodes a nil Go
+  nulled an array field entirely, e.g. creating a changelog entry with no
+  `"fixed"` key, because the underlying `pgx` driver encodes a nil Go
   slice as `NULL`, not `{}`, regardless of whether the call went through
   raw SQL or sqlc. Every affected insert/update path now defaults a nil
   slice to empty before it reaches the query.
@@ -325,7 +510,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Per-category notification preferences: a new `user_notification_prefs`
-  table and `types.AlertCategory` (8 topic-level categories -- votes,
+  table and `types.AlertCategory` (8 topic-level categories, votes,
   bot/server reviews, payments, shop, webhooks, staff applications,
   reports, account security) let a user mute a whole class of alert
   instead of it being all-or-nothing. `notifications.PushNotification` now
@@ -338,7 +523,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   push): bot/server approve, deny, unverify, certify/uncertify,
   claim/unclaim, vote ban/unban, single-entity vote reset, auto-unclaim,
   bot removal (deleted from Discord), premium removal, ban/unban sync, and
-  staff application approve/deny. Report resolution is new entirely --
+  staff application approve/deny. Report resolution is new entirely:
   previously a resolved/dismissed report had zero visibility anywhere,
   including the mod-log.
 - `arcadia/impls.NotifyOwners`, a small best-effort helper (fetch an
@@ -348,8 +533,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Vote reminders never actually reached a user's in-site notification bell
-  -- `votereminders/vote_reminders.go` set `NoSave: true` on every
+- Vote reminders never actually reached a user's in-site notification bell:
+  `votereminders/vote_reminders.go` set `NoSave: true` on every
   reminder ("spammy, fills the db"), which skipped the `alerts` table
   insert entirely. Removed; a user who finds reminders noisy can now mute
   the `votes` category instead of them being silently broken for everyone.
@@ -361,7 +546,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recomputes every entity's count from what's left in `entity_votes` in
   the same transaction.
 - `webhooks/core/drivers/core.go`'s failed-webhook-send alert had the
-  title "Webhook Send Successful!" on an `AlertTypeError` alert -- a
+  title "Webhook Send Successful!" on an `AlertTypeError` alert, a
   copy/paste bug. Now reads "Webhook Send Failed".
 - `dependabot_alert.go`'s dismissal-reason truncation used `+=` instead of
   `=`, which duplicated the text instead of shortening it whenever it
@@ -394,7 +579,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   implementation behind the Arcadia panel's `UpdateChangelog` action, gated
   by a new `manage_changelog` permission. This replaces an earlier draft
   (`changelogs` table + `UpdateChangelog` DTOs) that was scaffolded but
-  deliberately left as a hard 403 stub — the table now has its own
+  deliberately left as a hard 403 stub, the table now has its own
   `project`/`itag`/`published` columns so Popplio and Omniplex entries can
   coexist instead of colliding on a bare `version` primary key.
 
@@ -402,7 +587,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Keel/ratelimit`'s exceeded check ran against the pre-increment request
   count, so a `MaxRequests: N` bucket actually let `N+1` requests through
-  before blocking — the check now runs after incrementing, against the
+  before blocking, the check now runs after incrementing, against the
   count that includes the current request. Affects every rate-limited
   route across the API; limits are now exactly as configured rather than
   one request looser.
@@ -412,13 +597,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Popplio's dependency on the shared library formerly known as `eureka`
   moved from `github.com/infinitybotlist/eureka` to `github.com/PlexiOSS/Keel`
   (all ~210 files' imports rewritten, `go.mod` updated).
-- `popplio/db.GetCols` — a byte-for-byte duplicate of the `Keel/dbutil.GetCols`
-  the package was already extracted into — deleted. All 56 call sites now
+- `popplio/db.GetCols`, a byte-for-byte duplicate of the `Keel/dbutil.GetCols`
+  the package was already extracted into, deleted. All 56 call sites now
   use `Keel/dbutil` directly, finishing a migration that only relocated the
   code the first time around.
 - `validators.Pointer`/`TruePtr`/`FalsePtr`, `validators.EncodeUUID`, and
   `validators.IsNonProdFrontend` had no Omniplex-specific knowledge in them
-  at all — moved to new `Keel/ptr`, `Keel/uuidutil`, and `Keel/urlutil`
+  at all, moved to new `Keel/ptr`, `Keel/uuidutil`, and `Keel/urlutil`
   packages respectively (the last renamed to `urlutil.DifferentHost`, since
   a shared library shouldn't have "frontend" in a function name). Also
   found and collapsed a second, independent duplicate of the UUID-formatting
@@ -428,7 +613,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   considered for the same move and deliberately left in Popplio: the
   former's case list (`bots`→`bot`, etc.) *is* Omniplex's domain
   vocabulary, and the latter is genuinely coupled to `popplio/state` in
-  three places (config, Redis, a direct Postgres query) — moving it would
+  three places (config, Redis, a direct Postgres query), moving it would
   mean decoupling it first, not just relocating a file.
 
 ### Fixed
@@ -436,7 +621,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TestGoldenPanelStrings` only ever scanned `arcadia/panel`'s source for its
   frozen strings, but `identityExpired`/`sessionNotActive` are values
   defined in `arcadia/impls` (`ErrIdentityExpired`/`ErrSessionNotActive`)
-  and only surfaced *through* panel responses — so the test was failing on
+  and only surfaced *through* panel responses, so the test was failing on
   every run, permanently, checking the wrong directory for two of its own
   entries. `assertContains` now takes multiple dirs.
 - Shop coupon validation (`validateCoupon` in `arcadia/panel/ops_shop_coupons.go`)
@@ -446,23 +631,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   treated as "no constraint"; a present-but-non-positive value is still
   rejected. See `arcadia/CONFORMANCE.md` #2.
 - The bot-path `Unverify` RPC action's mod-log embed had a field with an
-  empty name, which Discord's API rejects — the embed post failed and the
+  empty name, which Discord's API rejects, the embed post failed and the
   whole call errored out *after* the bot had already been flipped back to
   `pending`, with no rollback. The field now has a real name (`"Bot"`,
   matching the server path's existing `"Server"` field). See
   `arcadia/CONFORMANCE.md` #9.
 - Creating a vote credit tier that landed on an already-doubly-occupied
-  position 500'd with a raw Postgres constraint violation (this was live —
+  position 500'd with a raw Postgres constraint violation (this was live,
   production's existing tiers at positions 1-3 made creating a new tier at
   position 1 fail outright). `dedupTierPositions` is now a single set-based
   `UPDATE ... SET position = position + 1 WHERE position >= $1`, replacing
   an iterative loop whose cursor skipped past positions it had just written
   to. See `arcadia/CONFORMANCE.md` #16.
 - A staff position's "testing" corresponding-role (main-guild-adjacent role
-  auto-grant/revoke) validated but silently never synced — only `main` and
+  auto-grant/revoke) validated but silently never synced, only `main` and
   `staff` were handled. Added the missing case. See `arcadia/CONFORMANCE.md`
   #8.
-- `/list/staff-templates` was registered with `OpId: "get_partners"` — a
+- `/list/staff-templates` was registered with `OpId: "get_partners"`, a
   copy-paste collision with the actual `/list/partners` route above it.
   Now `get_staff_templates`.
 - `PopplioStaff` (the staff panel's signed reverse proxy into Popplio's own
@@ -474,7 +659,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panel's request context now carries the real caller IP through to the
   proxy. See `arcadia/CONFORMANCE.md` #5.
 - `Authorize/Begin` built the Discord OAuth login URL by interpolating
-  `redirect_url` raw — neither validated nor URL-encoded. The actual
+  `redirect_url` raw, neither validated nor URL-encoded. The actual
   token-exchange step already checked it against an allow-list, so this
   couldn't complete a session with a bad value, but it could still hand
   back a malformed or attacker-chosen login URL. Now validates against the
@@ -482,15 +667,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `arcadia/CONFORMANCE.md` #13.
 - `topreviewer_sync` stripped the top-reviewer Discord role from everyone
   weekly and never regranted it (hardcoded `LIMIT 0` instead of the `3` the
-  `/refresh` command already used for the same query) — the role has been
+  `/refresh` command already used for the same query), the role has been
   permanently empty since this job started running. Now regrants to the
   actual top 3. See `arcadia/CONFORMANCE.md` #3.
 - Disciplinary type `created_at` was populated from the most recent
   disciplinary action against a staff member, not from when the type
-  itself was created — confirmed unused in Omniplex's admin UI, so this
+  itself was created, confirmed unused in Omniplex's admin UI, so this
   was silently wrong with no observable effect until now. Now selects the
   type's own `created_at`. See `arcadia/CONFORMANCE.md` #7.
-- A dead `testbot` branch in `Claim` (unreachable — the check above it
+- A dead `testbot` branch in `Claim` (unreachable, the check above it
   already rejects anything that isn't `pending`) removed. `Unclaim`'s live
   `testbot` check, which runs before its `pending` check, is untouched.
   See `arcadia/CONFORMANCE.md` #6.
@@ -505,27 +690,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"%q does not exist"`); and every leading-space mod-log embed title
   (`" Claimed!"`, `" Approved!"`, `" Force Deleted!"`, and five others)
   had the stray space dropped. `"__ Unverified For Futher Review!__"` was
-  deliberately left alone — same class of typo, but out of scope for this
+  deliberately left alone, same class of typo, but out of scope for this
   pass. See `arcadia/CONFORMANCE.md` #11, #12.
 
 ### Removed
 
 - `GET /list/current-status` and its Instatus/UptimeRobot proxying
   (`state.Config.Sites.Instatus`, `state.Config.Meta.UptimeRobotROAPIKey`,
-  `types.StatusDocs`). Confirmed unused anywhere in Omniplex's frontend —
+  `types.StatusDocs`). Confirmed unused anywhere in Omniplex's frontend,
   status reporting now lives entirely on the dedicated
   `status.omniplex.gg` instance, so this endpoint (and the two external
   status-provider integrations behind it) was dead weight.
 - `GET /list/team` (`get_list_team`) and the now-unused `types.StaffTeam`.
   Its own doc comment admitted it was "currently broken and does not
-  handle permissions yet" — fully superseded by this session's `GET
+  handle permissions yet", fully superseded by this session's `GET
   /staff/team`, which Omniplex's team page actually uses.
 
 ## [1.4.0] - 2026-08-24
 
 ### Added
 
-- `GET /staff/team` — a public, unauthenticated staff roster for the
+- `GET /staff/team`, a public, unauthenticated staff roster for the
   website's team page: user ID, username, avatar, and the position(s) each
   member holds (name/icon/rank only). Unlike everything else under
   `/staff/*` this deliberately skips auth, same reasoning as the existing
@@ -577,14 +762,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `moderation_flagged` entirely and edits made after initial submission
   (`PATCH .../settings` never re-runs the check). Tracked via a new
   `moderation_checked_at` column (`exp/moderation_scan_columns.sql`, not
-  auto-applied — run with `psql "$DATABASE_URL" -f
+  auto-applied, run with `psql "$DATABASE_URL" -f
   exp/moderation_scan_columns.sql`); no-ops entirely when
   `meta.openai_api_key` is unset, same as the existing check.
 
 ### Fixed
 
 - `PremiumAdd`/`FeatureAdd`/`SpotlightAdd`'s `time_period_hours` field
-  metadata claimed "Format: X years/days/hours" — the field has only ever
+  metadata claimed "Format: X years/days/hours", the field has only ever
   accepted a bare hour count (`int32`), never a compound duration string,
   so that placeholder was actively misleading staff filling out the field
   through the panel. Placeholder now reads "Duration, in hours (e.g. 720
@@ -592,7 +777,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Popplio no longer has a build-time `staging`/`beta`/`dev` environment —
+- Popplio no longer has a build-time `staging`/`beta`/`dev` environment,
   `config.Differs[T]` and the `//go:embed current-env` mechanism are gone,
   and every config value that used to need up to four variants
   (`token`, `redis_url`, port numbers, PayPal/Stripe keys, etc.) is now a
@@ -602,7 +787,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer exist was just a trap for the next person who forgets to keep
   all four variants of a secret in sync. The "only run this in prod"
   guards (Discord presence, background tasks, vote reminders) are gone
-  too — there's only one deployment now, so they were permanently true.
+  too, there's only one deployment now, so they were permanently true.
   PayPal always talks to the live API rather than switching to sandbox
   outside of prod, for the same reason.
 - The Bug Hunter-only sign-in restriction (previously scoped to
@@ -617,7 +802,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - The `staging`/`beta`/`dev` config sections (and `config.Differs[T]`
-  itself) — see Changed above. `config.yaml` now takes a single value per
+  itself), see Changed above. `config.yaml` now takes a single value per
   field instead of nesting one per environment; `config.yaml.sample`
   regenerates itself flat the next time the binary starts.
 - `validators.StagingCheckSensitive`, the payments perk-gating check that
@@ -630,60 +815,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Infernoplex and the staff bot (Arcadia) now set a Discord presence on
-  connect — "Watching Omniplex servers" and "Watching the review queue"
+  connect, "Watching Omniplex servers" and "Watching the review queue"
   respectively. Neither had one before (default "Playing nothing"). Gated
   to the prod instance only, same as Popplio's main bot: staging/beta/dev
   never broadcast a live-looking presence, whether from a shared token or a
   local checkout pointed at real credentials.
 - NSFW compliance signal on `Server` (`discord_nsfw_level`, `nsfw_channel_count`)
-  and the review queue/search panel ops that expose it — reviewers previously
+  and the review queue/search panel ops that expose it, reviewers previously
   had to join a server and look around by hand to check "Server: NSFW Content
   Not Gated." Infernoplex's periodic `syncServerMeta` task now also fetches
   the guild's channel list each cycle and counts how many have Discord's own
   age-restricted flag set, plus the guild's own NSFW classification
   (`guild.NSFWLevel`). New columns via `exp/server_nsfw_compliance.sql` (not
-  auto-applied — run with `psql "$DATABASE_URL" -f
+  auto-applied, run with `psql "$DATABASE_URL" -f
   exp/server_nsfw_compliance.sql`).
 - New `moderation` package wraps OpenAI's moderation endpoint
   (`omni-moderation-latest`, free to call). `POST /bots` and `POST /servers`
   now run the submitted short/long description through it right after
   insert and store the result on `moderation_flagged`/
   `moderation_categories`, surfaced on the review queue/search panel ops the
-  same way the NSFW compliance fields are — a reviewer signal, not an
+  same way the NSFW compliance fields are, a reviewer signal, not an
   auto-reject; nothing reads these columns to gate anything. Configured via
   a new `meta.openai_api_key` config value; moderation is silently skipped
   when it's unset, so this is a no-op until a key is added. New columns via
-  `exp/moderation_columns.sql` (not auto-applied — run with `psql
+  `exp/moderation_columns.sql` (not auto-applied, run with `psql
   "$DATABASE_URL" -f exp/moderation_columns.sql`).
 
 - Full CRUD for the staff-template catalog (pre-built answers staff pick
   from when approving/denying a bot or server review) via a new
   `UpdateStaffTemplates` panel op, gated by a new `manage_templates`
-  permission — previously the only way to add or edit one was a manual DB
+  permission, previously the only way to add or edit one was a manual DB
   insert, since nothing in Popplio or Arcadia wrote to `staff_templates`
   at all.
-- `POST /servers/stats` — lets a server self-report `total_members`/
+- `POST /servers/stats`, lets a server self-report `total_members`/
   `online_members` via a server-scoped API token, the same way bots have
   long been able to via `POST /bots/stats`. Posting at all flips a new
   `stats_self_managed` flag on, which tells Infernoplex's periodic
   `syncServerMeta` task to stop overwriting those two fields for that
-  server (it still keeps the icon in sync either way) — otherwise the
+  server (it still keeps the icon in sync either way), otherwise the
   automatic sync and a server's own self-reports would just fight each
   other every 30 minutes.
 - Staff review templates now carry an `entity_type` (`bot` or `server`)
-  column — `GET /list/staff-templates` previously only ever documented
+  column, `GET /list/staff-templates` previously only ever documented
   itself as "used for reviewing bots," with no way to scope a template to
   servers at all. Existing rows default to `bot`. Filter with
   `?entity_type=bot` or `?entity_type=server`; omit it for both.
 - `CertifyAdd`/`CertifyRemove` and `PremiumAdd`/`PremiumRemove` (staff RPC
-  actions) now support servers as well as bots — same pattern
+  actions) now support servers as well as bots, same pattern
   `Claim`/`Approve`/`Deny`/`Unverify` already established: the handler
   branches on `TargetType` to a `*Server` counterpart. Certifying a server
   moves it to `type = 'certified'`; uncertifying returns it to `approved`,
   same as bots.
 - A new `FeatureAdd`/`FeatureRemove` staff RPC action (gated by a new
   `feature_entities` permission) lets staff put a bot or server in the home
-  page's Featured section for a given time period, or pull it early —
+  page's Featured section for a given time period, or pull it early,
   previously `featured_until` was only ever settable through a shop
   purchase (`routes/shop/assets/benefits.go`), with no staff override.
   Storage matches the shop path exactly (stacks with a bought featured
@@ -692,7 +877,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `@ci` struct annotations to `types/server.go` (`IndexServer`,
   `Server`, `CreateServer`). Every other entity's types file (`bot.go`,
   `pack.go`, `user.go`, etc.) has these, wiring it into
-  `db_fields_check.py`'s struct-vs-schema validation — `server.go` was the
+  `db_fields_check.py`'s struct-vs-schema validation, `server.go` was the
   one file that never got them, so a `servers` column drifting out of sync
   with its struct field (renamed, dropped, added and never wired up) would
   go uncaught by CI while every other entity was protected.
@@ -712,11 +897,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were named after bots only: `review_bots` → `review_entities`,
   `certify_bots` → `certify_entities`, `force_remove_bots` →
   `force_remove_entities`, and the `marker_bot_reviewer` marker →
-  `marker_reviewer`. Functionally nothing changes — `review_entities`
+  `marker_reviewer`. Functionally nothing changes, `review_entities`
   still gates the same `Claim`/`Unclaim`/`Approve`/`Deny`/`Unverify` RPC
   actions it always did, and `force_remove_entities` still covers packs
   too, same as before. `exp/rewrite/rename_reviewer_perms.sql` (not
-  auto-applied — run with `psql "$DATABASE_URL" -f
+  auto-applied, run with `psql "$DATABASE_URL" -f
   exp/rewrite/rename_reviewer_perms.sql`) renames the already-stored flat
   names in `staff_positions.perms`, `staff_members.perm_overrides`, and
   `staff_disciplinary_types.perm_limits`; safe to run more than once.
@@ -724,7 +909,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `StaffMember` never exposed a way for the panel to know a viewer's actual
-  seniority rank (`perms.StaffGrants.Rank()`) — an instance owner holding
+  seniority rank (`perms.StaffGrants.Rank()`), an instance owner holding
   no explicit position had no way to be told apart from a regular staff
   member holding none, and the frontend derived a "lowest held index"
   from `positions` that put both at the same (locked-out-of-everything)
@@ -733,7 +918,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/health/bots`, `/health/servers`, `/health/packs`, `/health/blogs`,
   `/health/search`, `/health/auth`, `/health/tickets`, and
   `/health/staff-panel` all used `SELECT EXISTS(SELECT 1 FROM <table>
-  LIMIT 1)` as their check — a row-presence test, not a health check. A
+  LIMIT 1)` as their check, a row-presence test, not a health check. A
   perfectly healthy table with zero rows (an empty `blogs` table, a fresh
   instance with no tickets yet) reported as DOWN. Now checks the table
   exists in `information_schema.tables` instead, which still catches a
@@ -741,7 +926,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- Infernoplex's `/setup` command — the website's `PUT /servers` (Add
+- Infernoplex's `/setup` command, the website's `PUT /servers` (Add
   Server) already resolves a server from its invite link without needing
   the tracking bot present at all, and the staff review pipeline now
   provides the ownership-verification step `/setup`'s `AdminOnly` check
@@ -796,12 +981,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /bots/{id}/changelogs` append and remove individual entries (same
   convention as reviews). Both are public to read.
 
-  - A new `Health` route group, `GET /health/*` — one endpoint per subsystem
+  - A new `Health` route group, `GET /health/*`, one endpoint per subsystem
   (database, API, bot/server/pack listings, blog, search, Discord auth,
   tickets, staff panel, plus Infernoplex's and Arcadia's separate Discord
   gateway connections), each returning a bare 200/503 with no body to
   parse. Built for the new external status page (omni-status) to point one
-  uptime monitor at each endpoint — mirrors what Omniplex's own
+  uptime monitor at each endpoint, mirrors what Omniplex's own
   `/about/status` page already self-probes client-side, done server-side
   instead so an outside monitor doesn't need API-client internals.
 
@@ -818,11 +1003,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mod-log post for servers.
 - Some `Bot Reviews`/`Users & Votes` staff permissions (`transfer_bots`,
   `force_remove_bots`, `manage_premium`, `manage_votes`, `ban_voters`)
-  reclassified under a new `Content Management` category — these act on
+  reclassified under a new `Content Management` category, these act on
   listed entities (transferring, deleting, granting perks, resetting
   votes, vote-banning), not on the review queue or on user accounts, so
   they read oddly grouped with either.
-- `GET /servers/@emojis/flat` and `GET /servers/@stickers/flat` — unnest
+- `GET /servers/@emojis/flat` and `GET /servers/@stickers/flat`, unnest
   every opted-in server's emojis/stickers into one flat, item-level-paginated
   list (60/page) instead of `GET /servers/@emojis`'s one-page-per-server
   shape, for a cross-server browse page that doesn't grow one section per
@@ -831,13 +1016,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Animated emojis were synced with a permanently-static CDN URL despite
-  `animated: true` being stored correctly — `disgo`'s `Emoji.URL()`
+  `animated: true` being stored correctly, `disgo`'s `Emoji.URL()`
   always defaults to PNG regardless of the emoji's animated flag (unlike
   `Sticker.URL()`, which already inferred the right format from
   `FormatType`). `serversync.go` now explicitly requests GIF format when
   `Animated` is true.
 - Server `total_members`/`online_members` were only ever set once, at
-  `/setup` time, and never refreshed — there's no periodic member-count
+  `/setup` time, and never refreshed, there's no periodic member-count
   sync, and the bot deliberately doesn't hold the privileged Server
   Members intent (see `TeamCleanup`'s doc comment), so the gateway's
   cached guild object never gets live count updates either. The existing
@@ -878,7 +1063,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ("Application Approved"/"Application Denied") still linked to the
   deprecated SvelteKit panel (`Sites.Panel` + `/panel/apps`) after the
   equivalent submission-time embed was already fixed to point at
-  Omniplex's `/admin/applications` — these two were missed in that pass.
+  Omniplex's `/admin/applications`, these two were missed in that pass.
 - `StaffResync` (`arcadia/tasks/staffresync.go`) inserted a new row into
   `staff_members` before checking whether that user had a `users` row yet.
   `staff_members.user_id` has a foreign key into `users`, so any staff
@@ -896,12 +1081,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `apps/logic.go`) now automatically grants `BotDeveloper`/
   `CertifiedDeveloper` roles to a certified bot's owner(s), or every
   member of a certified server's owning team, provided they're already in
-  the main guild — previously only the bot's own `CertBot` role was
+  the main guild, previously only the bot's own `CertBot` role was
   granted, and owners had to know to run `ibb!getbotroles` themselves.
 - `GET /list/stats` gained `total_banned_users` and `total_vote_banned_bots`,
   aggregate `COUNT(*)` queries over the existing `banned`/`vote_banned`
   columns, for the Moderation Transparency page's new "Platform safety"
-  section. Public, no PII — same pattern as the existing report-stats
+  section. Public, no PII, same pattern as the existing report-stats
   endpoint.
 
 ### Fixed
@@ -912,7 +1097,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   even though `bots.type` had already been committed as `certified`
   separately. It's now logged as a warning instead of aborting the review.
 - `GetOwnedBy` (`arcadia/impls/entities.go`) only checked team ownership
-  for bots, silently missing bots owned directly — meaning a direct owner
+  for bots, silently missing bots owned directly, meaning a direct owner
   got "you don't own any bots" from `/getbotroles` even when they
   genuinely did. Added the missing `OR owner = $1` branch.
 - `/staff/tickets?open=true` was 500ing: 8 legacy ticket rows had
@@ -933,49 +1118,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `safeJoinPopplio` (`arcadia/panel/paths.go`): beyond the real security
   boundary (same scheme+host as Popplio's own API base), it also enforced
   that the resolved path stay under the *same path prefix* as the
-  configured base URL — which rejects any legitimate root-level target
+  configured base URL, which rejects any legitimate root-level target
   whenever that base URL has a non-root path component. That check added
   no security beyond the origin check and only broke valid callers, so
   it's removed. Also stopped collapsing every `safeJoinPopplio` error into
-  the same fixed string — the real error now surfaces, so a future failure
+  the same fixed string, the real error now surfaces, so a future failure
   here is diagnosable instead of misleading.
 - `notifications.PushNotification`'s `NoSave` field was inverted from its
-  own name/doc comment (`if notif.NoSave { INSERT }` — persisted only when
+  own name/doc comment (`if notif.NoSave { INSERT }`, persisted only when
   told *not* to save). In effect, every "normal" alert (push-subscribe
   confirmation, reminder-set confirmation, payment-failure alerts) never
   reached a user's in-app alert inbox, only ever firing as a transient
-  push notification — the one caller that explicitly opted out of saving
+  push notification, the one caller that explicitly opted out of saving
   (`vote_reminders.go`, "spammy, fills up the db quickly") was the only
   alert type that persisted. Condition is now `if !notif.NoSave`, matching
   what the field has always been named and documented to mean.
 - The "New Application" Discord embed (`routes/apps/endpoints/create_app`)
   linked to the old SvelteKit panel (`Sites.Panel` + `/panel/apps`),
-  superseded by Omniplex's own `/admin/applications` — link updated.
+  superseded by Omniplex's own `/admin/applications`, link updated.
 
 ### Added
 
-- `GET /staff/tickets` — every ticket platform-wide, gated on the existing
+- `GET /staff/tickets`, every ticket platform-wide, gated on the existing
   `view_tickets` staff permission (optional `?open=true|false` filter,
   paginated). Staff could already view/reply/close/reopen any ticket via
   the existing owner-or-staff checks on `get_ticket`/
   `create_ticket_message`/`patch_ticket`, but had no way to find a ticket
-  ID to act on in the first place — this closes that gap. Auth follows the
+  ID to act on in the first place, this closes that gap. Auth follows the
   same normal-user-session + in-handler permission check as the other
   ticket routes, not the legacy `staffpanel__authchain` system the
   Applications page uses.
 - A user-facing confirmation alert (now that `PushNotification` actually
   persists them) at three points that previously gave zero in-app
-  feedback on success — a purchase completing (`GivePerks`, alongside the
+  feedback on success, a purchase completing (`GivePerks`, alongside the
   existing staff-only mod-log post), a shop item purchase, and a vote
   credit redemption. All three are best-effort: the underlying change is
   already committed by the time the alert is sent, so a failed alert logs
   a warning rather than turning into an error response for something that
   actually succeeded.
 - A new report being filed now posts to the staff-only `StaffLogs`
-  Discord channel (target, type, reason — no reporter identity, consistent
+  Discord channel (target, type, reason, no reporter identity, consistent
   with reporter identity being staff-panel-only everywhere else). The
   equivalent "new application submitted" post already existed
-  (`create_app` posts to the `Apps` channel with an `@Apps` role ping) —
+  (`create_app` posts to the `Apps` channel with an `@Apps` role ping),
   confirmed by reading the handler directly, not assumed.
 
 ## [1.2.1] - 2026-08-15
@@ -988,7 +1173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instant regardless of what timezone the process happens to run in. Also
   added `VoteInfo.WeekendBonus`, a per-entity flag reporting whether the
   bonus is actively boosting that entity's `per_user`/`vote_time` right
-  now — `false` for premium bots/servers even on a bonus weekend, since
+  now, `false` for premium bots/servers even on a bonus weekend, since
   their flat premium cooldown already applies instead. Nothing in the API
   previously told callers when the bonus was live.
 - Certification requirements loosened and diversified. The old rule
@@ -1080,7 +1265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Omniplex is now owned by NodeByte LTD. Remaining "Infinity Bot List" /
-  "Infinity Development" copy left over from the old brand — application
+  "Infinity Development" copy left over from the old brand, application
   question text, the staff-denial DM, webhook docs, the RSS feed title
   and copyright line, the auth-log embed footer, and the `!delete`
   bot-command copy now reads "Omniplex" / "NodeByte LTD".
@@ -1093,12 +1278,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   24 like they do.
 - `POST /users/{id}/redeem-payment-offer?code=BOOSTPREMIUM` granted the
   perk successfully but then always fell through to a final `400 Invalid
-  offer code` response regardless — no caller could ever see it succeed.
+  offer code` response regardless, no caller could ever see it succeed.
   It also never stamped `last_booster_claim`, so the "once every 30 days"
   cooldown could never actually engage. Both are fixed: a successful
   redemption now returns `204` and updates the claim timestamp.
 - `tickets.user_id` had no foreign key constraint to `users(user_id)` at
-  all, just a plain column — so the account data-export/deletion pipeline
+  all, just a plain column, so the account data-export/deletion pipeline
   (`POST /users/{id}/data`, `routes/users/endpoints/create_data_task`)
   silently skipped every ticket a user had ever filed. The walker
   (`ddr_task.go`) auto-includes any table with a real FK into an
@@ -1106,7 +1291,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exp/ticketuserfkey.sql` adds the constraint `NOT VALID` (4 legacy
   tickets reference since-deleted accounts; `NOT VALID` enforces it for
   all new/updated rows without deleting or nulling that history). No Go
-  changes needed — confirmed via a direct `pg_constraint` check against
+  changes needed, confirmed via a direct `pg_constraint` check against
   the dev DB that tickets are now walked correctly.
 
 ## [1.2.0] - 2026-08-14
@@ -1115,7 +1300,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Packs are no longer bots-only: a new `pack_type` column (`bot` | `server`
   | `emoji`, immutable after creation) generalizes the existing `BotPack`
-  type, and a new `pack_emojis` table backs a genuinely new capability —
+  type, and a new `pack_emojis` table backs a genuinely new capability,
   user-curated emoji packs, each emoji its own durably-uploaded asset (not
   a live reference into a server's synced emoji list, so a pack keeps
   working even if the source server stops syncing or leaves). Server packs
@@ -1124,7 +1309,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   content per type (bot packs need `bots`, server packs need `servers`,
   emoji packs need `emojis`, capped at 50), `get_all_packs` gained an
   optional `?pack_type=` filter, and a new `edit_packs` entity permission
-  (`teams.GetEntityPerms`'s new `"pack"` case, single-owner only — no team
+  (`teams.GetEntityPerms`'s new `"pack"` case, single-owner only, no team
   fallback) lets the existing generic upload-permission-check flow cover
   pack emoji uploads the same way it already covers bot/server banners.
 - A generic content-report system (`popplio/reports`, new `routes/reports`
@@ -1136,22 +1321,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `entity_votes`; a partial unique index allows only one open report per
   reporter per target, and a per-user daily cap (10) limits spamming many
   different targets. Reporter identity is never exposed outside the staff
-  panel — the public API never returns it. Reviewed exclusively through a
+  panel, the public API never returns it. Reviewed exclusively through a
   new Arcadia RPC (`UpdateReports`/`ReportAction`, following
   `PartnerAction`'s exact discriminated-union codec pattern) gated on a new
   `review_reports` staff permission; there is deliberately no public
   listing/review route, matching how Blog/Partners never got one either.
-  **Config/DB note:** three new one-off migrations to apply —
+  **Config/DB note:** three new one-off migrations to apply,
   `exp/packtype.sql`, `exp/packemojis.sql`, `exp/reports.sql`.
 - `GET /bots/@all` and `GET /servers/@all` gained an optional
   `?sort=trending` param, ranking by net votes (upvotes minus downvotes) in
   the last 7 days instead of newest-first, and returning only entities with
   at least one vote in that window. New composite index
   `entity_votes_target_created_idx` (`exp/entityvotesidx.sql`) backs the
-  underlying grouped query — `entity_votes` had no index at all before
+  underlying grouped query, `entity_votes` had no index at all before
   this, so trending would otherwise have been a full table scan.
 - `GET /reports/stats`: a new, deliberate exception to the reports
-  system's "no public read-back" design — anonymized counts of reports
+  system's "no public read-back" design, anonymized counts of reports
   grouped by `reason`/`status` only (no report IDs, no target identity, no
   reporter identity), for a public moderation-transparency page.
 - `GET /servers/@emojis`: a new paginated endpoint returning only
@@ -1183,7 +1368,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Config shape change (update `config.yaml` before deploying):** a new
   `infernoplex:` block with `client_id`/`client_secret` plus per-environment
   `prefix`/`server_port`/`token` (same `Differs[T]` staging/prod/beta/dev
-  pattern used elsewhere) — see `config.yaml.sample`.
+  pattern used elsewhere), see `config.yaml.sample`.
 - Infernoplex's leaderboard command now replies with a "No Votes Yet" embed
   instead of an empty/broken one when a server has zero votes.
 - Self-hosted proof-of-work vote captcha (`popplio/captcha`), replacing the
@@ -1197,11 +1382,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `captcha.hmac_secret` config value so they can't be forged, and each
   solved challenge is single-use (consumed in Redis on first successful
   verification) so a solve can't be replayed across multiple votes. No
-  third-party captcha provider involved — the whole protocol lives in
+  third-party captcha provider involved, the whole protocol lives in
   `popplio/captcha`.
   **Config shape change (update `config.yaml` before deploying):** a new
   `captcha:` block with a per-environment `hmac_secret` (same `Differs[T]`
-  pattern used elsewhere) — see `config.yaml.sample`. Generate one with e.g.
+  pattern used elsewhere), see `config.yaml.sample`. Generate one with e.g.
   `openssl rand -hex 32`; rotating it invalidates all outstanding
   challenges.
 
@@ -1218,7 +1403,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the "Isabelle" rewrite, #43). A bare content message is indistinguishable
   from a staff member talking, which matters in the staff server where the
   bot's answers and the conversation share a channel. `Ctx.Say` builds the
-  embed itself, so this is a change of container rather than of wording —
+  embed itself, so this is a change of container rather than of wording,
   every string frozen in `arcadia/conformance` is untouched and still
   asserted. Two coloured variants went in alongside it: `Ctx.Fail` (red) for
   the command guards, the panic handler and the "there was an error" paths,
@@ -1244,7 +1429,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   into the resync itself, its reporting and its Discord role mirroring.
   What was deliberately *not* factored out: the frozen embed and error
   strings stay written out at their call sites, because
-  `arcadia/conformance` finds them by scanning the source for the literal —
+  `arcadia/conformance` finds them by scanning the source for the literal,
   a helper that formatted them would pass its own tests while quietly
   removing that check. For the same reason the SQL stays literal at each
   call site, since `arcadia/dbconform` PREPAREs every string literal it can
@@ -1271,7 +1456,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   left alone since `uapi` requires it.
 - `arcadia/rpc/methods.go` (878 lines, every RPC action in one file) is
   split into one file per group of actions, grouped exactly the way
-  `types.rpcPermissions` groups them — so the file an action lives in is
+  `types.rpcPermissions` groups them, so the file an action lives in is
   the same question as which permission gates it: `review.go` (claim,
   unclaim, approve, deny, unverify), `certify.go`, `transfer.go`,
   `forceremove.go`, `premium.go`, `votes.go`, `apps.go`, plus `dispatch.go`
@@ -1284,7 +1469,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code movement: every moved line is byte-identical to what it replaced,
   and `arcadia/conformance` scans the whole package rather than one file,
   so it pins the embed strings exactly as before. (`review.go` was later
-  split further into `claim.go`/`verdict.go` — see the dedup-pass bullet
+  split further into `claim.go`/`verdict.go`, see the dedup-pass bullet
   above; `arcadia/CONFORMANCE.md`'s file references still say `review.go`
   in a few spots and need updating to match, see Known Issues below.)
 - The Dev Team staff application no longer requires or mentions Rust
@@ -1297,13 +1482,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only the prod instance now sets the main Discord bot's gateway presence
   (`state.go`'s `OnGuildsReady` handler). Staging/beta/dev instances still
   connect and function normally, they just no longer call
-  `SetPresenceForShard`, so a non-prod checkout — misconfigured shared
-  token or otherwise — can never overwrite what the public bot's profile
+  `SetPresenceForShard`, so a non-prod checkout, misconfigured shared
+  token or otherwise, can never overwrite what the public bot's profile
   shows as its "Watching" activity.
 
 ### Removed
 
-- Five retired permissions — `view_shop`, `manage_shop`,
+- Five retired permissions, `view_shop`, `manage_shop`,
   `manage_bot_whitelist`, `view_cdn`, `manage_cdn` purged from every
   stored permission array (`staff_positions.perms`,
   `staff_members.perm_overrides`, `staff_disciplinary_types.perm_limits`)
@@ -1331,7 +1516,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Every `Differs[T]` config key (DB tokens, site URLs, etc.) previously
   required *both* a `staging` and a `prod` value to be set regardless of
-  which environment a given box actually runs — a `current-env: prod` box
+  which environment a given box actually runs, a `current-env: prod` box
   was rejected at startup for a missing `staging` value it would never
   read, and vice versa. `ValidateDiffers` now only requires whichever value
   `Parse()` will actually resolve for `CurrentEnv` (`prod` needs `prod`,
@@ -1342,7 +1527,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bot: `/staffroles edit [role]` and `/staffperms edit <user>` open a select
   menu editor (`arcadia/bot/permeditor.go`) with a role picker, a category
   picker and a multi-select of that category's permissions, preselected to
-  what the role or member currently holds — ticking grants, unticking revokes,
+  what the role or member currently holds, ticking grants, unticking revokes,
   and everything outside the open category is carried through untouched.
   Dangerous permissions are marked ⚠️ and ones the caller cannot manage 🔒.
   The existing one-at-a-time `grant`/`revoke` subcommands are unchanged and
@@ -1366,7 +1551,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it fired when the member being removed was *not* an owner instead of when
   they were, so removing any regular member from a team with only one owner
   (the common case) 400'd with "There needs to be one other global owner
-  before you can remove yourself from owner" — while actually removing the
+  before you can remove yourself from owner", while actually removing the
   team's last real owner sailed through with no check at all, the exact
   case this was meant to prevent. Condition un-inverted.
 - Every staff bot slash command appeared twice in every server. The bot
@@ -1382,20 +1567,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   application.
 - The `server`/`team` auth types were never registered as OpenAPI security
   schemes (only `User`/`Bot` were, via `docs.AddSecuritySchema` in
-  `main.go`) even though `Authorize()` has always fully supported them —
+  `main.go`) even though `Authorize()` has always fully supported them,
   every one of the 41 operations requiring `server` or `team` auth
   (`PUT /bots`, `PUT /servers`, both `PATCH .../settings` endpoints,
   reviews, sessions, etc.) referenced a security scheme name absent from
   `components.securitySchemes`. Harmless to the API itself, but any tool
   that resolves the requirement against registered schemes crashes outright
-  on the unresolved reference — including the docs site's OpenAPI reference
+  on the unresolved reference, including the docs site's OpenAPI reference
   pages (`fumadocs-openapi`'s `APIPage`, which throws
   `Cannot read properties of undefined (reading 'type')`). Registered both
   (`docs.AddSecuritySchema("server", ...)` / `("team", ...)`, lowercase to
   match `AuthTypeMap`'s self-mapping for these two types).
 - Presence still never actually got set even after 1.0.0's fix, now logging
   `error while setting presence err="no gateway configured"` from inside
-  `OnGuildsReady` instead of right on startup — that fix only addressed the
+  `OnGuildsReady` instead of right on startup, that fix only addressed the
   timing, not the actual cause: Popplio runs sharded (`OpenShardManager`),
   and `Discord.SetPresence` only ever checks disgo's single-gateway field
   (populated by `OpenGateway`, not `OpenShardManager`), so it returns
@@ -1403,7 +1588,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `OnGuildsReady` also fires once per shard, not once globally. Now uses
   `Discord.SetPresenceForShard(ctx, event.ShardID(), ...)` instead.
 - `POST /auth/test` ("Test Auth") 500ed on every call that reached an actual
-  authorization check — `api.Authorize` reads `PERMISSION_CHECK_KEY` out of
+  authorization check, `api.Authorize` reads `PERMISSION_CHECK_KEY` out of
   the route's `ExtData` unconditionally, but the synthetic `uapi.Route{}`
   this endpoint builds to call it never set `ExtData` at all, so any request
   with a syntactically valid token failed with a 500
@@ -1412,12 +1597,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed even earlier (nonexistent in `api_sessions`) ever got a real
   response (401). Now sets a no-op `PermissionCheck` (`NeededPermission`
   always returns `nil`), since this endpoint has no permission model of its
-  own to enforce — it's purely "is this token valid for this target."
+  own to enforce, it's purely "is this token valid for this target."
 
 ### Removed
 
 - The `use_borealis` staff permission. Borealis was removed from the platform
-  during the port (`arcadia/CONFORMANCE.md` D11a — the `arcadia.borealis_url`
+  during the port (`arcadia/CONFORMANCE.md` D11a, the `arcadia.borealis_url`
   config key, the client and the `Approve` call to it are all long gone), so
   the permission has gated nothing since and only added a line to
   `/permissions` and a row to every permission picker. `exp/rewrite/flatperms.sql`
@@ -1433,13 +1618,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Bot accounts can no longer hold staff permissions at all — not through a
+- Bot accounts can no longer hold staff permissions at all, not through a
   staff role, not through a direct grant, and not through `arcadia.owners`
   (`perms.ErrBotAccount`). Previously nothing stopped one: `StaffResync`
   walks every member of the staff server and creates a `staff_members` row
   for anyone holding a position's Discord role, and it never looked at
   whether that member was a bot, so giving a bot a staff role in Discord
-  handed it that role's permissions — including through the panel session
+  handed it that role's permissions, including through the panel session
   and RPC paths, which only ever asked what the row said. A bot is a token
   that can be handed to another program, which is exactly what the staff
   model's accountability assumes cannot happen, and nothing needs it: the
@@ -1467,20 +1652,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `current-env` now also accepts `beta`, a fourth environment alongside
   `staging`/`prod`/`dev`. Every `Differs[T]` config key gains an optional
   `beta` value (`config.Differs[T].Beta`), consulted only when `current-env`
-  is `beta` and falling back to `staging` when unset — same mechanism as
+  is `beta` and falling back to `staging` when unset, same mechanism as
   `dev`'s override, but without `dev`'s relaxed Staging/Prod requirement:
   `beta` is validated exactly like `staging`/`prod` (`ValidateDiffers`),
   since it's a real running deployment rather than a personal machine. In
   practice this means most config (DB, tokens, etc.) can stay shared with
-  staging, and only keys that genuinely differ per deployment — like
-  `sites.frontend` — need an explicit `beta:` value.
+  staging, and only keys that genuinely differ per deployment, like
+  `sites.frontend`, need an explicit `beta:` value.
 - `bgtasks` package: a new home for Popplio's own periodic background jobs,
   separate from `arcadia/tasks` (the staff bot's jobs, which only run when
   Arcadia is configured) so core platform features don't depend on staff
   tooling being set up. First job: `bot_uptime_check`, which periodically
   records whether every listed bot is currently online in the main server
   into `bots.uptime`/`total_uptime`/`uptime_last_checked`. These columns
-  have existed since the Rust port but were never actually written to —
+  have existed since the Rust port but were never actually written to,
   Arcadia's old uptime checker (`src/tasks/__toberewritten/uptime.rs`)
   didn't even compile against the serenity version it was last touched
   against, and was explicitly never ported (see `arcadia/CONFORMANCE.md`).
@@ -1489,7 +1674,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never requests it.
 - `servers.avatar`: servers previously had no icon anywhere (index listing,
   detail page, or the staff panel's server search all showed a blank/
-  initials fallback) — the old cache-server subsystem used to synthesize
+  initials fallback), the old cache-server subsystem used to synthesize
   this from its own CDN cache, and nothing replaced it after that was
   retired (`exp/remove_cache_servers.sql`). Populated once at Add Server
   time from the invite resolution already done there, and kept fresh
@@ -1514,7 +1699,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `current-env` now also accepts `dev`, a third environment alongside
   `staging`/`prod`. Every `Differs[T]` config key (`config/config.go`) gains
   an optional `dev` value, only consulted when `current-env` is `dev`, and
-  only used if actually set — an unset `dev` value falls back to `staging`,
+  only used if actually set, an unset `dev` value falls back to `staging`,
   so no existing `config.yaml` needs to change. Lets a local checkout run
   against things like a personal Discord bot application
   (`discord_auth.token`, `arcadia.token`) without touching the real staging
@@ -1547,7 +1732,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dovewing's almost-always-offline gateway-derived status.
 - `GET /servers/meta?invite=...` resolves a Discord invite to a preview of
   the server it points to (name, icon, member counts, and whether it's
-  already listed) without adding anything — lets a client show what's about
+  already listed) without adding anything, lets a client show what's about
   to be submitted before Add Server is actually called. Shares its invite
   resolution logic with `PUT /servers` via a new `ResolveInvite` helper.
 - Servers can opt in to showing their custom emojis and stickers on their
@@ -1555,7 +1740,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /servers/{id}` now includes `emojis`/`stickers`/`emojis_synced_at`,
   always empty unless the owner has opted in. The actual snapshot is synced
   periodically by the tracking bot (Infernoplex), not fetched live per
-  request, and requires the bot to currently be a member of the server —
+  request, and requires the bot to currently be a member of the server,
   Popplio itself never talks to Discord for this.
 - `GET /servers/meta` now also reports `bot_present`/`bot_invite_url` by
   asking Infernoplex's Sorbet API whether the tracking bot is currently a
@@ -1577,7 +1762,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gateway authenticates every request with its own shared bot credential by
   default, each client sends its own token via an `X-Upstream-Authorization`
   header instead, which the gateway forwards as the real `Authorization`
-  header sent to Discord — so Popplio and Arcadia's staff bot each keep
+  header sent to Discord, so Popplio and Arcadia's staff bot each keep
   their own distinct bot identity rather than both authenticating as
   whichever bot the gateway holds.
 - `EntityGetVoteCount` (used by nearly every bot/server/team/user/pack
@@ -1586,7 +1771,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bot/server index resolution (`ResolveIndexBot`/`ResolveIndexServer`,
   called by `GET /bots/@all`, `GET /servers/@all`, search, random, the bots
   index, packs, team entities, and user profiles) now resolves every row in
-  a page concurrently via `errgroup` instead of one row at a time — each
+  a page concurrently via `errgroup` instead of one row at a time, each
   row's dovewing/vanity/vote lookups are independent, so a page of results
   no longer pays for them sequentially.
 - `GET /list/current-status` now issues both the Instatus and UptimeRobot
@@ -1600,7 +1785,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folded two sequential "does the pack exist" / "who owns it" queries into
   one.
 - The generic error bodies returned when a failure carries no specific
-  message of its own (`constants/constants.go` — 404s, 400s, 403s, 401s,
+  message of its own (`constants/constants.go`, 404s, 400s, 403s, 401s,
   500s, 405s, and missing-body errors) were all a "Slow down, bucko!" joke
   string. Replaced with plain, professional messages that actually describe
   the failure.
@@ -1609,13 +1794,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The `server`/`team` auth types were never registered as OpenAPI security
   schemes (only `User`/`Bot` were, via `docs.AddSecuritySchema` in
-  `main.go`) even though `Authorize()` has always fully supported them —
+  `main.go`) even though `Authorize()` has always fully supported them,
   every one of the 41 operations requiring `server` or `team` auth
   (`PUT /bots`, `PUT /servers`, both `PATCH .../settings` endpoints,
   reviews, sessions, etc.) referenced a security scheme name absent from
   `components.securitySchemes`. Harmless to the API itself, but any tool
   that resolves the requirement against registered schemes crashes outright
-  on the unresolved reference — including the docs site's OpenAPI reference
+  on the unresolved reference, including the docs site's OpenAPI reference
   pages (`fumadocs-openapi`'s `APIPage`, which throws
   `Cannot read properties of undefined (reading 'type')`). Registered both
   (`docs.AddSecuritySchema("server", ...)` / `("team", ...)`, lowercase to
@@ -1626,7 +1811,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`perms.EntityOwner`). `exp/rewrite/flatperms.sql` converts this
   correctly for existing rows, but every server/bot added *after* running
   that migration created a team whose owner held a permission string the
-  flat permission checker doesn't recognize as anything — silently locking
+  flat permission checker doesn't recognize as anything, silently locking
   them out of managing their own new listing (`edit_servers`/`edit_bots`
   checks fail, since `global.*` isn't `owner` and isn't a declared
   permission either). `arcadia/tasks/cleaners.go`'s `TeamCleaner` task had
@@ -1640,19 +1825,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   built its link back to the site with `Sites.Frontend.Production()`,
   forcing the production URL regardless of which environment the action
   actually happened in. On staging/beta, this meant either a broken link
-  (if `sites.frontend.prod` wasn't configured on that box at all — its
+  (if `sites.frontend.prod` wasn't configured on that box at all, its
   `Production()` has no fallback, so an unset value silently becomes an
   invalid relative-path embed URL and Discord rejects the whole message
   with `50035`) or a link to an entity that only exists in a different
   environment's database. Switched to `.Parse()`, which resolves against
   whichever environment is actually running.
 - `PATCH /servers/{id}/settings` and `PATCH /bots/{id}/settings` returned a
-  500 whenever their mod-log notification embed failed to send — including
+  500 whenever their mod-log notification embed failed to send, including
   the guaranteed case for servers, which built its embed with
   `Thumbnail: &discord.EmbedResource{}` (a present-but-empty resource,
   which Discord's API rejects outright with `50035: Invalid Form Body`
   rather than treating as "no thumbnail"). The underlying update had
-  already succeeded in both cases — the error message even said so — so a
+  already succeeded in both cases, the error message even said so, so a
   caller retrying on this 500 risked double-submitting. The thumbnail is
   now omitted when there's no avatar instead of sent empty, servers' embed
   now uses the real `servers.avatar` value instead of nothing, and a
@@ -1663,7 +1848,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declaration order, which is what `db.GetCols`/the generated column list
   actually follow. Values were bound to columns purely by position, so e.g.
   `server_id` was written into `invite`, `name` into `short`, and
-  `extra_links` (a `[]Link`) into `tags` (a `text[]`) — the last of which is
+  `extra_links` (a `[]Link`) into `tags` (a `text[]`), the last of which is
   what surfaced as a `cannot find encode plan` error, since a `[]Link` can't
   encode into a `text[]` column. `createServerArgs` now lists values in the
   same order as the struct, with a comment on both explaining they must stay
@@ -1683,7 +1868,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `error while setting presence err="no gateway configured"`. First traced to
   `Discord.SetPresence` being called right after `Discord.OpenShardManager`
   returned (before the shards finish their handshake) and moved into the
-  `OnGuildsReady` handler — which turned out to only fix the timing, not the
+  `OnGuildsReady` handler, which turned out to only fix the timing, not the
   actual cause: Popplio runs sharded (`OpenShardManager`), and
   `Discord.SetPresence` only ever checks disgo's single-gateway field
   (populated by `OpenGateway`, not `OpenShardManager`), so it returns
@@ -1704,11 +1889,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   server panicked at startup ("Base sanity check failed: permissionCheck
   not found in route.ExtData") before it could serve a single request.
 - `PATCH .../webhooks/{id}` silently ignored `simple_auth` in the request
-  body — the `UPDATE` statement never included that column, so a webhook's
+  body, the `UPDATE` statement never included that column, so a webhook's
   auth mode could only ever be set at creation, never changed afterward.
 - `GET /list/current-status`'s Redis cache never actually worked: it passed
   a raw `map[string]any` to `Set`, which go-redis cannot serialize (returns
-  `"redis: can't marshal map[string]interface{}"`) — an error that was
+  `"redis: can't marshal map[string]interface{}"`), an error that was
   never checked, so every request silently round-tripped to Instatus or
   UptimeRobot instead of using the 3-minute cache the code's own comment
   says exists. Now JSON-marshals before `Set` and unmarshals back into the
@@ -1718,12 +1903,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `add_review`/`edit_review`/`remove_review` each called
   `state.Redis.Del(ctx, "rv-"+targetId+"-"+targetType)` on every mutation,
   invalidating a cache key that is never `Set` or `Get` anywhere in the
-  codebase — three no-op Redis round trips per review change. Removed.
+  codebase, three no-op Redis round trips per review change. Removed.
 - The OAuth authorization-code replay check (`create_oauth2_login`) used a
   separate `Exists` followed by `Set` to mark a code used, which is not
   atomic: two concurrent requests carrying the same code could both pass
   `Exists` before either called `Set`, letting the same code be redeemed
-  twice — exactly the race the code's own comment says it closes, but
+  twice, exactly the race the code's own comment says it closes, but
   didn't. Now uses `SetNX`, which checks and marks the code used in one
   atomic round trip.
 - Several route handlers (`delete_pack`, `patch_pack`, `current_status`)
@@ -1734,7 +1919,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A background goroutine filtering empty entries out of the Stripe webhook
   IP allowlist mutated the slice while ranging over its original indices, a
   classic Go bug that silently skips the element shifted into a just-removed
-  slot — consecutive empty lines in Stripe's IP list could leave stale
+  slot, consecutive empty lines in Stripe's IP list could leave stale
   entries in a security-relevant allowlist. Now builds a filtered copy
   instead of mutating in place.
 - Startup panicked the entire process on a transient Stripe API/network
@@ -1744,7 +1929,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   degraded gracefully.
 - `webhooks/sender` used `panic()` as its input-validation strategy for a
   handful of preconditions, including from inside an unrecovered goroutine
-  (the randomized "send a bad webhook to test auth" path) — a single
+  (the randomized "send a bad webhook to test auth" path), a single
   malformed webhook payload reaching that path could crash the whole
   process rather than just fail one webhook delivery. Preconditions now
   return errors instead.
@@ -1764,16 +1949,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real DB column with no corresponding Go struct field anywhere in the
   codebase, via the existing `ignore_fields` convention.
 - Team votes were never resolved when a team was embedded inside a user's
-  profile response (`GET /users/{id}`) — every embedded team silently
+  profile response (`GET /users/{id}`), every embedded team silently
   reported 0 votes regardless of its real count.
 - `GET /users/{id}` never requested team member data (`team_member`) when
-  resolving a user's teams, only `bot` and `server` — so any client relying
+  resolving a user's teams, only `bot` and `server`, so any client relying
   on that response to determine a user's permissions on a team-owned entity
   (e.g. "can I edit this bot?") always saw an empty permission set.
 - The tracking bot's Discord presence update was hard-gated to the
   production environment only, and silently swallowed any error from
   actually setting it (the failure check was reading a stale variable from
-  an earlier, unrelated call rather than the real result) — presence now
+  an earlier, unrelated call rather than the real result), presence now
   updates in every environment and logs real failures instead of going
   silent.
 - Nil slices (a user's teams, a team's `bots`/`servers`/`members`, etc.) now
@@ -1782,7 +1967,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response that has no data yet.
 - `GET /teams/{id}` had the same nil-slice gap on `tags`/`extra_links`
   directly (as opposed to the application-resolved slices above, which were
-  already covered) — a team with no tags or links set crashed the frontend
+  already covered), a team with no tags or links set crashed the frontend
   team page outright rather than just rendering emptily.
 - `webhooks/sender` failed to build at all: an in-progress refactor had
   extracted `Secret`, `webhookSendState`, and several helper methods

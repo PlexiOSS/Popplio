@@ -74,20 +74,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(err.Error())
 	}
 
-	// Get bot discord user
-	botUser, err := dovewing.GetUser(d.Context, id, state.DovewingPlatformDiscord)
-
-	if err != nil {
-		return resp.ErrBody("Failed to get bot user: ", "Failed to get bot user.", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
-	}
-
 	extraLinksJSON, err := json.Marshal(payload.ExtraLinks)
 
 	if err != nil {
 		return resp.Err("Error marshaling extra links", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 	}
 
-	// Update the bot
+	// Update the bot. This is the actual outcome the caller cares about --
+	// it used to run after a dovewing lookup whose only purpose is
+	// cosmetic (the mod-log embed's name/avatar below), so a transient
+	// Discord/dovewing hiccup resolving the bot's user object meant an
+	// owner couldn't edit a single field on their bot, even fields with
+	// nothing to do with Discord's user object at all. That lookup now
+	// happens after this succeeds, and best-effort.
 	err = db.New(state.Pool).UpdateBotSettings(d.Context, db.UpdateBotSettingsParams{
 		Short:         payload.Short,
 		Long:          payload.Long,
@@ -105,13 +104,29 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to update bot: ", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 	}
 
+	// Best-effort: the settings update above already succeeded, so a
+	// failure here degrades the mod-log embed's name/avatar rather than
+	// failing the request the caller is actually waiting on.
+	botUser, err := dovewing.GetUser(d.Context, id, state.DovewingPlatformDiscord)
+
+	if err != nil {
+		state.Logger.Error("Failed to get bot user for update embed", zap.Error(err), zap.String("userID", d.Auth.ID), zap.String("botID", id))
+		botUser = nil
+	}
+
+	botName := "<@" + id + ">"
+
+	if botUser != nil && botUser.Username != "" {
+		botName = botUser.Username
+	}
+
 	embed := discord.Embed{
 		URL:   state.Config.Sites.Frontend + "/bots/" + id,
 		Title: "Bot Updated",
 		Fields: []discord.EmbedField{
 			{
 				Name:   "Name",
-				Value:  botUser.Username,
+				Value:  botName,
 				Inline: ptr.TruePtr,
 			},
 			{
@@ -130,8 +145,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// An EmbedResource with an empty URL is itself invalid and gets the
 	// whole message rejected (50035) — Discord wants the field omitted
 	// entirely, not present-but-empty, when dovewing has no avatar for
-	// this bot yet.
-	if botUser.Avatar != "" {
+	// this bot yet (or the lookup above failed).
+	if botUser != nil && botUser.Avatar != "" {
 		embed.Thumbnail = &discord.EmbedResource{URL: botUser.Avatar}
 	}
 

@@ -18,10 +18,6 @@ func EnsurePanelAuth(ctx context.Context, r *http.Request) (uid string, err erro
 		return "", errors.New("missing staff auth token normally sent by Arcadia")
 	}
 
-	if ssToken == "" {
-		return "", errors.New("missing authorization header")
-	}
-
 	if userId == "" {
 		return "", errors.New("missing user id header")
 	}

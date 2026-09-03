@@ -62,8 +62,13 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 	addField("Fixed", entry.Fixed)
 	addField("Removed", entry.Removed)
 
+	var content string
+	if entry.Project == "omniplex" {
+		content = state.Config.Meta.ChangelogAnnounceMentions
+	}
+
 	_, err := state.Discord.Rest().CreateMessage(channelID, discord.MessageCreate{
-		Content: state.Config.Meta.ChangelogAnnounceMentions,
+		Content: content,
 		Embeds: []discord.Embed{
 			{
 				Title:       projectLabel(entry.Project) + " " + entry.Version + " Released",

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package validators
 
 import "testing"
@@ -14,7 +16,6 @@ func TestNormalizeTargetType(t *testing.T) {
 		"team":    "team",
 		"packs":   "pack",
 		"pack":    "pack",
-		// Unknown types fall through to a generic trailing-"s" strip.
 		"widgets": "widget",
 		"widget":  "widget",
 		"":        "",

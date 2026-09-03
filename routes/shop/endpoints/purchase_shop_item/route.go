@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package purchase_shop_item
 
 import (
@@ -172,6 +174,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	q := db.New(tx)
 
 	if coupon != nil {
+		if err := q.LockShopCoupon(d.Context, coupon.ID); err != nil {
+			return resp.Err("Failed to acquire coupon lock", err)
+		}
+
 		if coupon.MaxUses.Valid {
 			uses, err := q.CountShopCouponRedemptions(d.Context, coupon.ID)
 

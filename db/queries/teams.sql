@@ -125,6 +125,16 @@ SELECT EXISTS(SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2);
 -- name: CountTeamOwnersWithFlag :one
 SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND flags && sqlc.arg('flags')::text[];
 
+-- name: LockTeamOwnership :exec
+-- Per-team advisory lock (auto-released at transaction end), acquired
+-- before the "must keep at least one owner" check in delete_team_member
+-- and edit_team_member. Without it, two concurrent requests stripping
+-- Owner from two different members of the same two-owner team can both
+-- read ownerCount=2 before either commits, both pass the guard, and the
+-- team ends up with zero owners -- permanently locking out every
+-- EntityOwner-gated action on it, including re-granting Owner.
+SELECT pg_advisory_xact_lock(hashtext(sqlc.arg('team_id')::text));
+
 -- name: DeleteTeamMember :exec
 DELETE FROM team_members WHERE team_id = $1 AND user_id = $2;
 

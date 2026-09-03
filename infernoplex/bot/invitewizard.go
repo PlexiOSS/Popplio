@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package bot
 
 import (
@@ -27,7 +29,7 @@ var inviteSessions = map[string]*inviteSession{}
 
 func startInviteWizard(c *Ctx, onResolved func(ctx context.Context, c *Ctx, invite string) error) error {
 	sessionsMu.Lock()
-	inviteSessions[c.Author.ID.String()] = &inviteSession{
+	inviteSessions[sessionKey(c.Author.ID.String(), c.GuildID)] = &inviteSession{
 		AuthorID:   c.Author.ID.String(),
 		GuildID:    c.GuildID,
 		ExpiresAt:  time.Now().Add(wizardTTL),
@@ -56,30 +58,31 @@ func startInviteWizard(c *Ctx, onResolved func(ctx context.Context, c *Ctx, invi
 	})
 }
 
-func peekInviteSession(userID string) *inviteSession {
+func peekInviteSession(userID string, guildID snowflake.ID) *inviteSession {
 	sessionsMu.Lock()
 	defer sessionsMu.Unlock()
 
-	s, ok := inviteSessions[userID]
+	key := sessionKey(userID, guildID)
+	s, ok := inviteSessions[key]
 
 	if !ok {
 		return nil
 	}
 
 	if time.Now().After(s.ExpiresAt) {
-		delete(inviteSessions, userID)
+		delete(inviteSessions, key)
 		return nil
 	}
 
 	return s
 }
 
-func takeInviteSession(userID string) *inviteSession {
-	s := peekInviteSession(userID)
+func takeInviteSession(userID string, guildID snowflake.ID) *inviteSession {
+	s := peekInviteSession(userID, guildID)
 
 	if s != nil {
 		sessionsMu.Lock()
-		delete(inviteSessions, userID)
+		delete(inviteSessions, sessionKey(userID, guildID))
 		sessionsMu.Unlock()
 	}
 
@@ -89,7 +92,11 @@ func takeInviteSession(userID string) *inviteSession {
 func handleInviteComponent(ctx context.Context, e *events.ComponentInteractionCreate, id string) {
 	userID := e.User().ID.String()
 
-	s := peekInviteSession(userID)
+	if e.GuildID() == nil {
+		return
+	}
+
+	s := peekInviteSession(userID, *e.GuildID())
 
 	if s == nil || s.AuthorID != userID {
 		return
@@ -99,13 +106,13 @@ func handleInviteComponent(ctx context.Context, e *events.ComponentInteractionCr
 
 	switch id {
 	case "invite:cancel":
-		takeInviteSession(userID)
+		takeInviteSession(userID, *e.GuildID())
 		logFailedEdit("answer invite cancel", e.CreateMessage(discord.MessageCreate{
 			Embeds: []discord.Embed{{Description: "Cancelled."}},
 		}))
 
 	case "invite:none":
-		takeInviteSession(userID)
+		takeInviteSession(userID, *e.GuildID())
 		c := ctxFromComponent(ctx, e)
 
 		if err := s.OnResolved(ctx, c, "none"); err != nil {
@@ -157,7 +164,11 @@ func handleInviteComponent(ctx context.Context, e *events.ComponentInteractionCr
 func handleInviteURLModal(ctx context.Context, e *events.ModalSubmitInteractionCreate) {
 	userID := e.User().ID.String()
 
-	s := takeInviteSession(userID)
+	if e.GuildID() == nil {
+		return
+	}
+
+	s := takeInviteSession(userID, *e.GuildID())
 
 	if s == nil || s.AuthorID != userID {
 		return
@@ -185,7 +196,11 @@ func handleInviteURLModal(ctx context.Context, e *events.ModalSubmitInteractionC
 func handleInvitePerUserModal(ctx context.Context, e *events.ModalSubmitInteractionCreate) {
 	userID := e.User().ID.String()
 
-	s := takeInviteSession(userID)
+	if e.GuildID() == nil {
+		return
+	}
+
+	s := takeInviteSession(userID, *e.GuildID())
 
 	if s == nil || s.AuthorID != userID {
 		return

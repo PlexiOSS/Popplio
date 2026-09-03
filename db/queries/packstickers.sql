@@ -4,10 +4,13 @@
 -- additions.
 
 -- name: GetPackStickers :many
-SELECT id, name, animated, position, downloads FROM pack_stickers WHERE pack_url = $1 ORDER BY position ASC;
+SELECT id, name, animated, position, downloads, created_at FROM pack_stickers WHERE pack_url = $1 ORDER BY position ASC;
 
 -- name: InsertPackSticker :exec
-INSERT INTO pack_stickers (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5);
+-- downloads/created_at are optional -- see InsertPackEmoji's own comment
+-- in packs.sql, same reasoning.
+INSERT INTO pack_stickers (id, pack_url, name, animated, position, downloads, created_at)
+VALUES ($1, $2, $3, $4, $5, COALESCE(sqlc.narg('downloads')::integer, 0), COALESCE(sqlc.narg('created_at')::timestamptz, now()));
 
 -- name: DeletePackStickers :exec
 DELETE FROM pack_stickers WHERE pack_url = $1;

@@ -118,6 +118,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		if !newPermsResolved.Has(globalOwner) && currentUserPerms.Has(globalOwner) {
+			if err := q.LockTeamOwnership(d.Context, teamId); err != nil {
+				return resp.Err("Error acquiring team ownership lock", err, zap.String("uid", d.Auth.ID), zap.String("tid", teamId), zap.String("mid", userId))
+			}
+
 			ownerCount, err := q.CountTeamOwnersWithFlag(d.Context, db.CountTeamOwnersWithFlagParams{
 				TeamID: teamUUID,
 				Flags:  []string{globalOwner.String()},

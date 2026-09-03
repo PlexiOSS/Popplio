@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package moderation
 
 import (
@@ -89,12 +91,8 @@ func CheckText(ctx context.Context, inputs ...string) (Result, error) {
 	result := Result{Categories: []string{}}
 
 	for _, r := range parsed.Results {
-		if r.Flagged {
-			result.Flagged = true
-		}
-
 		for category, flagged := range r.Categories {
-			if flagged {
+			if flagged && !alwaysExemptCategory(category) {
 				result.Categories = append(result.Categories, category)
 			}
 		}
@@ -102,8 +100,13 @@ func CheckText(ctx context.Context, inputs ...string) (Result, error) {
 
 	slices.Sort(result.Categories)
 	result.Categories = slices.Compact(result.Categories)
+	result.Flagged = len(result.Categories) > 0
 
 	return result, nil
+}
+
+func alwaysExemptCategory(category string) bool {
+	return category == "violence"
 }
 
 func nsfwExemptCategory(category string) bool {

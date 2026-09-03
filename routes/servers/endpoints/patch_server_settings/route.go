@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
 	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
+
+	"github.com/PlexiOSS/Keel/ptr"
 
 	"github.com/disgoorg/disgo/discord"
 	"go.uber.org/zap"
@@ -91,13 +92,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while updating server", err, zap.String("serverID", id))
 	}
 
-	nameAvatar, err := q.GetServerNameAndAvatar(d.Context, id)
+	name, avatar := id, ""
 
-	if err != nil {
-		return resp.Err("Error while getting server info", err, zap.String("serverID", id))
+	if nameAvatar, err := q.GetServerNameAndAvatar(d.Context, id); err != nil {
+		state.Logger.Error("Error while getting server info for update embed", zap.Error(err), zap.String("serverID", id))
+	} else {
+		name, avatar = nameAvatar.Name, nameAvatar.Avatar
 	}
-
-	name, avatar := nameAvatar.Name, nameAvatar.Avatar
 
 	embed := discord.Embed{
 		URL:   state.Config.Sites.Frontend + "/servers/" + id,

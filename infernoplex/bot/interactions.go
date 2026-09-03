@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package bot
 
 import (
@@ -18,6 +20,20 @@ import (
 const wizardTTL = 6 * time.Minute
 
 var sessionsMu sync.Mutex
+
+// sessionKey combines a user and the guild they're acting in into one
+// wizard-session map key. The wizard/update/delete session maps used to be
+// keyed by user ID alone, so a user running e.g. /delete in one server and
+// then /delete again in another (without confirming or cancelling the
+// first) silently overwrote their only session slot with the second
+// server's GuildID -- clicking "Confirm" on the first, still-visible
+// message then acted on the second server, with nothing in the embed to
+// show which server was actually about to be affected. Scoping the key to
+// (user, guild) means each server the user is mid-wizard in gets its own
+// slot.
+func sessionKey(userID string, guildID snowflake.ID) string {
+	return userID + ":" + guildID.String()
+}
 
 func onComponent(ctx context.Context, e *events.ComponentInteractionCreate) {
 	id := e.Data.CustomID()

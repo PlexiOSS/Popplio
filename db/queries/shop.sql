@@ -124,6 +124,17 @@ DELETE FROM shop_coupons WHERE id = $1;
 
 -- Coupon redemption (purchase_shop_item route) -----------------------------
 
+-- name: LockShopCoupon :exec
+-- Per-coupon advisory lock (auto-released at transaction end), acquired
+-- before purchase_shop_item's max_uses/reuse_wait_duration checks below --
+-- both were plain check-then-insert with no locking, so two concurrent
+-- purchases using the same coupon could both read "under the limit" /
+-- "cooldown has passed" before either committed its redemption row, and
+-- both succeed, bypassing a single-use coupon's cap or its cooldown
+-- entirely. Scoped to the coupon, not the (coupon, target) pair, since
+-- max_uses is a global-across-targets limit.
+SELECT pg_advisory_xact_lock(hashtext(sqlc.arg('coupon_id')::text));
+
 -- name: GetShopCouponByCode :one
 SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, requirements, allowed_users, usable, target_types, cents
 FROM shop_coupons

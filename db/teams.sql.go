@@ -659,6 +659,22 @@ func (q *Queries) InsertVanityReturningItag(ctx context.Context, arg InsertVanit
 	return itag, err
 }
 
+const lockTeamOwnership = `-- name: LockTeamOwnership :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text))
+`
+
+// Per-team advisory lock (auto-released at transaction end), acquired
+// before the "must keep at least one owner" check in delete_team_member
+// and edit_team_member. Without it, two concurrent requests stripping
+// Owner from two different members of the same two-owner team can both
+// read ownerCount=2 before either commits, both pass the guard, and the
+// team ends up with zero owners -- permanently locking out every
+// EntityOwner-gated action on it, including re-granting Owner.
+func (q *Queries) LockTeamOwnership(ctx context.Context, teamID string) error {
+	_, err := q.db.Exec(ctx, lockTeamOwnership, teamID)
+	return err
+}
+
 const promoteTeamMemberToOwner = `-- name: PromoteTeamMemberToOwner :exec
 UPDATE team_members SET flags = $1, data_holder = $2 WHERE team_id = $3 AND user_id = $4
 `

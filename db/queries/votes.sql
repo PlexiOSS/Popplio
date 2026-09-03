@@ -144,6 +144,30 @@ ORDER BY position ASC;
 -- name: InsertVoteRedeemLog :one
 INSERT INTO entity_vote_redeem_logs (target_id, target_type, credits) VALUES ($1, $2, $3) RETURNING id;
 
+-- name: LockVoteCastTarget :exec
+-- A per-(user, target) advisory lock (auto-released at transaction end),
+-- held from the start of create_user_entity_vote's transaction, before
+-- EntityVoteCheck reads the user's existing votes/wait timer for this
+-- target. Without it, two concurrent vote requests from the same user for
+-- the same target can both read "not voted yet" / "wait elapsed" before
+-- either commits its INSERT, both pass the PerUser/VoteTime check, and both
+-- get counted -- exceeding the entity's configured vote limits. Scoped to
+-- (user, target) rather than target alone so unrelated users voting for the
+-- same entity at the same time are never serialized against each other.
+SELECT pg_advisory_xact_lock(hashtext(sqlc.arg('user_id')::text || ':' || sqlc.arg('target_type')::text || ':' || sqlc.arg('target_id')::text));
+
+-- name: LockVoteRedeemTarget :exec
+-- A per-target advisory lock (auto-released at transaction end), NOT the
+-- table-wide LockEntityVotesExclusive used by the batch vote-reset job --
+-- that would serialize every redemption sitewide instead of just the ones
+-- racing for the same target. Held for the duration of
+-- EntityRedeemVoteCredits, before it reads the redeemable vote count, so
+-- two concurrent redeem calls for the same target can no longer both read
+-- "N votes still unclaimed" and both log a fresh N-vote credit grant --
+-- the second call blocks until the first commits, then correctly sees
+-- however many votes are actually still unclaimed (possibly zero).
+SELECT pg_advisory_xact_lock(hashtext(sqlc.arg('target_type')::text || ':' || sqlc.arg('target_id')::text));
+
 -- name: GetRedeemableVoteItags :many
 -- credit_redeem IS NULL excludes votes some earlier redemption already
 -- claimed -- without it, a vote stays eligible forever and a repeat
@@ -160,8 +184,11 @@ SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void
 -- bot/server/team's vote total every time its owner cashed in credits.
 -- credit_redeem (set here) is what actually marks a vote as spent; void_reason/
 -- voided_at are kept purely as display metadata for the vote history UI, not
--- as a gate on anything.
-UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY(sqlc.arg('itags')::uuid[]);
+-- as a gate on anything. credit_redeem IS NULL guards the same re-claim
+-- risk RedeemAllVotesForTarget's own comment explains -- belt-and-suspenders
+-- alongside the caller's per-target advisory lock (LockVoteRedeemTarget),
+-- in case a future caller ever reaches this query without going through it.
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY(sqlc.arg('itags')::uuid[]) AND credit_redeem IS NULL;
 
 -- name: RedeemAllVotesForTarget :exec
 -- See RedeemVotesByItags -- same fix, same reasoning. credit_redeem IS NULL

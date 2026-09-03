@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package validators
 
 import (
@@ -11,10 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// BlacklistedWordRow describes blacklisted_words's columns actually relied
-// on by Popplio (it's otherwise queried via sqlc, not scanned into this
-// struct in practice) -- exists so cmd/migrate's schema validation has
-// something to check this table's columns against.
 type BlacklistedWordRow struct {
 	Word    string   `db:"word"`
 	Systems []string `db:"systems"`

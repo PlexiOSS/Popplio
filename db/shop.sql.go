@@ -389,13 +389,11 @@ func (q *Queries) GetRedeemableCreditBatches(ctx context.Context, arg GetRedeema
 }
 
 const getShopCouponByCode = `-- name: GetShopCouponByCode :one
-
 SELECT id, code, public, max_uses, created_at, created_by, last_updated, updated_by, reuse_wait_duration, expiry, applicable_items, requirements, allowed_users, usable, target_types, cents
 FROM shop_coupons
 WHERE code = $1
 `
 
-// Coupon redemption (purchase_shop_item route) -----------------------------
 func (q *Queries) GetShopCouponByCode(ctx context.Context, code string) (ShopCoupon, error) {
 	row := q.db.QueryRow(ctx, getShopCouponByCode, code)
 	var i ShopCoupon
@@ -868,6 +866,25 @@ func (q *Queries) ListVoteCreditTiers(ctx context.Context) ([]ListVoteCreditTier
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockShopCoupon = `-- name: LockShopCoupon :exec
+
+SELECT pg_advisory_xact_lock(hashtext($1::text))
+`
+
+// Coupon redemption (purchase_shop_item route) -----------------------------
+// Per-coupon advisory lock (auto-released at transaction end), acquired
+// before purchase_shop_item's max_uses/reuse_wait_duration checks below --
+// both were plain check-then-insert with no locking, so two concurrent
+// purchases using the same coupon could both read "under the limit" /
+// "cooldown has passed" before either committed its redemption row, and
+// both succeed, bypassing a single-use coupon's cap or its cooldown
+// entirely. Scoped to the coupon, not the (coupon, target) pair, since
+// max_uses is a global-across-targets limit.
+func (q *Queries) LockShopCoupon(ctx context.Context, couponID string) error {
+	_, err := q.db.Exec(ctx, lockShopCoupon, couponID)
+	return err
 }
 
 const spendCreditBatch = `-- name: SpendCreditBatch :exec

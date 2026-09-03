@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package create_team
 
 import (
@@ -172,8 +174,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error creating team", err, zap.String("user_id", d.Auth.ID))
 	}
 
+	var teamIdUUID pgtype.UUID
+	if err := teamIdUUID.Scan(teamId); err != nil {
+		return resp.Err("Invalid team ID", err, zap.String("user_id", d.Auth.ID), zap.String("teamId", teamId))
+	}
+
 	err = q.InsertTeamMemberOwner(d.Context, db.InsertTeamMemberOwnerParams{
-		TeamID: itag,
+		TeamID: teamIdUUID,
 		UserID: d.Auth.ID,
 		Flags:  []string{perms.EntityOwner.String()},
 	})

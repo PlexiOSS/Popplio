@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -168,23 +169,56 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if packType == types.PackTypeEmoji {
+		oldEmojis, err := txQ.GetPackEmojis(d.Context, id)
+
+		if err != nil {
+			return resp.Err("Error while reading existing pack emojis [db fetch]", err, zap.String("id", id))
+		}
+
+		oldByID := make(map[string]db.GetPackEmojisRow, len(oldEmojis))
+		for _, e := range oldEmojis {
+			oldByID[e.ID] = e
+		}
+
+		newIDs := make(map[string]bool, len(payload.Emojis))
+		for _, e := range payload.Emojis {
+			newIDs[e.ID] = true
+		}
+
 		err = txQ.DeletePackEmojis(d.Context, id)
 
 		if err != nil {
 			return resp.Err("Error while clearing existing pack emojis [db exec]", err, zap.String("id", id))
 		}
 
+		for oldID := range oldByID {
+			if newIDs[oldID] {
+				continue
+			}
+
+			if err := txQ.DeleteVanityByTarget(d.Context, db.DeleteVanityByTargetParams{
+				TargetID:   oldID,
+				TargetType: "pack_emoji",
+			}); err != nil {
+				return resp.Err("Error while cleaning up a removed emoji's vanity", err, zap.String("emojiId", oldID))
+			}
+		}
+
 		for i, emoji := range payload.Emojis {
-			err = txQ.InsertPackEmoji(
-				d.Context,
-				db.InsertPackEmojiParams{
-					ID:       emoji.ID,
-					PackUrl:  id,
-					Name:     emoji.Name,
-					Animated: emoji.Animated,
-					Position: int32(i),
-				},
-			)
+			insertParams := db.InsertPackEmojiParams{
+				ID:       emoji.ID,
+				PackUrl:  id,
+				Name:     emoji.Name,
+				Animated: emoji.Animated,
+				Position: int32(i),
+			}
+
+			if old, existed := oldByID[emoji.ID]; existed {
+				insertParams.Downloads = pgtype.Int4{Int32: old.Downloads, Valid: true}
+				insertParams.CreatedAt = old.CreatedAt
+			}
+
+			err = txQ.InsertPackEmoji(d.Context, insertParams)
 
 			if err != nil {
 				return resp.ErrBody("Failed to insert pack emoji [patch_pack]", "Failed to save one of the pack's emojis — the uploaded image may not exist yet.", err, zap.String("emojiId", emoji.ID))
@@ -197,23 +231,56 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if packType == types.PackTypeSticker {
+		oldStickers, err := txQ.GetPackStickers(d.Context, id)
+
+		if err != nil {
+			return resp.Err("Error while reading existing pack stickers [db fetch]", err, zap.String("id", id))
+		}
+
+		oldByID := make(map[string]db.GetPackStickersRow, len(oldStickers))
+		for _, s := range oldStickers {
+			oldByID[s.ID] = s
+		}
+
+		newIDs := make(map[string]bool, len(payload.Stickers))
+		for _, s := range payload.Stickers {
+			newIDs[s.ID] = true
+		}
+
 		err = txQ.DeletePackStickers(d.Context, id)
 
 		if err != nil {
 			return resp.Err("Error while clearing existing pack stickers [db exec]", err, zap.String("id", id))
 		}
 
+		for oldID := range oldByID {
+			if newIDs[oldID] {
+				continue
+			}
+
+			if err := txQ.DeleteVanityByTarget(d.Context, db.DeleteVanityByTargetParams{
+				TargetID:   oldID,
+				TargetType: "pack_sticker",
+			}); err != nil {
+				return resp.Err("Error while cleaning up a removed sticker's vanity", err, zap.String("stickerId", oldID))
+			}
+		}
+
 		for i, sticker := range payload.Stickers {
-			err = txQ.InsertPackSticker(
-				d.Context,
-				db.InsertPackStickerParams{
-					ID:       sticker.ID,
-					PackUrl:  id,
-					Name:     sticker.Name,
-					Animated: sticker.Animated,
-					Position: int32(i),
-				},
-			)
+			insertParams := db.InsertPackStickerParams{
+				ID:       sticker.ID,
+				PackUrl:  id,
+				Name:     sticker.Name,
+				Animated: sticker.Animated,
+				Position: int32(i),
+			}
+
+			if old, existed := oldByID[sticker.ID]; existed {
+				insertParams.Downloads = pgtype.Int4{Int32: old.Downloads, Valid: true}
+				insertParams.CreatedAt = old.CreatedAt
+			}
+
+			err = txQ.InsertPackSticker(d.Context, insertParams)
 
 			if err != nil {
 				return resp.ErrBody("Failed to insert pack sticker [patch_pack]", "Failed to save one of the pack's stickers — the uploaded image may not exist yet.", err, zap.String("stickerId", sticker.ID))

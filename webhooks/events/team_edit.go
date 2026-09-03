@@ -1,9 +1,12 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package events
 
 import (
-	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/types"
 	"popplio/webhooks/core/events"
+
+	"github.com/PlexiOSS/Keel/ptr"
 
 	"github.com/disgoorg/disgo/discord"
 

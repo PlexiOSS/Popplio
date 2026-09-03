@@ -2053,47 +2053,54 @@ func (q *Queries) UnverifyServer(ctx context.Context, serverID string) error {
 }
 
 const updateServerAvatarAndNsfwStats = `-- name: UpdateServerAvatarAndNsfwStats :exec
-UPDATE servers SET avatar = $2, discord_nsfw_level = $3, nsfw_channel_count = $4 WHERE server_id = $1
+UPDATE servers SET avatar = $1::text, discord_nsfw_level = $2::smallint, nsfw_channel_count = COALESCE($3::integer, nsfw_channel_count) WHERE server_id = $4::text
 `
 
 type UpdateServerAvatarAndNsfwStatsParams struct {
-	ServerID         string `db:"server_id" json:"server_id"`
-	Avatar           string `db:"avatar" json:"avatar"`
-	DiscordNsfwLevel int16  `db:"discord_nsfw_level" json:"discord_nsfw_level"`
-	NsfwChannelCount int32  `db:"nsfw_channel_count" json:"nsfw_channel_count"`
+	Avatar           string      `db:"avatar" json:"avatar"`
+	DiscordNsfwLevel int16       `db:"discord_nsfw_level" json:"discord_nsfw_level"`
+	NsfwChannelCount pgtype.Int4 `db:"nsfw_channel_count" json:"nsfw_channel_count"`
+	ServerID         string      `db:"server_id" json:"server_id"`
 }
 
+// nsfw_channel_count uses COALESCE against a nullable arg: when the caller
+// couldn't fetch the guild's channels this cycle (rate limit, transient
+// REST error), it passes a NULL rather than a fabricated 0, so this update
+// leaves the previously-synced count untouched instead of clobbering good
+// data with zero.
 func (q *Queries) UpdateServerAvatarAndNsfwStats(ctx context.Context, arg UpdateServerAvatarAndNsfwStatsParams) error {
 	_, err := q.db.Exec(ctx, updateServerAvatarAndNsfwStats,
-		arg.ServerID,
 		arg.Avatar,
 		arg.DiscordNsfwLevel,
 		arg.NsfwChannelCount,
+		arg.ServerID,
 	)
 	return err
 }
 
 const updateServerAvatarMembersAndNsfw = `-- name: UpdateServerAvatarMembersAndNsfw :exec
-UPDATE servers SET avatar = $2, total_members = $3, online_members = $4, discord_nsfw_level = $5, nsfw_channel_count = $6 WHERE server_id = $1
+UPDATE servers SET avatar = $1::text, total_members = $2::integer, online_members = $3::integer, discord_nsfw_level = $4::smallint, nsfw_channel_count = COALESCE($5::integer, nsfw_channel_count) WHERE server_id = $6::text
 `
 
 type UpdateServerAvatarMembersAndNsfwParams struct {
-	ServerID         string `db:"server_id" json:"server_id"`
-	Avatar           string `db:"avatar" json:"avatar"`
-	TotalMembers     int32  `db:"total_members" json:"total_members"`
-	OnlineMembers    int32  `db:"online_members" json:"online_members"`
-	DiscordNsfwLevel int16  `db:"discord_nsfw_level" json:"discord_nsfw_level"`
-	NsfwChannelCount int32  `db:"nsfw_channel_count" json:"nsfw_channel_count"`
+	Avatar           string      `db:"avatar" json:"avatar"`
+	TotalMembers     int32       `db:"total_members" json:"total_members"`
+	OnlineMembers    int32       `db:"online_members" json:"online_members"`
+	DiscordNsfwLevel int16       `db:"discord_nsfw_level" json:"discord_nsfw_level"`
+	NsfwChannelCount pgtype.Int4 `db:"nsfw_channel_count" json:"nsfw_channel_count"`
+	ServerID         string      `db:"server_id" json:"server_id"`
 }
 
+// See UpdateServerAvatarAndNsfwStats above -- same COALESCE treatment for
+// nsfw_channel_count.
 func (q *Queries) UpdateServerAvatarMembersAndNsfw(ctx context.Context, arg UpdateServerAvatarMembersAndNsfwParams) error {
 	_, err := q.db.Exec(ctx, updateServerAvatarMembersAndNsfw,
-		arg.ServerID,
 		arg.Avatar,
 		arg.TotalMembers,
 		arg.OnlineMembers,
 		arg.DiscordNsfwLevel,
 		arg.NsfwChannelCount,
+		arg.ServerID,
 	)
 	return err
 }

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package invite
 
 import (
@@ -20,8 +22,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Same pattern as routes/servers/assets.ResolveInvite — matches an optional
-// discord.gg/discord.com/invite/... prefix and captures the trailing code.
 var inviteCodeRegex = regexp.MustCompile(`(?:discord(?:\.gg|\.com/invite|app\.com/invite)/)?([a-zA-Z0-9-]+)/?$`)
 
 type ErrorKind string
@@ -69,20 +69,6 @@ func generic(format string, args ...any) *CreateInviteError {
 	return &CreateInviteError{Kind: ErrGeneric, Message: fmt.Sprintf(format, args...)}
 }
 
-// ResolveInvite validates that rawInvite (whatever a server owner pasted
-// into the setup wizard, or sent to Sorbet's ResolveInvite query) is a real,
-// permanent invite for guildID.
-//
-// This deliberately never makes an HTTP request to rawInvite itself — an
-// earlier version did (a GET to the raw user-supplied URL, following
-// redirects, then checking the *final* URL's host after the request had
-// already fired), which is a server-side request forgery: an attacker could
-// point Popplio's server at an arbitrary internal/external URL and have it
-// make a real request before any validation ran. Popplio's main invite
-// resolution (routes/servers/assets.ResolveInvite) never had this problem
-// because it only ever extracts an invite *code* from the input and hands
-// that to Discord's own REST client — the only network request is always to
-// Discord's API, never to attacker-controlled data. Same pattern here.
 func ResolveInvite(ctx context.Context, guildID snowflake.ID, rawInvite string) error {
 	match := inviteCodeRegex.FindStringSubmatch(strings.TrimSpace(rawInvite))
 
@@ -109,11 +95,7 @@ func ResolveInvite(ctx context.Context, guildID snowflake.ID, rawInvite string) 
 	if inv.ExpiresAt != nil {
 		length := time.Until(*inv.ExpiresAt)
 
-		if length < 30*24*time.Hour {
-			return errors.New("Invite expiry must be after at least 30 days long")
-		}
-
-		return errors.New("Invite must be permanent")
+		return fmt.Errorf("Invite must be permanent (expires in %s)", length.Round(time.Hour))
 	}
 
 	return nil

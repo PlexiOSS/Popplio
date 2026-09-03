@@ -1,6 +1,5 @@
-// Package teams mounts the "Teams" group of API routes.
-//
-// These API endpoints are related to our teams system
+// Copyright (C) 2026 NodeByte LTD
+
 package teams
 
 import (
@@ -69,11 +68,10 @@ func (b Router) Routes(r *chi.Mux) {
 			},
 		},
 		ExtData: map[string]any{
-			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+			api.PERMISSION_CHECK_KEY: nil,
 		},
 	}.Route(r)
 
-	// Intentionally without authentication
 	uapi.Route{
 		Pattern: "/users/{id}/{target_type}/{target_id}/perms",
 		OpId:    "get_entity_permissions",
@@ -122,7 +120,6 @@ func (b Router) Routes(r *chi.Mux) {
 		},
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
-				// Deleting a team is Owner-only
 				NeededPermission: api.Needs(perms.EntityOwner),
 				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
 					return api.TargetTypeTeam, chi.URLParam(r, "tid")
@@ -173,6 +170,10 @@ func (b Router) Routes(r *chi.Mux) {
 			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
 				NeededPermission: api.Needs(perms.EntityEditMembers),
 				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					if chi.URLParam(r, "mid") == authData.ID {
+						return api.TargetTypeUser, authData.ID
+					}
+
 					return api.TargetTypeTeam, chi.URLParam(r, "tid")
 				},
 			},
@@ -197,6 +198,10 @@ func (b Router) Routes(r *chi.Mux) {
 			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
 				NeededPermission: api.Needs(perms.EntityRemoveMembers),
 				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					if chi.URLParam(r, "mid") == authData.ID {
+						return api.TargetTypeUser, authData.ID
+					}
+
 					return api.TargetTypeTeam, chi.URLParam(r, "tid")
 				},
 			},

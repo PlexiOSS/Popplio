@@ -310,15 +310,16 @@ func (q *Queries) GetPackEmojiByID(ctx context.Context, id string) (GetPackEmoji
 }
 
 const getPackEmojis = `-- name: GetPackEmojis :many
-SELECT id, name, animated, position, downloads FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC
+SELECT id, name, animated, position, downloads, created_at FROM pack_emojis WHERE pack_url = $1 ORDER BY position ASC
 `
 
 type GetPackEmojisRow struct {
-	ID        string `db:"id" json:"id"`
-	Name      string `db:"name" json:"name"`
-	Animated  bool   `db:"animated" json:"animated"`
-	Position  int32  `db:"position" json:"position"`
-	Downloads int32  `db:"downloads" json:"downloads"`
+	ID        string             `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Position  int32              `db:"position" json:"position"`
+	Downloads int32              `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) GetPackEmojis(ctx context.Context, packUrl string) ([]GetPackEmojisRow, error) {
@@ -336,6 +337,7 @@ func (q *Queries) GetPackEmojis(ctx context.Context, packUrl string) ([]GetPackE
 			&i.Animated,
 			&i.Position,
 			&i.Downloads,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -533,17 +535,25 @@ func (q *Queries) InsertPack(ctx context.Context, arg InsertPackParams) error {
 }
 
 const insertPackEmoji = `-- name: InsertPackEmoji :exec
-INSERT INTO pack_emojis (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO pack_emojis (id, pack_url, name, animated, position, downloads, created_at)
+VALUES ($1, $2, $3, $4, $5, COALESCE($6::integer, 0), COALESCE($7::timestamptz, now()))
 `
 
 type InsertPackEmojiParams struct {
-	ID       string `db:"id" json:"id"`
-	PackUrl  string `db:"pack_url" json:"pack_url"`
-	Name     string `db:"name" json:"name"`
-	Animated bool   `db:"animated" json:"animated"`
-	Position int32  `db:"position" json:"position"`
+	ID        string             `db:"id" json:"id"`
+	PackUrl   string             `db:"pack_url" json:"pack_url"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Position  int32              `db:"position" json:"position"`
+	Downloads pgtype.Int4        `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+// downloads/created_at are optional (COALESCE to the column defaults when
+// not given) so a pack edit that deletes-and-reinserts an *unchanged*
+// emoji can carry its real download count and original upload date
+// forward instead of resetting both to 0/now() -- see patch_pack, which
+// passes the old row's values through for any ID that already existed.
 func (q *Queries) InsertPackEmoji(ctx context.Context, arg InsertPackEmojiParams) error {
 	_, err := q.db.Exec(ctx, insertPackEmoji,
 		arg.ID,
@@ -551,6 +561,8 @@ func (q *Queries) InsertPackEmoji(ctx context.Context, arg InsertPackEmojiParams
 		arg.Name,
 		arg.Animated,
 		arg.Position,
+		arg.Downloads,
+		arg.CreatedAt,
 	)
 	return err
 }

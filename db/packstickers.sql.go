@@ -105,15 +105,16 @@ func (q *Queries) GetPackStickerByID(ctx context.Context, id string) (PackSticke
 
 const getPackStickers = `-- name: GetPackStickers :many
 
-SELECT id, name, animated, position, downloads FROM pack_stickers WHERE pack_url = $1 ORDER BY position ASC
+SELECT id, name, animated, position, downloads, created_at FROM pack_stickers WHERE pack_url = $1 ORDER BY position ASC
 `
 
 type GetPackStickersRow struct {
-	ID        string `db:"id" json:"id"`
-	Name      string `db:"name" json:"name"`
-	Animated  bool   `db:"animated" json:"animated"`
-	Position  int32  `db:"position" json:"position"`
-	Downloads int32  `db:"downloads" json:"downloads"`
+	ID        string             `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Position  int32              `db:"position" json:"position"`
+	Downloads int32              `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 // Sticker packs' counterpart to the pack_emojis queries in packs.sql --
@@ -135,6 +136,7 @@ func (q *Queries) GetPackStickers(ctx context.Context, packUrl string) ([]GetPac
 			&i.Animated,
 			&i.Position,
 			&i.Downloads,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -158,17 +160,22 @@ func (q *Queries) IncrementPackStickerDownloads(ctx context.Context, id string) 
 }
 
 const insertPackSticker = `-- name: InsertPackSticker :exec
-INSERT INTO pack_stickers (id, pack_url, name, animated, position) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO pack_stickers (id, pack_url, name, animated, position, downloads, created_at)
+VALUES ($1, $2, $3, $4, $5, COALESCE($6::integer, 0), COALESCE($7::timestamptz, now()))
 `
 
 type InsertPackStickerParams struct {
-	ID       string `db:"id" json:"id"`
-	PackUrl  string `db:"pack_url" json:"pack_url"`
-	Name     string `db:"name" json:"name"`
-	Animated bool   `db:"animated" json:"animated"`
-	Position int32  `db:"position" json:"position"`
+	ID        string             `db:"id" json:"id"`
+	PackUrl   string             `db:"pack_url" json:"pack_url"`
+	Name      string             `db:"name" json:"name"`
+	Animated  bool               `db:"animated" json:"animated"`
+	Position  int32              `db:"position" json:"position"`
+	Downloads pgtype.Int4        `db:"downloads" json:"downloads"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+// downloads/created_at are optional -- see InsertPackEmoji's own comment
+// in packs.sql, same reasoning.
 func (q *Queries) InsertPackSticker(ctx context.Context, arg InsertPackStickerParams) error {
 	_, err := q.db.Exec(ctx, insertPackSticker,
 		arg.ID,
@@ -176,6 +183,8 @@ func (q *Queries) InsertPackSticker(ctx context.Context, arg InsertPackStickerPa
 		arg.Name,
 		arg.Animated,
 		arg.Position,
+		arg.Downloads,
+		arg.CreatedAt,
 	)
 	return err
 }

@@ -146,6 +146,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	defer tx.Rollback(d.Context)
 
+	q := db.New(tx)
+
+	// Serializes concurrent vote-cast requests from this same user for this
+	// same target before EntityVoteCheck reads their vote history -- see
+	// LockVoteCastTarget's own comment for the race this closes.
+	if err := q.LockVoteCastTarget(d.Context, db.LockVoteCastTargetParams{
+		UserID:     d.Auth.ID,
+		TargetType: targetType,
+		TargetID:   targetId,
+	}); err != nil {
+		return resp.Err("Failed to acquire vote lock", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
+	}
+
 	entityInfo, err := votes.GetEntityInfo(d.Context, tx, targetId, targetType)
 
 	if err != nil {

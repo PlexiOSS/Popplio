@@ -49,6 +49,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	q := db.New(tx)
 
+	// Without this, a bot/server can be added to this team (add_bot/
+	// add_server, which take the same lock before inserting) in the window
+	// between the count checks below passing at 0 and the DELETE FROM teams
+	// below -- both bots.team_owner and servers.team_owner are ON DELETE
+	// CASCADE, so that newly-added bot/server would be silently
+	// cascade-deleted along with the team instead of the add either
+	// blocking until this delete finishes or the delete correctly seeing a
+	// nonzero count.
+	if err := q.LockTeamOwnership(d.Context, teamId); err != nil {
+		return resp.Err("Error acquiring team ownership lock", err, zap.String("tid", teamId))
+	}
+
 	botCount, err := q.CountBotsByTeamOwner(d.Context, teamUUID)
 
 	if err != nil {

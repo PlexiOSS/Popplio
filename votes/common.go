@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package votes
 
 import (
@@ -307,13 +309,6 @@ func EntityGetVoteCount(ctx context.Context, c DbConn, targetId, targetType stri
 	return int(row.Upvotes - row.Downvotes), nil
 }
 
-// EntityGetRedeemableVoteCount is EntityGetVoteCount's counterpart for the
-// vote-credit redemption flow specifically: it excludes votes an earlier
-// redemption already claimed (credit_redeem IS NOT NULL), so a repeat
-// redemption can't pay out credits for the same vote twice. The public vote
-// count (EntityGetVoteCount, used everywhere else -- listings, profiles,
-// leaderboards) intentionally keeps counting a redeemed vote; only the
-// credit math itself needs the narrower count.
 func EntityGetRedeemableVoteCount(ctx context.Context, c DbConn, targetId, targetType string) (int, error) {
 	row, err := db.New(c).CountRedeemableEntityVotes(ctx, db.CountRedeemableEntityVotesParams{
 		TargetID:   targetId,

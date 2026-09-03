@@ -2010,6 +2010,13 @@ CREATE INDEX positions_card ON public.staff_members USING btree (cardinality(pos
 
 
 --
+-- Name: reports_auto_dedup_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX reports_auto_dedup_idx ON public.reports USING btree (target_type, target_id, reporter_id, description) WHERE (reporter_id = 'system:moderation'::text);
+
+
+--
 -- Name: reports_reporter_target_open_idx; Type: INDEX; Schema: public; Owner: -
 --
 

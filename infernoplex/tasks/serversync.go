@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package tasks
 
 import (
@@ -10,6 +12,8 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
 )
 
 func ServerSync(ctx context.Context) error {
@@ -35,12 +39,14 @@ func ServerSync(ctx context.Context) error {
 		emojis, err := dclient.Get().Rest().GetEmojis(guildID)
 
 		if err != nil {
+			state.Logger.Warn("Server sync: failed to fetch emojis, skipping", zap.Error(err), zap.String("server_id", serverID))
 			continue
 		}
 
 		stickers, err := dclient.Get().Rest().GetStickers(guildID)
 
 		if err != nil {
+			state.Logger.Warn("Server sync: failed to fetch stickers, skipping", zap.Error(err), zap.String("server_id", serverID))
 			continue
 		}
 
@@ -137,10 +143,12 @@ func syncServerMeta(ctx context.Context) error {
 			avatar = *url
 		}
 
-		nsfwChannelCount := 0
+		var nsfwChannelCount pgtype.Int4
 
 		if channels, err := dclient.Get().Rest().GetGuildChannels(guildID); err == nil {
-			nsfwChannelCount = countNSFWChannels(channels)
+			nsfwChannelCount = pgtype.Int4{Int32: int32(countNSFWChannels(channels)), Valid: true}
+		} else {
+			state.Logger.Warn("Server sync: failed to fetch channels, leaving nsfw_channel_count untouched", zap.Error(err), zap.String("server_id", serverID))
 		}
 
 		if target.statsSelfManaged {
@@ -148,7 +156,7 @@ func syncServerMeta(ctx context.Context) error {
 				ServerID:         serverID,
 				Avatar:           avatar,
 				DiscordNsfwLevel: int16(guild.NSFWLevel),
-				NsfwChannelCount: int32(nsfwChannelCount),
+				NsfwChannelCount: nsfwChannelCount,
 			}); err != nil {
 				return err
 			}
@@ -161,7 +169,7 @@ func syncServerMeta(ctx context.Context) error {
 			TotalMembers:     int32(guild.ApproximateMemberCount),
 			OnlineMembers:    int32(guild.ApproximatePresenceCount),
 			DiscordNsfwLevel: int16(guild.NSFWLevel),
-			NsfwChannelCount: int32(nsfwChannelCount),
+			NsfwChannelCount: nsfwChannelCount,
 		}); err != nil {
 			return err
 		}

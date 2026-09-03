@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package perms
 
 import (
@@ -6,8 +8,6 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
-// A bot holds nothing, from any source, in any combination. This is the whole
-// rule, so it is tested source by source rather than once.
 func TestBotAccountHoldsNothing(t *testing.T) {
 	roles := []Role{{ID: "admins", Index: 1, Perms: []Perm{StaffAdministrator}}}
 
@@ -47,8 +47,6 @@ func TestBotAccountHoldsNothing(t *testing.T) {
 	}
 }
 
-// Rank is what the "can I edit them" checks compare against, so a bot must not
-// inherit the standing its roles or the owners list would otherwise give it.
 func TestBotAccountHasNoRank(t *testing.T) {
 	withOwners(t, snowflake.ID(510065483693817867))
 
@@ -62,8 +60,6 @@ func TestBotAccountHasNoRank(t *testing.T) {
 		t.Errorf("Rank() = %d, want NoRank (%d)", got, NoRank)
 	}
 
-	// The same grants on a person keep the standing the bot was denied, so the
-	// test is about the flag and not about the grants being empty.
 	person := bot
 	person.BotAccount = false
 
@@ -72,16 +68,12 @@ func TestBotAccountHasNoRank(t *testing.T) {
 	}
 }
 
-// A permission cannot be handed to a bot by way of a patch check either: with
-// nothing resolved, there is nothing it is allowed to keep.
 func TestBotAccountCannotBePatchedInto(t *testing.T) {
 	bot := StaffGrants{BotAccount: true, Extras: []Perm{StaffReviewEntities}}
 
 	current := bot.Resolve()
 	next := current.With(StaffReviewEntities)
 
-	// The manager holds the permission, so the patch itself is legitimate; what
-	// makes it meaningless is that the bot's resolved set stays empty.
 	manager := Staff.NewSet(StaffAdministrator)
 
 	if err := CheckPatch(manager, current, next); err != nil {

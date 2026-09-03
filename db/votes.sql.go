@@ -698,6 +698,53 @@ func (q *Queries) LockEntityVotesExclusive(ctx context.Context) error {
 	return err
 }
 
+const lockVoteCastTarget = `-- name: LockVoteCastTarget :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2::text || ':' || $3::text))
+`
+
+type LockVoteCastTargetParams struct {
+	UserID     string `db:"user_id" json:"user_id"`
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+}
+
+// A per-(user, target) advisory lock (auto-released at transaction end),
+// held from the start of create_user_entity_vote's transaction, before
+// EntityVoteCheck reads the user's existing votes/wait timer for this
+// target. Without it, two concurrent vote requests from the same user for
+// the same target can both read "not voted yet" / "wait elapsed" before
+// either commits its INSERT, both pass the PerUser/VoteTime check, and both
+// get counted -- exceeding the entity's configured vote limits. Scoped to
+// (user, target) rather than target alone so unrelated users voting for the
+// same entity at the same time are never serialized against each other.
+func (q *Queries) LockVoteCastTarget(ctx context.Context, arg LockVoteCastTargetParams) error {
+	_, err := q.db.Exec(ctx, lockVoteCastTarget, arg.UserID, arg.TargetType, arg.TargetID)
+	return err
+}
+
+const lockVoteRedeemTarget = `-- name: LockVoteRedeemTarget :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2::text))
+`
+
+type LockVoteRedeemTargetParams struct {
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+}
+
+// A per-target advisory lock (auto-released at transaction end), NOT the
+// table-wide LockEntityVotesExclusive used by the batch vote-reset job --
+// that would serialize every redemption sitewide instead of just the ones
+// racing for the same target. Held for the duration of
+// EntityRedeemVoteCredits, before it reads the redeemable vote count, so
+// two concurrent redeem calls for the same target can no longer both read
+// "N votes still unclaimed" and both log a fresh N-vote credit grant --
+// the second call blocks until the first commits, then correctly sees
+// however many votes are actually still unclaimed (possibly zero).
+func (q *Queries) LockVoteRedeemTarget(ctx context.Context, arg LockVoteRedeemTargetParams) error {
+	_, err := q.db.Exec(ctx, lockVoteRedeemTarget, arg.TargetType, arg.TargetID)
+	return err
+}
+
 const recomputeBotApproximateVotes = `-- name: RecomputeBotApproximateVotes :exec
 UPDATE bots t SET approximate_votes = v.count FROM
     (SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS count
@@ -754,7 +801,7 @@ func (q *Queries) RedeemAllVotesForTarget(ctx context.Context, arg RedeemAllVote
 }
 
 const redeemVotesByItags = `-- name: RedeemVotesByItags :exec
-UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY($2::uuid[])
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY($2::uuid[]) AND credit_redeem IS NULL
 `
 
 type RedeemVotesByItagsParams struct {
@@ -770,7 +817,10 @@ type RedeemVotesByItagsParams struct {
 // bot/server/team's vote total every time its owner cashed in credits.
 // credit_redeem (set here) is what actually marks a vote as spent; void_reason/
 // voided_at are kept purely as display metadata for the vote history UI, not
-// as a gate on anything.
+// as a gate on anything. credit_redeem IS NULL guards the same re-claim
+// risk RedeemAllVotesForTarget's own comment explains -- belt-and-suspenders
+// alongside the caller's per-target advisory lock (LockVoteRedeemTarget),
+// in case a future caller ever reaches this query without going through it.
 func (q *Queries) RedeemVotesByItags(ctx context.Context, arg RedeemVotesByItagsParams) error {
 	_, err := q.db.Exec(ctx, redeemVotesByItags, arg.CreditRedeem, arg.Itags)
 	return err

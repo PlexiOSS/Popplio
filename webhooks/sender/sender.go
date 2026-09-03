@@ -1,19 +1,5 @@
-/**
-* Package sender implements the webhook sending logic for Popplio.
-* It provides functionality to send webhooks to various targets, including Discord webhooks,
-* and handles retries, logging, and error handling.
-*
-* The package defines the following key components:
-* - Secret: Represents a webhook's shared secret used for authenticating payloads.
-* - WebhookEntity: Represents an abstraction over an entity (bot/team/server) that can receive webhooks.
-* - WebhookData: Represents the data required to send a webhook, including the event, user ID, and entity information.
-* - WebhookSendResult: Represents the result of sending a webhook, including the send states for each webhook.
-*
-* The Send function is the main entry point for sending webhooks. It retrieves the webhooks associated with the specified entity,
-* validates the payload, and sends the webhook to each target. It handles retries, logging, and error handling for each webhook.
-*
-* The package also includes functionality to send Discord webhooks using the SendDiscord function.
- */
+// Copyright (C) 2026 NodeByte LTD
+
 package sender
 
 import (
@@ -40,7 +26,6 @@ import (
 	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
-// Represents a internal webhook to fanout
 type webhookData struct {
 	ID             string
 	Secret         string
@@ -54,21 +39,13 @@ type webhookData struct {
 
 var (
 	ErrNoWebhooks                = errors.New("no webhooks found")
-	WebhookMaximumFailedRequests = 20 // Be very lenient
+	WebhookMaximumFailedRequests = 20
 )
 
-// An abstraction over an entity whether that be a bot/team/server
 type WebhookEntity struct {
-	// the id of the webhook's target
-	EntityID string
-
-	// the entity type
+	EntityID   string
 	EntityType string
-
-	// the name of the webhook's target
 	EntityName string
-
-	// Override whether or not the authentication is 'simple' (no auth header) or not
 	SimpleAuth *bool
 }
 
@@ -76,30 +53,18 @@ func (e WebhookEntity) Validate() bool {
 	return e.EntityID != "" && e.EntityType != "" && e.EntityName != ""
 }
 
-// External state that should be used by public function definitions
 type WebhookData struct {
-	// webhook event (used for discord webhooks)
-	Event *events.WebhookResponse
-
-	// Is it a bad intent: intentionally bad auth to trigger 401 check
+	Event     *events.WebhookResponse
 	BadIntent bool
-
-	// Log ID (pull pending etc)
-	LogID string
-
-	// user id that triggered the webhook
-	UserID string
-
-	// The entity itself
-	Entity WebhookEntity
+	LogID     string
+	UserID    string
+	Entity    WebhookEntity
 }
 
-// Represents a webhook send result
 type WebhookSendResult struct {
 	SendStates map[string]string
 }
 
-// Creates a webhook response fanning it out to multiple webhooks if needed, retrying if needed
 func Send(d *WebhookData) (*WebhookSendResult, error) {
 	if !d.Entity.Validate() {
 		return nil, errors.New("invalid webhook entity")
@@ -144,16 +109,12 @@ func Send(d *WebhookData) (*WebhookSendResult, error) {
 		return nil, fmt.Errorf("failed to marshal webhook payload: %w", err)
 	}
 
-	// sqlc's generic jsonb override wants a map[string]any param, not raw
-	// bytes -- round-trip through it once here rather than at every insert
-	// call site below.
 	var dataMap map[string]any
 
 	if err := jsonimpl.Unmarshal(dataBytes, &dataMap); err != nil {
 		return nil, fmt.Errorf("failed to prepare webhook payload for storage: %w", err)
 	}
 
-	// Send to each webhook
 	var webhErrors map[string]error
 	var sendStates = make(map[string]string)
 	for _, webhook := range webhooks {
@@ -247,7 +208,26 @@ func Send(d *WebhookData) (*WebhookSendResult, error) {
 	return res, nil
 }
 
-func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
+func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) (err error) {
+	// Several early-return paths below (a rejected Discord webhook check, a
+	// failed SendDiscord call, a failed buildRequest, ...) used to return an
+	// error without ever calling d.cancelSend, leaving that attempt's
+	// webhook_logs row stuck at its initial PENDING status forever --
+	// PullPendingForAll only re-scans pending rows once at process startup
+	// (webhooks/setup.go), so nothing ever revisited them. Every other path
+	// in this function already calls cancelSend with a specific state before
+	// returning; this defer is the backstop that guarantees the same is
+	// true of any error return that doesn't, current or future, without
+	// having to thread cancelSend into every branch by hand. Explicit
+	// cancelSend calls elsewhere in this function still win (cancelSend's
+	// own "first call wins" guard, and the d.SendState == "" check here,
+	// both prevent this from overwriting a more specific state).
+	defer func() {
+		if err != nil && d.SendState == "" {
+			d.cancelSend("INTERNAL_ERROR")
+		}
+	}()
+
 	if !d.Entity.Validate() {
 		return errors.New("invalid webhook entity")
 	}
@@ -355,7 +335,6 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 		return err
 	}
 
-	// Only read a maximum of 1kb, with timeout of 65 seconds
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -413,7 +392,6 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 
 	switch {
 	case resp.StatusCode == 404 || resp.StatusCode == 410:
-		// Remove from DB
 		d.cancelSend("WEBHOOK_404_410")
 
 		if err := d.markFailed(); err != nil {
@@ -427,17 +405,14 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		if d.BadIntent {
-			// webhook auth is invalid as intended,
 			d.cancelSend("SUCCESS")
 
 			return nil
 		} else {
-			// webhook auth is invalid, return error
 			d.cancelSend("WEBHOOK_AUTH_INVALID")
 
 			d.notify(types.AlertTypeError, "Webhook Auth Error", "Webhook could not be securely authenticated by the bot at this time. Please try again later.")
 
-			// Set webhook to broken
 			if err := d.markFailed(); err != nil {
 				return errors.New("webhook failed to validate auth and failed to mark request as failed")
 			}
@@ -458,7 +433,6 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 
 			d.notify(types.AlertTypeError, "Webhook Auth Error", "This webhook does not properly handle authentication at this time.")
 
-			// Set webhook to broken
 			if err := d.markFailed(); err != nil {
 				return errors.New("webhook failed to validate auth and failed to mark request as failed")
 			}
@@ -474,9 +448,7 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) error {
 	return nil
 }
 
-// Sends a webhook via discord
 func SendDiscord(url, prefix string, entity WebhookEntity, params *discord.Embed) error {
-	// Remove out prefix
 	url = state.Config.Meta.PopplioProxy + "/" + strings.TrimPrefix(url, prefix)
 
 	payload, err := jsonimpl.Marshal(discord.WebhookMessageCreate{
@@ -495,7 +467,6 @@ func SendDiscord(url, prefix string, entity WebhookEntity, params *discord.Embed
 
 	for _, code := range []int{404, 401, 403, 410} {
 		if resp.StatusCode == code {
-			// This webhook is broken
 			err := db.New(state.Pool).MarkWebhookBrokenForTarget(state.Context, db.MarkWebhookBrokenForTargetParams{
 				TargetID:   entity.EntityID,
 				TargetType: entity.EntityType,

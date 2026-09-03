@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package bot
 
 import (
@@ -7,6 +9,7 @@ import (
 	"time"
 
 	"popplio/db"
+	"popplio/infernoplex/dclient"
 	"popplio/perms"
 	"popplio/state"
 
@@ -39,17 +42,23 @@ func cmdDelete() *Command {
 			}
 
 			sessionsMu.Lock()
-			deleteSessions[c.Author.ID.String()] = &deleteSession{
+			deleteSessions[sessionKey(c.Author.ID.String(), c.GuildID)] = &deleteSession{
 				AuthorID:  c.Author.ID.String(),
 				GuildID:   c.GuildID,
 				ExpiresAt: time.Now().Add(wizardTTL),
 			}
 			sessionsMu.Unlock()
 
+			guildName := c.GuildID.String()
+
+			if guild, ok := dclient.Get().Caches().Guild(c.GuildID); ok {
+				guildName = guild.Name
+			}
+
 			return c.Send(discord.MessageCreate{
 				Embeds: []discord.Embed{{
 					Title:       "Confirm Server Deletion?",
-					Description: "Are you sure you want to delete your server from Omniplex? This action is irreversible so think before acting!.",
+					Description: fmt.Sprintf("Are you sure you want to delete **%s** from Omniplex? This action is irreversible so think before acting!.", guildName),
 				}},
 				Components: []discord.ContainerComponent{
 					discord.NewActionRow(
@@ -65,11 +74,17 @@ func cmdDelete() *Command {
 func handleDeleteComponent(ctx context.Context, e *events.ComponentInteractionCreate, id string) {
 	userID := e.User().ID.String()
 
+	if e.GuildID() == nil {
+		return
+	}
+
+	key := sessionKey(userID, *e.GuildID())
+
 	sessionsMu.Lock()
-	s, ok := deleteSessions[userID]
+	s, ok := deleteSessions[key]
 
 	if ok {
-		delete(deleteSessions, userID)
+		delete(deleteSessions, key)
 	}
 
 	sessionsMu.Unlock()

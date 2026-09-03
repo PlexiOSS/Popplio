@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package add_team_member
 
 import (

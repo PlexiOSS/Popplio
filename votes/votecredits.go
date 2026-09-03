@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package votes
 
 import (
@@ -10,7 +12,6 @@ import (
 	"popplio/types"
 )
 
-// Returns a summary of the vote credit tiers of an entity
 func EntityGetVoteCreditsSummary(
 	ctx context.Context,
 	c DbConn,
@@ -23,8 +24,6 @@ func EntityGetVoteCreditsSummary(
 		return nil, fmt.Errorf("could not fetch vote credit tiers [row]: %w", err)
 	}
 
-	// Redeemable, not the entity's public total -- a vote already cashed in
-	// by an earlier redemption must not be offered (or paid out) again.
 	voteCount, err := EntityGetRedeemableVoteCount(ctx, c, targetId, targetType)
 
 	if err != nil {
@@ -49,7 +48,6 @@ func EntityGetVoteCreditsSummary(
 	}, nil
 }
 
-// Redeems vote credits for a user towards a specific entity
 func EntityRedeemVoteCredits(
 	ctx context.Context,
 	c DbConn,
@@ -57,6 +55,15 @@ func EntityRedeemVoteCredits(
 	targetType string,
 	votesToRedeem int,
 ) error {
+	q := db.New(c)
+
+	if err := q.LockVoteRedeemTarget(ctx, db.LockVoteRedeemTargetParams{
+		TargetType: targetType,
+		TargetID:   targetId,
+	}); err != nil {
+		return fmt.Errorf("could not acquire vote redeem lock: %w", err)
+	}
+
 	vi, err := EntityVoteInfo(ctx, c, targetId, targetType)
 
 	if err != nil {
@@ -73,7 +80,6 @@ func EntityRedeemVoteCredits(
 		return fmt.Errorf("could not fetch vote credit tiers [row]: %w", err)
 	}
 
-	// Redeemable, not the entity's public total -- see EntityGetVoteCreditsSummary.
 	voteCount, err := EntityGetRedeemableVoteCount(ctx, c, targetId, targetType)
 
 	if err != nil {
@@ -81,10 +87,9 @@ func EntityRedeemVoteCredits(
 	}
 
 	if !vi.SupportsPartialVoteCreditsRedeem {
-		votesToRedeem = voteCount // If the entity does not support partial vote credit redemption, then redeem all votes
+		votesToRedeem = voteCount
 	}
 
-	// Check if the votes to redeem exceeds the total votes to protect against malicious input for votes to redeem
 	if votesToRedeem > voteCount {
 		return errors.New("votes to redeem exceeds total votes")
 	}
@@ -95,8 +100,6 @@ func EntityRedeemVoteCredits(
 	if totalCredits == 0 {
 		return errors.New("no vote credits to redeem")
 	}
-
-	q := db.New(c)
 
 	id, err := q.InsertVoteRedeemLog(ctx, db.InsertVoteRedeemLogParams{
 		TargetID:   targetId,
@@ -139,7 +142,6 @@ func EntityRedeemVoteCredits(
 	return nil
 }
 
-// Returns a summary of the entity vote redeem logs
 func EntityGetVoteRedeemLogsSummary(
 	ctx context.Context,
 	c DbConn,
@@ -189,9 +191,6 @@ func EntityGetVoteRedeemLogsSummary(
 	}, nil
 }
 
-// getVoteCreditTiers fetches and converts the vote credit tiers for a
-// target type, shared by EntityGetVoteCreditsSummary and
-// EntityRedeemVoteCredits.
 func getVoteCreditTiers(ctx context.Context, c DbConn, targetType string) ([]*types.VoteCreditTier, error) {
 	rows, err := db.New(c).GetVoteCreditTiers(ctx, targetType)
 
@@ -214,33 +213,7 @@ func getVoteCreditTiers(ctx context.Context, c DbConn, targetType string) ([]*ty
 	return vcts, nil
 }
 
-// Given a number of votes and the vote credit tiers, return the structure of how vote credits should be awarded
-// as a map of string to int
-//
-// Note that this function assumes that the vote credits tiers are sorted by position in ascending order
 func SlabSplitVotes(votes int, tiers []*types.VoteCreditTier) []int {
-	/*
-		<div class="system">
-				<p>
-					Vote credits are tier based through slabs<br /><br />
-
-					(e.g.)For the following tiers<br /><br />
-				</p>
-				<OrderedList>
-					<ListItem>Tier 1: 100 votes at 0.10 cents</ListItem>
-					<ListItem>Tier 2: 200 votes at 0.05 cents</ListItem>
-					<ListItem>Tier 3: 50 votes at 0.025 cents</ListItem>
-				</OrderedList>
-				<p>Would mean 625 votes would be split as the following:</p>
-				<OrderedList>
-					<ListItem>100 votes: 0.10 cents [Tier 1]</ListItem>
-					<ListItem>Next 200 votes: 0.05 cents [Tier 2]</ListItem>
-					<ListItem>Next 50 votes: 0.025 cents [Tier 3]</ListItem>
-					<ListItem>Last 275 votes: 0.025 cents [last tier used at end of tiering]</ListItem>
-				</OrderedList>
-			</div>
-	*/
-
 	voteCredits := make([]int, len(tiers))
 
 	var remainingVotes = votes
@@ -260,7 +233,6 @@ func SlabSplitVotes(votes int, tiers []*types.VoteCreditTier) []int {
 		}
 	}
 
-	// If there are remaining votes, then add them to the last tier
 	if remainingVotes > 0 {
 		voteCredits[len(tiers)-1] += remainingVotes
 	}

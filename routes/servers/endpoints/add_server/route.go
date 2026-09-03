@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package add_server
 
 import (
@@ -9,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"popplio/api"
 	"popplio/api/resp"
 
 	"popplio/db"
@@ -141,7 +144,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	txq := db.New(tx)
 
+	if d.Auth.TargetType == api.TargetTypeTeam {
+		payload.TeamOwner = d.Auth.ID
+	}
+
 	if payload.TeamOwner != "" {
+		if err := txq.LockTeamOwnership(d.Context, payload.TeamOwner); err != nil {
+			return resp.Err("Error acquiring team ownership lock", err, zap.String("userID", d.Auth.ID), zap.String("teamID", payload.TeamOwner), zap.String("serverID", payload.ServerID))
+		}
+
 		entityPerms, err := teams.GetEntityPerms(d.Context, d.Auth.ID, "team", payload.TeamOwner)
 
 		if err != nil {

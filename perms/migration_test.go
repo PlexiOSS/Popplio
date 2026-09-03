@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package perms
 
 import (
@@ -7,18 +9,10 @@ import (
 	"testing"
 )
 
-// The migration in db/migrations/20260801004000_flatperms.sql and the Legacy
-// lists in the catalogues are two statements of the same mapping. These tests
-// keep them from drifting: a permission renamed in one place but not the
-// other is caught here rather than by a staff member who has quietly lost
-// access.
-
 const migrationPath = "../db/migrations/20260801004000_flatperms.sql"
 
 var (
-	// ('staff', 'rpc.Claim', 'review_entities')
-	tupleRe = regexp.MustCompile(`\('(staff|entity)',\s*'([^']+)',\s*'([^']+)'\)`)
-	// SELECT 'staff', 'rpc.*', p FROM unnest(ARRAY[...]) AS p
+	tupleRe    = regexp.MustCompile(`\('(staff|entity)',\s*'([^']+)',\s*'([^']+)'\)`)
 	wildcardRe = regexp.MustCompile(`(?s)SELECT '(staff|entity)', '([^']+)', p\s*FROM unnest\(ARRAY\[(.*?)\]\)`)
 	quotedRe   = regexp.MustCompile(`'([^']+)'`)
 )
@@ -35,8 +29,6 @@ func readMigration(t *testing.T) string {
 	return string(b)
 }
 
-// retired reports whether the migration drops a permission on purpose, i.e.
-// lists it in retired_perm as a ('domain', 'name') pair rather than mapping it.
 func retired(sql, domain, perm string) bool {
 	body := sql
 
@@ -57,8 +49,6 @@ func catalogueFor(domain string) *Catalogue {
 	return Entity
 }
 
-// TestMigrationTargetsAreDeclared checks that everything the migration writes
-// into the database is a permission the code knows about.
 func TestMigrationTargetsAreDeclared(t *testing.T) {
 	sql := readMigration(t)
 
@@ -81,9 +71,6 @@ func TestMigrationTargetsAreDeclared(t *testing.T) {
 	}
 }
 
-// TestEveryLegacyPermissionIsMigrated checks the other direction: every old
-// permission the catalogues claim to replace is actually handled by the SQL,
-// and lands on the permission the catalogue says it should.
 func TestEveryLegacyPermissionIsMigrated(t *testing.T) {
 	sql := readMigration(t)
 
@@ -114,12 +101,6 @@ func TestEveryLegacyPermissionIsMigrated(t *testing.T) {
 	}
 }
 
-// TestMigrationCoversTheOldVocabulary pins the permissions that were actually in
-// use, so that dropping one from the migration is a deliberate act.
-//
-// The list is every distinct value found across staff_positions.perms,
-// staff_members.perm_overrides, staff_disciplinary_types.perm_limits,
-// team_members.flags and api_sessions.perm_limits before the migration ran.
 func TestMigrationCoversTheOldVocabulary(t *testing.T) {
 	sql := readMigration(t)
 
@@ -138,14 +119,10 @@ func TestMigrationCoversTheOldVocabulary(t *testing.T) {
 			}
 		}
 
-		// Retiring a permission is handling it: the migration drops it on
-		// purpose rather than leaving it to the unmapped NOTICE.
 		if retired(sql, domain, perm) {
 			return true
 		}
 
-		// Wildcards listed together in one unnest, e.g. shop_items.* and
-		// friends, appear as quoted names in the wildcard section.
 		return strings.Contains(sql, "'"+perm+"'")
 	}
 
@@ -193,9 +170,6 @@ func TestMigrationCoversTheOldVocabulary(t *testing.T) {
 	}
 }
 
-// Borealis was removed from the platform in the port, so its permission gated
-// nothing. It must be gone from the catalogue and dropped by the migration
-// rather than mapped onto something else.
 func TestBorealisIsRetired(t *testing.T) {
 	for _, d := range Staff.Definitions() {
 		if strings.Contains(strings.ToLower(string(d.ID)), "boreal") {

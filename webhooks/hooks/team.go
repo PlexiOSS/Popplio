@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package hooks
 
 import (
@@ -58,7 +60,7 @@ func (td TeamDriver) Construct(userId, id string) (*events.Target, *sender.Webho
 	}
 
 	team.Entities = &types.TeamEntities{
-		Targets: []string{}, // We don't provide any entities right now, may change
+		Targets: []string{},
 	}
 
 	code, err := q.GetVanityCodeByItag(state.Context, team.VanityRef)

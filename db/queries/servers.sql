@@ -77,10 +77,17 @@ UPDATE servers SET emojis = $2, stickers = $3, emojis_synced_at = NOW() WHERE se
 SELECT server_id, stats_self_managed FROM servers;
 
 -- name: UpdateServerAvatarAndNsfwStats :exec
-UPDATE servers SET avatar = $2, discord_nsfw_level = $3, nsfw_channel_count = $4 WHERE server_id = $1;
+-- nsfw_channel_count uses COALESCE against a nullable arg: when the caller
+-- couldn't fetch the guild's channels this cycle (rate limit, transient
+-- REST error), it passes a NULL rather than a fabricated 0, so this update
+-- leaves the previously-synced count untouched instead of clobbering good
+-- data with zero.
+UPDATE servers SET avatar = sqlc.arg('avatar')::text, discord_nsfw_level = sqlc.arg('discord_nsfw_level')::smallint, nsfw_channel_count = COALESCE(sqlc.narg('nsfw_channel_count')::integer, nsfw_channel_count) WHERE server_id = sqlc.arg('server_id')::text;
 
 -- name: UpdateServerAvatarMembersAndNsfw :exec
-UPDATE servers SET avatar = $2, total_members = $3, online_members = $4, discord_nsfw_level = $5, nsfw_channel_count = $6 WHERE server_id = $1;
+-- See UpdateServerAvatarAndNsfwStats above -- same COALESCE treatment for
+-- nsfw_channel_count.
+UPDATE servers SET avatar = sqlc.arg('avatar')::text, total_members = sqlc.arg('total_members')::integer, online_members = sqlc.arg('online_members')::integer, discord_nsfw_level = sqlc.arg('discord_nsfw_level')::smallint, nsfw_channel_count = COALESCE(sqlc.narg('nsfw_channel_count')::integer, nsfw_channel_count) WHERE server_id = sqlc.arg('server_id')::text;
 
 -- name: GetServerInviteEligibility :one
 SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1;

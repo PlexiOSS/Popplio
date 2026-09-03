@@ -520,7 +520,13 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 			return response{}, newError(err)
 		}
 
-		announceBlogPost(*entry)
+		// No announcement here: InsertBlogEntry never sets draft, so every
+		// new entry lands as blogs.draft's DEFAULT true -- announcing here
+		// would always be announcing a post nobody can see yet (GetBlogList
+		// filters draft = false). The UpdateEntry case below already
+		// announces exactly once, at the actual draft -> published
+		// transition; that's the only path a newly-created entry can ever
+		// be announced through.
 
 		return writeNoContent(), nil
 	case q.Action.UpdateEntry != nil:

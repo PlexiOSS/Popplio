@@ -660,12 +660,16 @@ func (q *Queries) GetBotUniqueClicksCount(ctx context.Context, botID string) (in
 
 const getBotsDueForJapiUpdate = `-- name: GetBotsDueForJapiUpdate :many
 SELECT bot_id FROM bots
-WHERE (type = 'approved' OR type = 'certified')
+WHERE type IN ('approved', 'certified', 'pending', 'under_review')
 AND (last_stats_post IS NULL OR NOW() - last_stats_post > INTERVAL '3 days')
 AND (last_japi_update IS NULL OR NOW() - last_japi_update > INTERVAL '3 days')
 ORDER BY RANDOM() LIMIT 10
 `
 
+// Includes pending/under_review, not just approved/certified -- a bot
+// resolved via Discord's RPC endpoint at submission time could sit with a
+// stale/zero guild count for as long as it's awaiting review otherwise,
+// since this is the only thing that ever refreshes it.
 func (q *Queries) GetBotsDueForJapiUpdate(ctx context.Context) ([]string, error) {
 	rows, err := q.db.Query(ctx, getBotsDueForJapiUpdate)
 	if err != nil {

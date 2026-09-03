@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package notifications
 
 import (
@@ -70,6 +72,8 @@ func PushNotification(userId string, notif types.Alert) error {
 		return err
 	}
 
+	var lastErr error
+
 	for _, row := range subs {
 		notifId, auth, endpoint, p256dh := row.NotifID, row.Auth, row.Endpoint, row.P256dh
 
@@ -95,14 +99,17 @@ func PushNotification(userId string, notif types.Alert) error {
 		})
 
 		if err != nil {
-			if resp.StatusCode == 410 || resp.StatusCode == 404 {
+			if resp != nil && (resp.StatusCode == 410 || resp.StatusCode == 404) {
 				q.DeleteUserNotificationByNotifID(state.Context, notifId)
 			}
-			return err
+
+			state.Logger.Error("Failed to send push notification", zap.Error(err), zap.String("notif_id", notifId), zap.String("user_id", userId))
+			lastErr = err
+			continue
 		}
 	}
 
-	return nil
+	return lastErr
 }
 
 func categoryEnabled(userId string, category types.AlertCategory) (bool, error) {

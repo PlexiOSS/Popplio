@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package moderation
 
 import (
@@ -18,9 +20,9 @@ func FileAutoReport(ctx context.Context, targetType, targetID string, categories
 	)
 
 	return db.New(state.Pool).InsertAutoReport(ctx, db.InsertAutoReportParams{
-		TargetType: targetType,
-		TargetID:   targetID,
-		ReporterID: SystemReporterID,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		ReporterID:  SystemReporterID,
 		Description: description,
 	})
 }

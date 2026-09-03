@@ -1,17 +1,8 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package perms
 
-// The entity permissions: what a team member may do with the team and the bots
-// and servers it owns.
-//
-// The old model crossed every action with every entity type, so a team had
-// separate permissions for getting, creating, editing, deleting and testing
-// webhooks on each of bots, servers and the team itself — twenty-one
-// permissions for one feature. Actions that are only ever granted together are
-// now one permission, and the entity type is only kept where it changes who
-// should be able to do something: adding, editing and deleting bots is a
-// different decision from doing the same to servers.
 const (
-	// EntityOwner implies every other entity permission.
 	EntityOwner Perm = "owner"
 
 	EntityEditTeam  Perm = "edit_team"
@@ -48,8 +39,6 @@ const (
 	EntityEditPacks Perm = "edit_packs"
 )
 
-// Entity is what a team member may do. Teams have no roles, so a member's
-// `flags` and an API session's `perm_limits` are the whole source.
 var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 	{
 		ID:          EntityOwner,
@@ -278,9 +267,6 @@ var Entity = NewCatalogue("entity", EntityOwner, []Definition{
 	},
 })
 
-// EntityLifecycle maps a target type to the permissions that govern adding,
-// editing and deleting one of them, so routes that work on "whatever the URL
-// points at" do not each need their own switch.
 func EntityLifecycle(targetType string) (add, edit, del Perm, ok bool) {
 	switch targetType {
 	case "bot":
@@ -288,8 +274,6 @@ func EntityLifecycle(targetType string) (add, edit, del Perm, ok bool) {
 	case "server":
 		return EntityAddServers, EntityEditServers, EntityDeleteServers, true
 	case "team":
-		// A team is created by its owner and deleted with Owner, so the only
-		// lifecycle permission it has is editing.
 		return EntityEditTeam, EntityEditTeam, EntityOwner, true
 	default:
 		return "", "", "", false

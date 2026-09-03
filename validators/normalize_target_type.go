@@ -1,8 +1,9 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package validators
 
 import "strings"
 
-// This function normalizes the target type to its correct form.
 func NormalizeTargetType(targetType string) string {
 	switch targetType {
 	// Bot

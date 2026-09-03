@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package types
 
 import (
@@ -8,10 +10,9 @@ import (
 	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 )
 
-// An announcement
 type Announcement struct {
 	UserID       string                  `db:"author" json:"-"`
-	Author       *dovetypes.PlatformUser `json:"author"` // Must be parsed internally
+	Author       *dovetypes.PlatformUser `json:"author"`
 	ID           pgtype.UUID             `db:"id" json:"id"`
 	Title        string                  `db:"title" json:"title"`
 	Content      string                  `db:"content" json:"content"`

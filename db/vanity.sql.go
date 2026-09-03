@@ -38,6 +38,25 @@ func (q *Queries) CountVanityByTarget(ctx context.Context, arg CountVanityByTarg
 	return count, err
 }
 
+const deleteVanityByTarget = `-- name: DeleteVanityByTarget :exec
+DELETE FROM vanity WHERE target_id = $1 AND target_type = $2
+`
+
+type DeleteVanityByTargetParams struct {
+	TargetID   string `db:"target_id" json:"target_id"`
+	TargetType string `db:"target_type" json:"target_type"`
+}
+
+// Cleans up a target's vanity row when the target itself is deleted --
+// e.g. patch_pack removing a pack_emoji/pack_sticker from a pack, which
+// otherwise leaves an orphaned vanity row permanently squatting its code
+// (no FK/cascade exists between vanity and any target table by design,
+// since vanity is generic across target types).
+func (q *Queries) DeleteVanityByTarget(ctx context.Context, arg DeleteVanityByTargetParams) error {
+	_, err := q.db.Exec(ctx, deleteVanityByTarget, arg.TargetID, arg.TargetType)
+	return err
+}
+
 const getBotIDByClientID = `-- name: GetBotIDByClientID :one
 SELECT bot_id FROM bots WHERE client_id = $1
 `

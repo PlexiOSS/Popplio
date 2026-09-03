@@ -1,3 +1,5 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package bot
 
 import (
@@ -64,7 +66,7 @@ func cmdUpdate() *Command {
 
 func startUpdateBasicInfo(c *Ctx) error {
 	sessionsMu.Lock()
-	updateBasicSessions[c.Author.ID.String()] = &updateBasicSession{
+	updateBasicSessions[sessionKey(c.Author.ID.String(), c.GuildID)] = &updateBasicSession{
 		AuthorID:  c.Author.ID.String(),
 		GuildID:   c.GuildID,
 		ExpiresAt: time.Now().Add(wizardTTL),
@@ -107,8 +109,14 @@ func startUpdateInvite(c *Ctx) error {
 func handleUpdateComponent(ctx context.Context, e *events.ComponentInteractionCreate, id string) {
 	userID := e.User().ID.String()
 
+	if e.GuildID() == nil {
+		return
+	}
+
+	key := sessionKey(userID, *e.GuildID())
+
 	sessionsMu.Lock()
-	s, ok := updateBasicSessions[userID]
+	s, ok := updateBasicSessions[key]
 	sessionsMu.Unlock()
 
 	if !ok || time.Now().After(s.ExpiresAt) {
@@ -117,7 +125,7 @@ func handleUpdateComponent(ctx context.Context, e *events.ComponentInteractionCr
 
 	if id == "update:cancel" {
 		sessionsMu.Lock()
-		delete(updateBasicSessions, userID)
+		delete(updateBasicSessions, key)
 		sessionsMu.Unlock()
 
 		logFailedEdit("clear update buttons", clearComponents(e.Channel().ID(), e.Message.ID))
@@ -160,11 +168,17 @@ func handleUpdateComponent(ctx context.Context, e *events.ComponentInteractionCr
 func handleUpdateBasicModal(ctx context.Context, e *events.ModalSubmitInteractionCreate) {
 	userID := e.User().ID.String()
 
+	if e.GuildID() == nil {
+		return
+	}
+
+	key := sessionKey(userID, *e.GuildID())
+
 	sessionsMu.Lock()
-	s, ok := updateBasicSessions[userID]
+	s, ok := updateBasicSessions[key]
 
 	if ok {
-		delete(updateBasicSessions, userID)
+		delete(updateBasicSessions, key)
 	}
 
 	sessionsMu.Unlock()
