@@ -121,12 +121,12 @@ func main() {
 
 	docs.DocsSetupData = &docs.SetupData{
 		URL:               state.Config.Sites.API,
-		ServerDescription: "Popplio (v6)",
+		ServerDescription: "Popplio",
 		ErrorStruct:       types.ApiError{},
 		Info: docs.Info{
 			Title:          "Omniplex API",
 			TermsOfService: "https://omniplex.gg/legal/terms",
-			Version:        "1.4.0",
+			Version:        "1.8.2",
 			Description:    "RESTful API and Backend Services for Omniplex",
 			Contact: docs.Contact{
 				Name: "Omniplex Support",
