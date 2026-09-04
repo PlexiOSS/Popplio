@@ -65,6 +65,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	case "team":
 	case "pack_emoji":
 	case "pack_sticker":
+	case "pack_sound":
 	default:
 		return resp.Status(http.StatusNotImplemented, "Target type not implemented")
 	}

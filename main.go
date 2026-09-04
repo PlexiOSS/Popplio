@@ -40,6 +40,7 @@ import (
 	"popplio/routes/servers"
 	"popplio/routes/servertemplates"
 	"popplio/routes/shop"
+	"popplio/routes/sounds"
 	"popplio/routes/staff"
 	"popplio/routes/stickers"
 	"popplio/routes/tasks"
@@ -182,6 +183,7 @@ func main() {
 		servers.Router{},
 		servertemplates.Router{},
 		shop.Router{},
+		sounds.Router{},
 		staff.Router{},
 		stickers.Router{},
 		tasks.Router{},

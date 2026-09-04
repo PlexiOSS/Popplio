@@ -1,6 +1,10 @@
 package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
+)
 
 const (
 	MaxBotCommands        = 100
@@ -38,4 +42,17 @@ type BotCommandInput struct {
 
 type UpdateBotCommands struct {
 	Commands []BotCommandInput `json:"commands" validate:"max=100,dive"`
+}
+
+// One result row of the cross-bot command search (GET /bots/@commands),
+// with just enough of the owning bot's identity to display and link back
+// to it.
+type BotCommandSearchResult struct {
+	ID          string                  `json:"id"`
+	BotID       string                  `json:"bot_id"`
+	Name        string                  `json:"name"`
+	Description string                  `json:"description"`
+	Usage       string                  `json:"usage"`
+	Category    string                  `json:"category"`
+	Bot         *dovetypes.PlatformUser `json:"bot"`
 }

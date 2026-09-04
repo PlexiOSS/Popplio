@@ -7,10 +7,12 @@ import (
 	"net/http"
 
 	"popplio/api"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/vanity/endpoints/patch_vanity"
 	"popplio/routes/vanity/endpoints/redirect_vanity"
 	"popplio/routes/vanity/endpoints/resolve_vanity"
+	"popplio/state"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
@@ -55,7 +57,50 @@ func (b Router) Routes(r *chi.Mux) {
 			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
 				NeededPermission: api.Needs(perms.EntitySetVanity),
 				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
-					return validators.NormalizeTargetType(chi.URLParam(r, "target_type")), chi.URLParam(r, "target_id")
+					targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
+					targetId := chi.URLParam(r, "target_id")
+
+					// pack_emoji/pack_sticker aren't real auth entities (no
+					// AuthTypeMap entry, no team permissions) -- ownership is
+					// owner-only on the parent pack, same model packs/themes
+					// already use. Resolve down to the owning user instead so
+					// AuthzEntityPermissionCheck's normal "user" handling
+					// (self-match, or ErrUsersCannotModifyOtherUsers) applies.
+					q := db.New(state.Pool)
+					switch targetType {
+					case "pack_emoji":
+						emoji, err := q.GetPackEmojiByID(r.Context(), targetId)
+						if err != nil {
+							return "", ""
+						}
+						owner, err := q.GetPackOwner(r.Context(), emoji.PackUrl)
+						if err != nil {
+							return "", ""
+						}
+						return api.TargetTypeUser, owner
+					case "pack_sticker":
+						sticker, err := q.GetPackStickerByID(r.Context(), targetId)
+						if err != nil {
+							return "", ""
+						}
+						owner, err := q.GetPackOwner(r.Context(), sticker.PackUrl)
+						if err != nil {
+							return "", ""
+						}
+						return api.TargetTypeUser, owner
+					case "pack_sound":
+						sound, err := q.GetPackSoundByID(r.Context(), targetId)
+						if err != nil {
+							return "", ""
+						}
+						owner, err := q.GetPackOwner(r.Context(), sound.PackUrl)
+						if err != nil {
+							return "", ""
+						}
+						return api.TargetTypeUser, owner
+					default:
+						return targetType, targetId
+					}
 				},
 			},
 		},

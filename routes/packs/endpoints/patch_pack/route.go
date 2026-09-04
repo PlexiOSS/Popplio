@@ -33,6 +33,7 @@ type PatchPack struct {
 	Servers  []string                 `json:"servers" validate:"omitempty,unique,max=10,dive,numeric" msg:"There can be at most 10 servers without duplicates"`
 	Emojis   []types.PackEmojiInput   `json:"emojis" validate:"omitempty,max=50,dive" msg:"There can be at most 50 emojis"`
 	Stickers []types.PackStickerInput `json:"stickers" validate:"omitempty,max=50,dive" msg:"There can be at most 50 stickers"`
+	Sounds   []types.PackSoundInput   `json:"sounds" validate:"omitempty,max=50,dive" msg:"There can be at most 50 sounds"`
 }
 
 func Docs() *docs.Doc {
@@ -111,6 +112,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	case types.PackTypeSticker:
 		if len(payload.Stickers) == 0 {
 			return resp.BadRequest("A sticker pack must contain at least one sticker")
+		}
+	case types.PackTypeSound:
+		if len(payload.Sounds) == 0 {
+			return resp.BadRequest("A sound pack must contain at least one sound")
 		}
 	}
 
@@ -288,6 +293,68 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 			if err := packAssets.EnsureDefaultVanity(d.Context, txQ, sticker.ID, "pack_sticker", sticker.Name); err != nil {
 				return resp.ErrBody("Failed to set a default vanity for a pack sticker [patch_pack]", "Failed to save one of the pack's stickers.", err, zap.String("stickerId", sticker.ID))
+			}
+		}
+	}
+
+	if packType == types.PackTypeSound {
+		oldSounds, err := txQ.GetPackSounds(d.Context, id)
+
+		if err != nil {
+			return resp.Err("Error while reading existing pack sounds [db fetch]", err, zap.String("id", id))
+		}
+
+		oldByID := make(map[string]db.GetPackSoundsRow, len(oldSounds))
+		for _, s := range oldSounds {
+			oldByID[s.ID] = s
+		}
+
+		newIDs := make(map[string]bool, len(payload.Sounds))
+		for _, s := range payload.Sounds {
+			newIDs[s.ID] = true
+		}
+
+		err = txQ.DeletePackSounds(d.Context, id)
+
+		if err != nil {
+			return resp.Err("Error while clearing existing pack sounds [db exec]", err, zap.String("id", id))
+		}
+
+		for oldID := range oldByID {
+			if newIDs[oldID] {
+				continue
+			}
+
+			if err := txQ.DeleteVanityByTarget(d.Context, db.DeleteVanityByTargetParams{
+				TargetID:   oldID,
+				TargetType: "pack_sound",
+			}); err != nil {
+				return resp.Err("Error while cleaning up a removed sound's vanity", err, zap.String("soundId", oldID))
+			}
+		}
+
+		for i, sound := range payload.Sounds {
+			insertParams := db.InsertPackSoundParams{
+				ID:         sound.ID,
+				PackUrl:    id,
+				Name:       sound.Name,
+				DurationMs: int32(sound.DurationMs),
+				Position:   int32(i),
+			}
+
+			if old, existed := oldByID[sound.ID]; existed {
+				insertParams.Downloads = pgtype.Int4{Int32: old.Downloads, Valid: true}
+				insertParams.CreatedAt = old.CreatedAt
+			}
+
+			err = txQ.InsertPackSound(d.Context, insertParams)
+
+			if err != nil {
+				return resp.ErrBody("Failed to insert pack sound [patch_pack]", "Failed to save one of the pack's sounds — the uploaded audio may not exist yet.", err, zap.String("soundId", sound.ID))
+			}
+
+			if err := packAssets.EnsureDefaultVanity(d.Context, txQ, sound.ID, "pack_sound", sound.Name); err != nil {
+				return resp.ErrBody("Failed to set a default vanity for a pack sound [patch_pack]", "Failed to save one of the pack's sounds.", err, zap.String("soundId", sound.ID))
 			}
 		}
 	}

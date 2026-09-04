@@ -32,6 +32,7 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 	pack.ResolvedServers = []types.IndexServer{}
 	pack.Emojis = []types.PackEmoji{}
 	pack.Stickers = []types.PackSticker{}
+	pack.Sounds = []types.PackSound{}
 
 	q := db.New(state.Pool)
 
@@ -179,6 +180,35 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 		}
 
 		pack.Stickers = stickers
+	}
+
+	if pack.PackType == types.PackTypeSound {
+		rows, err := q.GetPackSounds(ctx, pack.URL)
+
+		if err != nil {
+			state.Logger.Error("Error querying pack_sounds table [db fetch]", zap.Error(err), zap.String("pack_url", pack.URL))
+			return fmt.Errorf("error querying pack_sounds table: %w", err)
+		}
+
+		sounds := make([]types.PackSound, len(rows))
+		for i, row := range rows {
+			vanity, err := ResolveVanityCode(ctx, q, row.ID)
+
+			if err != nil {
+				return fmt.Errorf("error resolving vanity for pack sound %s: %w", row.ID, err)
+			}
+
+			sounds[i] = types.PackSound{
+				ID:         row.ID,
+				Name:       row.Name,
+				DurationMs: int(row.DurationMs),
+				Position:   int(row.Position),
+				Downloads:  int(row.Downloads),
+				Vanity:     vanity,
+			}
+		}
+
+		pack.Sounds = sounds
 	}
 
 	pack.Votes, err = votes.EntityGetVoteCount(ctx, state.Pool, pack.URL, "pack")

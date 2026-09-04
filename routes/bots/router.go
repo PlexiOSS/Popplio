@@ -15,6 +15,7 @@ import (
 	"popplio/routes/bots/endpoints/get_all_bots"
 	"popplio/routes/bots/endpoints/get_bot"
 	"popplio/routes/bots/endpoints/get_bot_changelogs"
+	"popplio/routes/bots/endpoints/get_bot_changelogs_feed"
 	"popplio/routes/bots/endpoints/get_bot_commands"
 	"popplio/routes/bots/endpoints/get_bot_meta"
 	"popplio/routes/bots/endpoints/get_bot_seo"
@@ -25,6 +26,7 @@ import (
 	"popplio/routes/bots/endpoints/patch_bot_team"
 	"popplio/routes/bots/endpoints/post_bot_stats"
 	"popplio/routes/bots/endpoints/put_bot_commands"
+	"popplio/routes/bots/endpoints/search_bot_commands"
 
 	"github.com/go-chi/chi/v5"
 
@@ -64,6 +66,22 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_bots_index.Docs,
 		Handler: get_bots_index.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/@changelogs",
+		OpId:    "get_bot_changelogs_feed",
+		Method:  uapi.GET,
+		Docs:    get_bot_changelogs_feed.Docs,
+		Handler: get_bot_changelogs_feed.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/@commands",
+		OpId:    "search_bot_commands",
+		Method:  uapi.GET,
+		Docs:    search_bot_commands.Docs,
+		Handler: search_bot_commands.Route,
 	}.Route(r)
 
 	uapi.Route{

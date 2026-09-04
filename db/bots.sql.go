@@ -143,6 +143,31 @@ func (q *Queries) ClearBotSpotlightedUntil(ctx context.Context, botID string) er
 	return err
 }
 
+const countBotChangelogs = `-- name: CountBotChangelogs :one
+SELECT COUNT(*) FROM bot_changelogs
+`
+
+func (q *Queries) CountBotChangelogs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countBotChangelogs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countBotCommandsSearch = `-- name: CountBotCommandsSearch :one
+SELECT COUNT(*)
+FROM bot_commands bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE bc.name ILIKE $1
+`
+
+func (q *Queries) CountBotCommandsSearch(ctx context.Context, name string) (int64, error) {
+	row := q.db.QueryRow(ctx, countBotCommandsSearch, name)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countBots = `-- name: CountBots :one
 SELECT COUNT(*) FROM bots
 `
@@ -423,6 +448,55 @@ func (q *Queries) GetBotChangelogs(ctx context.Context, botID string) ([]GetBotC
 			&i.Content,
 			&i.Version,
 			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBotChangelogsFeed = `-- name: GetBotChangelogsFeed :many
+SELECT id, bot_id, title, content, version, created_at
+FROM bot_changelogs
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type GetBotChangelogsFeedParams struct {
+	Limit  int32 `db:"limit" json:"limit"`
+	Offset int32 `db:"offset" json:"offset"`
+}
+
+type GetBotChangelogsFeedRow struct {
+	ID        string             `db:"id" json:"id"`
+	BotID     string             `db:"bot_id" json:"bot_id"`
+	Title     string             `db:"title" json:"title"`
+	Content   string             `db:"content" json:"content"`
+	Version   string             `db:"version" json:"version"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+// Sitewide feed across every bot's changelog entries, newest first.
+func (q *Queries) GetBotChangelogsFeed(ctx context.Context, arg GetBotChangelogsFeedParams) ([]GetBotChangelogsFeedRow, error) {
+	rows, err := q.db.Query(ctx, getBotChangelogsFeed, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBotChangelogsFeedRow
+	for rows.Next() {
+		var i GetBotChangelogsFeedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.Title,
+			&i.Content,
+			&i.Version,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -2090,6 +2164,61 @@ UPDATE bots SET type = 'pending', claimed_by = NULL WHERE bot_id = $1
 func (q *Queries) ResubmitBot(ctx context.Context, botID string) error {
 	_, err := q.db.Exec(ctx, resubmitBot, botID)
 	return err
+}
+
+const searchBotCommands = `-- name: SearchBotCommands :many
+SELECT bc.id, bc.bot_id, bc.name, bc.description, bc.usage, bc.category
+FROM bot_commands bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE bc.name ILIKE $1
+ORDER BY b.approximate_votes DESC, bc.name ASC
+LIMIT $2 OFFSET $3
+`
+
+type SearchBotCommandsParams struct {
+	Name   string `db:"name" json:"name"`
+	Limit  int32  `db:"limit" json:"limit"`
+	Offset int32  `db:"offset" json:"offset"`
+}
+
+type SearchBotCommandsRow struct {
+	ID          string `db:"id" json:"id"`
+	BotID       string `db:"bot_id" json:"bot_id"`
+	Name        string `db:"name" json:"name"`
+	Description string `db:"description" json:"description"`
+	Usage       string `db:"usage" json:"usage"`
+	Category    string `db:"category" json:"category"`
+}
+
+// Cross-bot command search -- "who has a /giveaway command." ILIKE against
+// the command name only (not description/usage), most-voted bot first;
+// good enough at today's command-table size without a dedicated GIN index
+// (unlike bots/servers/teams/packs' full-text search_list).
+func (q *Queries) SearchBotCommands(ctx context.Context, arg SearchBotCommandsParams) ([]SearchBotCommandsRow, error) {
+	rows, err := q.db.Query(ctx, searchBotCommands, arg.Name, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchBotCommandsRow
+	for rows.Next() {
+		var i SearchBotCommandsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.Name,
+			&i.Description,
+			&i.Usage,
+			&i.Category,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const searchBotsPublic = `-- name: SearchBotsPublic :many

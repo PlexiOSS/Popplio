@@ -114,6 +114,28 @@ func GetEntityPerms(ctx context.Context, userId, targetType, targetId string) (p
 		}
 
 		return perms.Set{}, nil
+	case "pack_sound":
+		row, err := q.GetPackSoundByID(ctx, targetId)
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			return perms.Set{}, fmt.Errorf("pack sound not found")
+		}
+
+		if err != nil {
+			return perms.Set{}, fmt.Errorf("error finding pack sound: %v", err)
+		}
+
+		owner, err := q.GetPackOwner(ctx, row.PackUrl)
+
+		if err != nil {
+			return perms.Set{}, fmt.Errorf("error finding owning pack: %v", err)
+		}
+
+		if owner == userId {
+			return perms.Entity.NewSet(perms.EntityOwner), nil
+		}
+
+		return perms.Set{}, nil
 	case "team":
 		if _, err := uuid.Parse(targetId); err != nil {
 			return perms.Set{}, fmt.Errorf("invalid team id")

@@ -343,6 +343,34 @@ RETURNING id, title, content, version, created_by, created_at;
 -- name: DeleteBotChangelog :execrows
 DELETE FROM bot_changelogs WHERE id = $1 AND bot_id = $2;
 
+-- name: SearchBotCommands :many
+-- Cross-bot command search -- "who has a /giveaway command." ILIKE against
+-- the command name only (not description/usage), most-voted bot first;
+-- good enough at today's command-table size without a dedicated GIN index
+-- (unlike bots/servers/teams/packs' full-text search_list).
+SELECT bc.id, bc.bot_id, bc.name, bc.description, bc.usage, bc.category
+FROM bot_commands bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE bc.name ILIKE $1
+ORDER BY b.approximate_votes DESC, bc.name ASC
+LIMIT $2 OFFSET $3;
+
+-- name: CountBotCommandsSearch :one
+SELECT COUNT(*)
+FROM bot_commands bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE bc.name ILIKE $1;
+
+-- name: GetBotChangelogsFeed :many
+-- Sitewide feed across every bot's changelog entries, newest first.
+SELECT id, bot_id, title, content, version, created_at
+FROM bot_changelogs
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountBotChangelogs :one
+SELECT COUNT(*) FROM bot_changelogs;
+
 -- name: DeleteBotByID :exec
 DELETE FROM bots WHERE bot_id = $1;
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"popplio/api"
+	"popplio/db"
 	"popplio/perms"
 	"popplio/routes/votes/endpoints/create_user_entity_vote"
 	"popplio/routes/votes/endpoints/get_all_user_votes"
@@ -18,6 +19,7 @@ import (
 	"popplio/routes/votes/endpoints/get_voter_leaderboard"
 	"popplio/routes/votes/endpoints/get_votes_user_list"
 	"popplio/routes/votes/endpoints/redeem_vote_credits"
+	"popplio/state"
 	"popplio/validators"
 
 	"github.com/go-chi/chi/v5"
@@ -85,7 +87,25 @@ func (b Router) Routes(r *chi.Mux) {
 			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
 				NeededPermission: api.Needs(perms.EntityRedeemVoteCredits),
 				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
-					return validators.NormalizeTargetType(chi.URLParam(r, "target_type")), chi.URLParam(r, "target_id")
+					targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
+					targetId := chi.URLParam(r, "target_id")
+
+					// "pack" isn't a registered auth type (no AuthTypeMap
+					// entry -- see the identical fix in
+					// routes/vanity/router.go for pack_emoji/pack_sticker/
+					// pack_sound), so AuthzEntityPermissionCheck would reject
+					// it outright before ever reaching teams.GetEntityPerms's
+					// already-correct "pack" owner-comparison case. Resolve
+					// down to the owning user instead, same pattern.
+					if targetType == "pack" {
+						owner, err := db.New(state.Pool).GetPackOwner(r.Context(), targetId)
+						if err != nil {
+							return "", ""
+						}
+						return api.TargetTypeUser, owner
+					}
+
+					return targetType, targetId
 				},
 			},
 		},

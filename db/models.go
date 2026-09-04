@@ -332,6 +332,16 @@ type PackEmoji struct {
 	Downloads int32              `db:"downloads" json:"downloads"`
 }
 
+type PackSound struct {
+	ID         string             `db:"id" json:"id"`
+	PackUrl    string             `db:"pack_url" json:"pack_url"`
+	Name       string             `db:"name" json:"name"`
+	DurationMs int32              `db:"duration_ms" json:"duration_ms"`
+	Position   int32              `db:"position" json:"position"`
+	Downloads  int32              `db:"downloads" json:"downloads"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type PackSticker struct {
 	ID        string             `db:"id" json:"id"`
 	PackUrl   string             `db:"pack_url" json:"pack_url"`

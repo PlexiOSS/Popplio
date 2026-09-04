@@ -84,6 +84,9 @@ sql:
           - column: "pack_stickers.id"
             go_type:
               type: "string"
+          - column: "pack_sounds.id"
+            go_type:
+              type: "string"
           - column: "themes.id"
             go_type:
               type: "string"

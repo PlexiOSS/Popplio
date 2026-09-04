@@ -38,7 +38,7 @@ func Docs() *docs.Doc {
 			},
 			{
 				Name:        "pack_type",
-				Description: "Filter to only packs of this type (bot, server, emoji, or sticker). Omit to return every type.",
+				Description: "Filter to only packs of this type (bot, server, emoji, sticker, or sound). Omit to return every type.",
 				Required:    false,
 				In:          "query",
 				Schema:      docs.IdSchema,
@@ -64,8 +64,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var count int64
 
 	if packType != "" {
-		if packType != types.PackTypeBot && packType != types.PackTypeServer && packType != types.PackTypeEmoji && packType != types.PackTypeSticker {
-			return resp.BadRequest("pack_type must be one of bot, server, emoji, or sticker")
+		if packType != types.PackTypeBot && packType != types.PackTypeServer && packType != types.PackTypeEmoji && packType != types.PackTypeSticker && packType != types.PackTypeSound {
+			return resp.BadRequest("pack_type must be one of bot, server, emoji, sticker, or sound")
 		}
 
 		rows, err := q.GetAllPacksByType(d.Context, db.GetAllPacksByTypeParams{

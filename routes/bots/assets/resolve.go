@@ -3,6 +3,7 @@ package assets
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"popplio/db"
@@ -74,4 +75,83 @@ func ResolveIndexBots(ctx context.Context, bots []types.IndexBot) error {
 	}
 
 	return g.Wait()
+}
+
+// ResolveBotChangelogFeedEntries fills in `User` on each entry, one
+// dovewing lookup per distinct bot ID rather than per entry -- a page of
+// the feed routinely has several entries from the same bot.
+func ResolveBotChangelogFeedEntries(ctx context.Context, entries []types.BotChangelogFeedEntry) error {
+	uniqueBotIDs := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		uniqueBotIDs[entry.BotID] = struct{}{}
+	}
+
+	users := make(map[string]*dovetypes.PlatformUser, len(uniqueBotIDs))
+	var mu sync.Mutex
+
+	g, ctx := errgroup.WithContext(ctx)
+	for botID := range uniqueBotIDs {
+		g.Go(func() error {
+			botUser, err := dovewing.GetUser(ctx, botID, state.DovewingPlatformDiscord)
+			if err != nil {
+				return fmt.Errorf("botID=%s: %w", botID, err)
+			}
+
+			mu.Lock()
+			users[botID] = botUser
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	for i := range entries {
+		entries[i].User = users[entries[i].BotID]
+	}
+
+	return nil
+}
+
+// ResolveBotCommandSearchResults is ResolveBotChangelogFeedEntries'
+// counterpart for command search results -- same one-lookup-per-distinct-bot
+// batching, since a search page routinely surfaces several commands from
+// the same bot.
+func ResolveBotCommandSearchResults(ctx context.Context, results []types.BotCommandSearchResult) error {
+	uniqueBotIDs := make(map[string]struct{}, len(results))
+	for _, result := range results {
+		uniqueBotIDs[result.BotID] = struct{}{}
+	}
+
+	users := make(map[string]*dovetypes.PlatformUser, len(uniqueBotIDs))
+	var mu sync.Mutex
+
+	g, ctx := errgroup.WithContext(ctx)
+	for botID := range uniqueBotIDs {
+		g.Go(func() error {
+			botUser, err := dovewing.GetUser(ctx, botID, state.DovewingPlatformDiscord)
+			if err != nil {
+				return fmt.Errorf("botID=%s: %w", botID, err)
+			}
+
+			mu.Lock()
+			users[botID] = botUser
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	for i := range results {
+		results[i].Bot = users[results[i].BotID]
+	}
+
+	return nil
 }

@@ -11,6 +11,7 @@ const (
 	PackTypeServer  = "server"
 	PackTypeEmoji   = "emoji"
 	PackTypeSticker = "sticker"
+	PackTypeSound   = "sound"
 )
 
 // @ci table=packs, unfilled=1
@@ -30,6 +31,7 @@ type BotPack struct {
 	ResolvedServers []IndexServer           `db:"-" json:"servers" ci:"internal" description:"The resolved servers in the pack"`                                   // Servers must be resolved internally from their IDs
 	Emojis          []PackEmoji             `db:"-" json:"emojis" ci:"internal" description:"The pack's emojis (pack_type=emoji only), resolved from pack_emojis"` // Emojis must be resolved internally from pack_emojis
 	Stickers        []PackSticker           `db:"-" json:"stickers" ci:"internal" description:"The pack's stickers (pack_type=sticker only), resolved from pack_stickers"`
+	Sounds          []PackSound             `db:"-" json:"sounds" ci:"internal" description:"The pack's sounds (pack_type=sound only), resolved from pack_sounds"`
 	VoteBanned      bool                    `db:"vote_banned" json:"vote_banned" description:"Whether the pack is banned from voting"`
 }
 
@@ -64,6 +66,22 @@ type PackStickerInput struct {
 	Animated bool   `json:"animated"`
 }
 
+type PackSound struct {
+	ID         string `db:"id" json:"id" description:"The sound's ID within the pack"`
+	Name       string `db:"name" json:"name" description:"The sound's name"`
+	DurationMs int    `db:"duration_ms" json:"duration_ms" description:"The sound clip's duration, in milliseconds"`
+	Position   int    `db:"position" json:"position" description:"Display order within the pack"`
+	Downloads  int    `db:"downloads" json:"downloads" description:"How many times this specific sound has been individually downloaded from its own page"`
+	Vanity     string `db:"-" json:"vanity" description:"The sound's own short vanity code" ci:"internal"`
+}
+
+// PackSoundInput is PackEmojiInput's counterpart for sound packs.
+type PackSoundInput struct {
+	ID         string `json:"id" validate:"required,uuid" msg:"Each sound needs a valid ID"`
+	Name       string `json:"name" validate:"required,min=1,max=32,notblank" msg:"Sound names must be between 1 and 32 characters"`
+	DurationMs int    `json:"duration_ms" validate:"min=0" msg:"Duration cannot be negative"`
+}
+
 // FlatPackEmoji is one row of the flat, sitewide GET /emojis/@all browse
 // feed -- PackEmoji plus just enough of its owning pack to link back to it.
 type FlatPackEmoji struct {
@@ -85,6 +103,17 @@ type FlatPackSticker struct {
 	CreatedAt time.Time `json:"created_at"`
 	PackURL   string    `json:"pack_url"`
 	PackName  string    `json:"pack_name"`
+}
+
+// FlatPackSound is FlatPackEmoji's counterpart for GET /sounds/@all.
+type FlatPackSound struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	DurationMs int       `json:"duration_ms"`
+	Downloads  int       `json:"downloads"`
+	CreatedAt  time.Time `json:"created_at"`
+	PackURL    string    `json:"pack_url"`
+	PackName   string    `json:"pack_name"`
 }
 
 // PackEmojiDetail is GET /emojis/{id}'s response -- a single emoji plus its
@@ -117,4 +146,18 @@ type PackStickerDetail struct {
 	PackName  string                  `json:"pack_name"`
 	Owner     *dovetypes.PlatformUser `json:"owner"`
 	Vanity    string                  `json:"vanity"`
+}
+
+// PackSoundDetail is PackEmojiDetail's counterpart for GET /sounds/{id}.
+type PackSoundDetail struct {
+	ID         string                  `json:"id"`
+	Name       string                  `json:"name"`
+	DurationMs int                     `json:"duration_ms"`
+	Position   int                     `json:"position"`
+	Downloads  int                     `json:"downloads"`
+	CreatedAt  time.Time               `json:"created_at"`
+	PackURL    string                  `json:"pack_url"`
+	PackName   string                  `json:"pack_name"`
+	Owner      *dovetypes.PlatformUser `json:"owner"`
+	Vanity     string                  `json:"vanity"`
 }
