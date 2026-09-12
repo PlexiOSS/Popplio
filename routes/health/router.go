@@ -17,16 +17,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// checkTimeout bounds every health check independently of whatever timeout
-// (or lack of one) the caller's own request context carries. Every DB-backed
-// check below shares state.Pool with the rest of the application -- with no
-// bound here, a brief moment of real connection-pool contention leaves
-// Pool.Acquire blocking indefinitely, and it's the external monitor's own
-// client-side timeout that ends up deciding "down", often well before the
-// query would have actually succeeded. That produces exactly the
-// down-then-instantly-recovered flapping across multiple, otherwise
-// unrelated checks at once (they all queue on the same pool) instead of a
-// clean, fast, deterministic 503.
 const checkTimeout = 4 * time.Second
 
 const tagName = "Health"
@@ -72,6 +62,8 @@ var services = []service{
 	{"/health/bots", "Bot Listings", tableCheck("bots")},
 	{"/health/servers", "Server Listings", tableCheck("servers")},
 	{"/health/packs", "Pack Listings", tableCheck("packs")},
+	{"/health/server-templates", "Server Templates", tableCheck("server_templates")},
+	{"/health/themes", "Themes", tableCheck("themes")},
 	{"/health/blogs", "Blog Service", tableCheck("blogs")},
 	{"/health/search", "Search Service", tableCheck("bots")},
 	{"/health/auth", "Discord Auth", tableCheck("users")},
