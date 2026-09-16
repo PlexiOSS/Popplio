@@ -25,6 +25,7 @@ func (v WebhookNewReviewData) TargetTypes() []string {
 	return []string{
 		"bot",
 		"server",
+		"team",
 	}
 }
 
@@ -41,8 +42,22 @@ func (n WebhookNewReviewData) Description() string {
 }
 
 func (n WebhookNewReviewData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, targets events.Target) *discord.Embed {
+
+	var baseURL string
+
+	switch {
+	case targets.Bot != nil:
+		baseURL = "https://omniplex.gg/bots/" + targets.GetID()
+	case targets.Server != nil:
+		baseURL = "https://omniplex.gg/servers/" + targets.GetID()
+	case targets.Team != nil:
+		baseURL = "https://omniplex.gg/teams/" + targets.GetID()
+	default:
+		baseURL = "https://omniplex.gg/" + targets.GetID()
+	}
+
 	return &discord.Embed{
-		URL: "https://botlist.site/" + targets.GetID(),
+		URL: baseURL,
 		Thumbnail: &discord.EmbedResource{
 			URL: targets.GetAvatarURL(),
 		},
@@ -88,7 +103,7 @@ func (n WebhookNewReviewData) CreateDiscordEmbed(creator *dovetypes.PlatformUser
 			},
 			{
 				Name:   "Review Page",
-				Value:  targets.GetViewLink(),
+				Value:  "[View " + targets.GetDisplayName() + "](" + baseURL + ")",
 				Inline: ptr.TruePtr,
 			},
 		},

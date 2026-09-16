@@ -83,7 +83,7 @@ func (v WebhookNewVoteData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, 
 			},
 			{
 				Name:   "View Page",
-				Value:  baseURL,
+				Value:  "[View " + targets.GetDisplayName() + "](" + baseURL + ")",
 				Inline: ptr.TruePtr,
 			},
 		},
