@@ -1,9 +1,5 @@
-// Package events defines the webhook event types and their registry.
-//
-// An event declares which target types it applies to and how it renders as a
-// Discord embed, and registers itself at init. Both the API documentation
-// and the test-webhook endpoint are generated from that registry, so a new
-// event does not need either to be updated by hand.
+// Copyright (C) 2026 NodeByte LTD
+
 package events
 
 import (
@@ -26,10 +22,6 @@ type EventRegistry struct {
 
 var Registry = []EventRegistry{}
 
-// Webhook events
-//
-// All events defined under the webhooks/events folder must implement this interface
-// to be considered an event
 type WebhookEvent interface {
 	TargetTypes() []string
 	Event() string
@@ -38,23 +30,13 @@ type WebhookEvent interface {
 	Description() string
 }
 
-// List of all events that have been added
 var eventList = []WebhookEvent{}
-
-// Map of event type to event
 var eventMapToType = map[string]WebhookEvent{}
 
-// Adds an event to be registered. This should be called in the init() function of the event
-//
-// Note that this function technically does not register the event but rather just adds it
-// to the list of events to be registered.
-//
-// This is because `doclib` and `state` are not initialized until after state setyp
 func AddEvent(a WebhookEvent) {
 	eventList = append(eventList, a)
 }
 
-// Register all events that have been added
 func RegisterAddedEvents() {
 	for _, a := range eventList {
 		state.Logger.Error("Webhook event register", zap.String("event", a.Event()))
@@ -62,19 +44,7 @@ func RegisterAddedEvents() {
 	}
 }
 
-// Internal implementation to register an event which does the following tasks:
-//
-// - Adds the event to the documentation
-// - Decoonstructs the event for the Test Webhooks feature
-//
-// Point 2 is achieved by looping over all the fields of the event
-// using runtime reflection and handling changelogs/other primitive types
-// where encountered. For this reason, ensure that all types used in an event
-// are handled in the switch-case and add them there if not before use in an event.
-//
-// WARNING: This function is not concurrency safe and should only be run during initialization
 func registerEventImpl(a WebhookEvent) {
-	// Add the event to the map
 	eventMapToType[a.Event()] = a
 
 	docs.AddWebhook(&docs.WebhookDoc{
@@ -91,9 +61,6 @@ func registerEventImpl(a WebhookEvent) {
 		FormatName: "WEBHOOK-" + a.Event(),
 	})
 
-	// Helper method to generate the changeset type
-	//
-	// Format returned: changeset/<type>
 	changesetOf := func(t types.WebhookType) types.WebhookType {
 		return types.WebhookType(string(types.WebhookTypeChangeset) + "/" + string(t))
 	}
@@ -106,8 +73,6 @@ func registerEventImpl(a WebhookEvent) {
 
 	var cols []types.TestWebhookVariables
 
-	// Deconstruct the event fields to create the list of fields
-	// for the test webhook feature
 	for _, f := range reflect.VisibleFields(refType) {
 		var fieldType string
 
@@ -119,7 +84,6 @@ func registerEventImpl(a WebhookEvent) {
 		case reflect.Bool:
 			fieldType = types.WebhookTypeBoolean
 		case reflect.Struct:
-			// Typeswitch here
 			ti := reflect.Zero(f.Type).Interface()
 
 			switch ti.(type) {

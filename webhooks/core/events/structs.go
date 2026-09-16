@@ -1,11 +1,14 @@
+// Copyright (C) 2026 NodeByte LTD
+
 package events
 
 import (
 	"fmt"
 	"time"
 
-	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/types"
+
+	"github.com/PlexiOSS/Keel/ptr"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/mitchellh/mapstructure"
@@ -14,21 +17,12 @@ import (
 	"github.com/PlexiOSS/Keel/jsonimpl"
 )
 
-// Target is a struct to store the target of a webhook event.
-//
-// Similarity to rust enums: While not yet used, a webhook can technically
-// have multiple targets. As such, the Target struct cannot technically be
-// implemented as a simple Rust enum. In practice, as there is only one
-// target per webhook, a simple enum may be possible.
-//
-// You can add targets here to extend the webhook system
 type Target struct {
 	Bot    *dovetypes.PlatformUser `json:"bot,omitempty" description:"If a bot event, the bot that the webhook is about"`
 	Server *types.IndexServer      `json:"server,omitempty" description:"If a server event, the server that the webhook is about"`
 	Team   *types.Team             `json:"team,omitempty" description:"If a team event, the team that the webhook is about"`
 }
 
-// The response that a webhook will recieve
 type WebhookResponse struct {
 	Creator  *dovetypes.PlatformUser `json:"creator" description:"The user who created the action/event (e.g voted for the bot or made a review)"`
 	Type     string                  `json:"type" dynexample:"true" description:"The type of the webhook event"`
@@ -37,9 +31,6 @@ type WebhookResponse struct {
 	Metadata WebhookMetadata         `json:"metadata" description:"Metadata about the webhook event"`
 }
 
-// UnmarshalJSON implements jsonimpl.Unmarshaler
-//
-// This is used to unmarshal the webhook response into a valid webhook event
 func (wr *WebhookResponse) UnmarshalJSON(b []byte) error {
 	var smap map[string]any
 
@@ -61,15 +52,12 @@ func (wr *WebhookResponse) UnmarshalJSON(b []byte) error {
 		return fmt.Errorf("failed to unmarshal webhook response: invalid type")
 	}
 
-	// Set type and data now. Rest will be decoded into the struct
-	// using mapstructure
 	wr.Type = typ
 	wr.Data = evt
 
-	// decoder to copy map values to my struct using json tags
 	cfg := &mapstructure.DecoderConfig{
 		Metadata: nil,
-		Result:   wr, // Save the extra data to wr
+		Result:   wr,
 		TagName:  "json",
 		Squash:   true,
 	}
@@ -80,7 +68,6 @@ func (wr *WebhookResponse) UnmarshalJSON(b []byte) error {
 		return e
 	}
 
-	// copy map to struct
 	e = decoder.Decode(smap)
 
 	if e != nil {
@@ -90,8 +77,6 @@ func (wr *WebhookResponse) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Core structs
-// A changeset represents a change in a value
 type Changeset[T any] struct {
 	Old T `json:"old"`
 	New T `json:"new"`
@@ -102,9 +87,6 @@ type WebhookMetadata struct {
 	Test      bool  `json:"test" description:"Whether the vote was a test vote or not"`
 }
 
-// Given a webhook metadata object, parse it and return a valid/parsed one
-//
-// The created_at field will be set to the current time IF it is not set
 func ParseWebhookMetadata(w *WebhookMetadata) WebhookMetadata {
 	if w == nil {
 		w = &WebhookMetadata{}
@@ -117,8 +99,6 @@ func ParseWebhookMetadata(w *WebhookMetadata) WebhookMetadata {
 	return *w
 }
 
-// Helper method to convert a Changeset to a set of embed fields
-// for use in a discord webhook
 func ConvertChangesetToEmbedFields[T any](name string, c Changeset[T]) []discord.EmbedField {
 	return []discord.EmbedField{
 		{
@@ -146,9 +126,6 @@ func ConvertChangesetToEmbedFields[T any](name string, c Changeset[T]) []discord
 	}
 }
 
-// Abstract fetching to make events easier to implement
-
-// Gets the best/single target type of a webhook event
 func (t Target) GetBestTargetType() string {
 	if t.Bot != nil {
 		return "bot"
@@ -165,7 +142,6 @@ func (t Target) GetBestTargetType() string {
 	return "<unknown>"
 }
 
-// Get the target types of a webhook event
 func (t Target) GetTargetTypes() []string {
 	var types []string
 
@@ -184,7 +160,6 @@ func (t Target) GetTargetTypes() []string {
 	return types
 }
 
-// Gets the ID of a target
 func (t Target) GetID() string {
 	if t.Bot != nil {
 		return t.Bot.ID
@@ -201,7 +176,6 @@ func (t Target) GetID() string {
 	return "<unknown>"
 }
 
-// Get the username of a target
 func (t Target) GetUsername() string {
 	if t.Bot != nil {
 		return t.Bot.Username
@@ -218,7 +192,6 @@ func (t Target) GetUsername() string {
 	return "<unknown>"
 }
 
-// Get the display name of a target
 func (t Target) GetDisplayName() string {
 	if t.Bot != nil {
 		return t.Bot.DisplayName
@@ -235,10 +208,6 @@ func (t Target) GetDisplayName() string {
 	return "<unknown>"
 }
 
-// GetAvatarURL returns the avatar URL of a target.
-//
-// Only bots still have one: it comes from dovewing, which returns Discord's own
-// URL. Servers and teams had self-hosted avatars and no longer carry any.
 func (t Target) GetAvatarURL() string {
 	if t.Bot != nil {
 		return t.Bot.Avatar
@@ -247,22 +216,29 @@ func (t Target) GetAvatarURL() string {
 	return ""
 }
 
-// Returns the target name'. Currently <target type> <username>
 func (t Target) GetTargetName() string {
 	return t.GetBestTargetType() + " " + t.GetUsername()
 }
 
-// Returns a link to the target
-func (t Target) GetTargetLink(header, path string) string {
-	// Teams do not support vanities at this time
-	if t.Team != nil {
-		return "[" + header + " " + t.GetUsername() + "](https://botlist.site/teams/" + t.GetID() + path + ")"
+func (t Target) GetURL() string {
+	var category string
+
+	switch {
+	case t.Bot != nil:
+		category = "bots/"
+	case t.Server != nil:
+		category = "servers/"
+	case t.Team != nil:
+		category = "teams/"
 	}
 
-	return "[" + header + " " + t.GetUsername() + "](https://botlist.site/" + t.GetID() + path + ")"
+	return "https://omniplex.gg/" + category + t.GetID()
 }
 
-// Shorthand for t.GetTargetLink("View", "")
+func (t Target) GetTargetLink(header, path string) string {
+	return "[" + header + " " + t.GetUsername() + "](" + t.GetURL() + path + ")"
+}
+
 func (t Target) GetViewLink() string {
 	return t.GetTargetLink("View", "")
 }

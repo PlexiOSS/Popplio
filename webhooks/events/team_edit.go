@@ -38,23 +38,13 @@ func (n WebhookTeamEditData) Description() string {
 }
 
 func (n WebhookTeamEditData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, targets events.Target) *discord.Embed {
-
-	var baseURL string
-
-	switch {
-	case targets.Team != nil:
-		baseURL = "https://omniplex.gg/teams/" + targets.GetID()
-	default:
-		baseURL = "https://omniplex.gg/" + targets.GetID()
-	}
-
 	name := events.ConvertChangesetToEmbedFields[string]("Name", n.Name)
 	short := events.ConvertChangesetToEmbedFields[string]("Short", n.Short)
 	tags := events.ConvertChangesetToEmbedFields[[]string]("Tags", n.Tags)
 	extraLinks := events.ConvertChangesetToEmbedFields[[]types.Link]("Extra Links", n.ExtraLinks)
 	nsfw := events.ConvertChangesetToEmbedFields[bool]("NSFW", n.NSFW)
 	return &discord.Embed{
-		URL: baseURL,
+		URL: targets.GetURL(),
 		Thumbnail: &discord.EmbedResource{
 			URL: targets.GetAvatarURL(),
 		},
