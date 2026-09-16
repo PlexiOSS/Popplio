@@ -42,12 +42,12 @@ func (v WebhookNewVoteData) Description() string {
 
 func (v WebhookNewVoteData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, targets events.Target) *discord.Embed {
 	var baseURL string
-	switch targets.GetType() {
-	case "bot":
+	switch {
+	case targets.Bot != nil:
 		baseURL = "https://omniplex.gg/bots/" + targets.GetID()
-	case "server":
+	case targets.Server != nil:
 		baseURL = "https://omniplex.gg/servers/" + targets.GetID()
-	case "team":
+	case targets.Team != nil:
 		baseURL = "https://omniplex.gg/teams/" + targets.GetID()
 	default:
 		baseURL = "https://omniplex.gg/" + targets.GetID()
