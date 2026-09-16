@@ -41,8 +41,20 @@ func (v WebhookNewVoteData) Description() string {
 }
 
 func (v WebhookNewVoteData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, targets events.Target) *discord.Embed {
+	var baseURL string
+	switch targets.GetType() {
+	case "bot":
+		baseURL = "https://omniplex.gg/bots/" + targets.GetID()
+	case "server":
+		baseURL = "https://omniplex.gg/servers/" + targets.GetID()
+	case "team":
+		baseURL = "https://omniplex.gg/teams/" + targets.GetID()
+	default:
+		baseURL = "https://omniplex.gg/" + targets.GetID()
+	}
+
 	return &discord.Embed{
-		URL: "https://botlist.site/" + targets.GetID(),
+		URL: baseURL,
 		Thumbnail: &discord.EmbedResource{
 			URL: targets.GetAvatarURL(),
 		},
@@ -71,12 +83,13 @@ func (v WebhookNewVoteData) CreateDiscordEmbed(creator *dovetypes.PlatformUser, 
 			},
 			{
 				Name:   "View Page",
-				Value:  targets.GetViewLink(),
+				Value:  baseURL,
 				Inline: ptr.TruePtr,
 			},
 		},
 	}
 }
+
 func init() {
 	events.AddEvent(WebhookNewVoteData{})
 }
