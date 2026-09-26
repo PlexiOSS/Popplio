@@ -48,6 +48,10 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 			return fmt.Errorf("error querying bots table: %w", err)
 		}
 
+		if row.Type != "approved" && row.Type != "certified" {
+			continue
+		}
+
 		bot := types.IndexBot{
 			BotID:            row.BotID,
 			Short:            row.Short,
@@ -91,6 +95,10 @@ func ResolveBotPack(ctx context.Context, pack *types.BotPack) error {
 		if err != nil {
 			state.Logger.Error("Error querying servers table [db fetch]", zap.Error(err), zap.String("server_id", serverId))
 			return fmt.Errorf("error querying servers table: %w", err)
+		}
+
+		if row.Type != "approved" && row.Type != "certified" {
+			continue
 		}
 
 		server := types.IndexServer{

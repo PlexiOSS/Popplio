@@ -117,7 +117,7 @@ func (q *Queries) CountServerEmojiPreviews(ctx context.Context) (int64, error) {
 }
 
 const countServers = `-- name: CountServers :one
-SELECT COUNT(*) FROM servers
+SELECT COUNT(*) FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public'
 `
 
 func (q *Queries) CountServers(ctx context.Context) (int64, error) {
@@ -770,7 +770,7 @@ func (q *Queries) GetMostViewedIndexServers(ctx context.Context) ([]GetMostViewe
 
 const getPremiumIndexServers = `-- name: GetPremiumIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND premium = true ORDER BY approximate_votes DESC LIMIT 9
+FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9
 `
 
 type GetPremiumIndexServersRow struct {

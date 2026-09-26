@@ -11,6 +11,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/listing"
 	"popplio/notifications"
 	"popplio/routes/shop/assets"
 	"popplio/state"
@@ -72,6 +73,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if targetType != "bot" && targetType != "server" {
 		return resp.BadRequest("Only bots and servers can purchase shop items")
+	}
+
+	public, err := listing.EntityIsPublic(d.Context, targetType, targetID)
+
+	if err != nil {
+		return resp.Err("Failed to check listing status", err, zap.String("target_id", targetID), zap.String("target_type", targetType))
+	}
+
+	if !public {
+		return resp.BadRequest("This " + targetType + " must be approved before it can use shop items")
 	}
 
 	var payload PurchaseShopItem

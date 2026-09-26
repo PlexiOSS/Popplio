@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/listing"
 	teamAssets "popplio/routes/teams/assets"
 
 	"popplio/db"
@@ -168,6 +169,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		})
 	}
 
+	includeUnlisted := listing.ViewerIsSelfOrStaff(d.Context, d.Auth, user.ID)
+
+	if !includeUnlisted {
+		user.UserBots = listing.PublicBots(user.UserBots)
+	}
+
 	if err := botAssets.ResolveIndexBots(d.Context, user.UserBots); err != nil {
 		return resp.ErrBody("Error resolving indexbot", "An error occurred while resolving index bot.", err)
 	}
@@ -201,6 +208,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			FeaturedUntil:    row.FeaturedUntil,
 			SpotlightedUntil: row.SpotlightedUntil,
 		}
+	}
+
+	if !includeUnlisted {
+		user.UserServers = listing.PublicServers(user.UserServers)
 	}
 
 	if err := serverAssets.ResolveIndexServers(d.Context, user.UserServers); err != nil {
@@ -255,7 +266,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			"team_member",
 			"bot",
 			"server",
-		})
+		}, includeUnlisted)
 
 		if err != nil {
 			return resp.Err("Error while getting team entities", err, zap.String("teamID", tid), zap.String("userID", user.ID))

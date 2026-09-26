@@ -232,7 +232,7 @@ ORDER BY (SELECT score FROM scored WHERE scored.target_id = servers.server_id) D
 LIMIT $1 OFFSET $2;
 
 -- name: CountServers :one
-SELECT COUNT(*) FROM servers;
+SELECT COUNT(*) FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public';
 
 -- name: CountServersByType :many
 SELECT type AS method, COUNT(*) FROM servers GROUP BY type;
@@ -265,7 +265,7 @@ FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_
 
 -- name: GetPremiumIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND premium = true ORDER BY approximate_votes DESC LIMIT 9;
+FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9;
 
 -- name: GetMostViewedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until

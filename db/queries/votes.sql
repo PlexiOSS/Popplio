@@ -13,7 +13,7 @@ SELECT vote_banned FROM packs WHERE url = $1;
 SELECT name, vote_banned FROM teams WHERE id = $1;
 
 -- name: GetServerVoteStatus :one
-SELECT name, vote_banned FROM servers WHERE server_id = $1;
+SELECT name, type, vote_banned FROM servers WHERE server_id = $1;
 
 -- name: GetBotVoteInfo :one
 SELECT premium, vote_blitz_until FROM bots WHERE bot_id = $1;

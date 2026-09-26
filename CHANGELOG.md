@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pending, claimed, under-review and denied bots and servers were publicly
+  readable. `GET /bots/{id}`, `GET /servers/{id}` and their `/seo`
+  endpoints now 404 for them unless the caller is the entity's own token,
+  an owner or team member, or staff with `view_panel` or
+  `review_entities`. `GET /users/{id}` and `GET /teams/{id}` (and
+  `team_includes` on bot/server pages) only include unlisted bots and
+  servers when the viewer is that user, a team member, or staff. Public
+  packs skip them, and view/click analytics aren't recorded for them.
+- The homepage Premium section didn't filter by approval, and because the
+  index rejects any non-approved bot, a single premium bot sent back to
+  pending would have made `GET /bots/@index` fail entirely. Premium
+  sections, `/bots/@all` and `/servers/@all` page counts, and the global
+  command search now only include approved and certified entries.
+- Pending and denied servers could still be voted for (bots already
+  couldn't). Neither can now receive votes, reviews or vote-credit shop
+  items until approved.
+- Routes marked `AuthOptional` returned 401 when no token was sent (and
+  for an invalid or expired one). They now treat both as anonymous.
+
 - Discord user lookups could get permanently stuck after a rate limit
   (every lookup failing with "error locking bucket" until restart). 1.9.0
   passed disgo a 5s context deadline, and disgo v0.18.11 leaks its bucket

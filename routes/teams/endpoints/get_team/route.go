@@ -10,6 +10,7 @@ import (
 	"popplio/api/resp"
 	"popplio/db"
 	"popplio/entityassets"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
@@ -103,7 +104,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		team.ExtraLinks = []types.Link{}
 	}
 
-	team.Entities, err = resolvers.GetTeamEntities(d.Context, id, targets)
+	team.Entities, err = resolvers.GetTeamEntities(d.Context, id, targets, listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeTeam, id))
 
 	if err != nil {
 		return resp.Err("Error resolving team entities", err, zap.String("id", id))

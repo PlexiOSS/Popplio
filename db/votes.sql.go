@@ -301,18 +301,19 @@ func (q *Queries) GetServerVoteLeaderboard(ctx context.Context, targetID string)
 }
 
 const getServerVoteStatus = `-- name: GetServerVoteStatus :one
-SELECT name, vote_banned FROM servers WHERE server_id = $1
+SELECT name, type, vote_banned FROM servers WHERE server_id = $1
 `
 
 type GetServerVoteStatusRow struct {
 	Name       string `db:"name" json:"name"`
+	Type       string `db:"type" json:"type"`
 	VoteBanned bool   `db:"vote_banned" json:"vote_banned"`
 }
 
 func (q *Queries) GetServerVoteStatus(ctx context.Context, serverID string) (GetServerVoteStatusRow, error) {
 	row := q.db.QueryRow(ctx, getServerVoteStatus, serverID)
 	var i GetServerVoteStatusRow
-	err := row.Scan(&i.Name, &i.VoteBanned)
+	err := row.Scan(&i.Name, &i.Type, &i.VoteBanned)
 	return i, err
 }
 

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"popplio/api"
 	"popplio/api/resp"
+	"popplio/listing"
 
 	"popplio/db"
 	"popplio/state"
@@ -38,6 +40,16 @@ func Docs() *docs.Doc {
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
+
+	public, err := listing.EntityIsPublic(d.Context, api.TargetTypeServer, id)
+
+	if err != nil {
+		return resp.Err("Error while checking listing status", err, zap.String("id", id))
+	}
+
+	if !public {
+		return uapi.DefaultResponse(http.StatusNotFound)
+	}
 
 	row, err := db.New(state.Pool).GetServerNameAndShort(d.Context, id)
 

@@ -7,6 +7,7 @@ import (
 	"popplio/api"
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/listing"
 	"popplio/perms"
 	"popplio/routes/reviews/assets"
 	"popplio/state"
@@ -89,6 +90,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
 
 	q := db.New(state.Pool)
+
+	public, err := listing.EntityIsPublic(d.Context, targetType, targetId)
+
+	if err != nil {
+		return resp.Err("Failed to check listing status", err, zap.String("target_id", targetId), zap.String("target_type", targetType))
+	}
+
+	if !public {
+		return resp.BadRequest("This " + targetType + " isn't approved yet, so it can't be reviewed")
+	}
 
 	switch targetType {
 	case "bot":

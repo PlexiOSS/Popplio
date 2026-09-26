@@ -158,7 +158,7 @@ const countBotCommandsSearch = `-- name: CountBotCommandsSearch :one
 SELECT COUNT(*)
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1
+WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified')
 `
 
 func (q *Queries) CountBotCommandsSearch(ctx context.Context, name string) (int64, error) {
@@ -169,7 +169,7 @@ func (q *Queries) CountBotCommandsSearch(ctx context.Context, name string) (int6
 }
 
 const countBots = `-- name: CountBots :one
-SELECT COUNT(*) FROM bots
+SELECT COUNT(*) FROM bots WHERE (type = 'approved' OR type = 'certified')
 `
 
 func (q *Queries) CountBots(ctx context.Context) (int64, error) {
@@ -1450,7 +1450,7 @@ func (q *Queries) GetMostViewedIndexBots(ctx context.Context) ([]GetMostViewedIn
 
 const getPremiumIndexBots = `-- name: GetPremiumIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE premium = true ORDER BY approximate_votes DESC LIMIT 9
+FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9
 `
 
 type GetPremiumIndexBotsRow struct {
@@ -2170,7 +2170,7 @@ const searchBotCommands = `-- name: SearchBotCommands :many
 SELECT bc.id, bc.bot_id, bc.name, bc.description, bc.usage, bc.category
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1
+WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified')
 ORDER BY b.approximate_votes DESC, bc.name ASC
 LIMIT $2 OFFSET $3
 `

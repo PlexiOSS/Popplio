@@ -118,6 +118,10 @@ func GetEntityInfo(ctx context.Context, c DbConn, targetId, targetType string) (
 			return nil, fmt.Errorf("failed to fetch server data for this vote: %w", err)
 		}
 
+		if row.Type != "approved" && row.Type != "certified" {
+			return nil, errors.New("server is not approved or certified and cannot be voted for right now")
+		}
+
 		if row.VoteBanned {
 			return nil, errors.New("server is vote banned and cannot be voted for right now")
 		}

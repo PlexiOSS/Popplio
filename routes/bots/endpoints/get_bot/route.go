@@ -14,6 +14,7 @@ import (
 	"popplio/api"
 	"popplio/api/resp"
 	"popplio/entityassets"
+	"popplio/listing"
 
 	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/db"
@@ -165,6 +166,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrDetail("Error while getting bot [db fetch]", err, zap.String("id", id), zap.String("target", target))
 	}
 
+	unlisted := !listing.IsPublic(row.Type)
+
+	if unlisted && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeBot, row.BotID) {
+		return resp.NotFound("No bots could be found matching your query")
+	}
+
 	var extraLinks []types.Link
 	if err := json.Unmarshal(row.ExtraLinks, &extraLinks); err != nil {
 		return resp.ErrDetail("Error parsing bot extra_links [json]", err, zap.String("id", id), zap.String("target", target))
@@ -271,7 +278,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				return resp.BadRequest("Too many `team_includes`. Maximum is 16")
 			}
 
-			eto.Entities, err = resolvers.GetTeamEntities(d.Context, eto.ID, includesSplit)
+			eto.Entities, err = resolvers.GetTeamEntities(d.Context, eto.ID, includesSplit, listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeTeam, eto.ID))
 
 			if err != nil {
 				return resp.ErrDetail("Error while getting team entities", err, zap.String("id", id), zap.String("target", target), zap.String("teamOwner", uuidutil.Encode(bot.TeamOwnerID.Bytes)))
@@ -322,17 +329,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error while getting bot vote count [db fetch]", "Error while getting bot vote count [db fetch].", err)
 	}
 
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				state.Logger.Error("Panic while handling analytics", zap.Any("panic", rec), zap.String("id", id), zap.String("target", target))
+	if !unlisted {
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					state.Logger.Error("Panic while handling analytics", zap.Any("panic", rec), zap.String("id", id), zap.String("target", target))
+				}
+			}()
+
+			if err := handleAnalytics(r, id, target); err != nil {
+				state.Logger.Error("Error while handling analytics", zap.Error(err), zap.String("id", id), zap.String("target", target))
 			}
 		}()
-
-		if err := handleAnalytics(r, id, target); err != nil {
-			state.Logger.Error("Error while handling analytics", zap.Error(err), zap.String("id", id), zap.String("target", target))
-		}
-	}()
+	}
 
 	// Handle extra includes
 	if r.URL.Query().Get("include") != "" {

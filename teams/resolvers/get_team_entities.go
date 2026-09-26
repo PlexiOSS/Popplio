@@ -8,6 +8,7 @@ import (
 
 	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/db"
+	"popplio/listing"
 	botAssets "popplio/routes/bots/assets"
 	serverAssets "popplio/routes/servers/assets"
 	"popplio/state"
@@ -18,7 +19,7 @@ import (
 	"github.com/PlexiOSS/Keel/dovewing"
 )
 
-func GetTeamEntities(ctx context.Context, teamId string, targets []string) (*types.TeamEntities, error) {
+func GetTeamEntities(ctx context.Context, teamId string, targets []string, includeUnlisted bool) (*types.TeamEntities, error) {
 
 	eto := &types.TeamEntities{Targets: []string{}}
 
@@ -94,6 +95,10 @@ func GetTeamEntities(ctx context.Context, teamId string, targets []string) (*typ
 				}
 			}
 
+			if !includeUnlisted {
+				eto.Bots = listing.PublicBots(eto.Bots)
+			}
+
 			if err := botAssets.ResolveIndexBots(ctx, eto.Bots); err != nil {
 				return nil, fmt.Errorf("error occurred while resolving index bot: %w", err)
 			}
@@ -127,6 +132,10 @@ func GetTeamEntities(ctx context.Context, teamId string, targets []string) (*typ
 					FeaturedUntil:    row.FeaturedUntil,
 					SpotlightedUntil: row.SpotlightedUntil,
 				}
+			}
+
+			if !includeUnlisted {
+				eto.Servers = listing.PublicServers(eto.Servers)
 			}
 
 			if err := serverAssets.ResolveIndexServers(ctx, eto.Servers); err != nil {

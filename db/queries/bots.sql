@@ -279,7 +279,7 @@ ORDER BY (SELECT score FROM scored WHERE scored.target_id = bots.bot_id) DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountBots :one
-SELECT COUNT(*) FROM bots;
+SELECT COUNT(*) FROM bots WHERE (type = 'approved' OR type = 'certified');
 
 -- name: CountTrendingBots :one
 SELECT COUNT(*) FROM bots
@@ -295,7 +295,7 @@ FROM bots WHERE type = 'certified' ORDER BY approximate_votes DESC LIMIT 9;
 
 -- name: GetPremiumIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE premium = true ORDER BY approximate_votes DESC LIMIT 9;
+FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9;
 
 -- name: GetMostViewedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
@@ -351,7 +351,7 @@ DELETE FROM bot_changelogs WHERE id = $1 AND bot_id = $2;
 SELECT bc.id, bc.bot_id, bc.name, bc.description, bc.usage, bc.category
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1
+WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified')
 ORDER BY b.approximate_votes DESC, bc.name ASC
 LIMIT $2 OFFSET $3;
 
@@ -359,7 +359,7 @@ LIMIT $2 OFFSET $3;
 SELECT COUNT(*)
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1;
+WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified');
 
 -- name: GetBotChangelogsFeed :many
 -- Sitewide feed across every bot's changelog entries, newest first.

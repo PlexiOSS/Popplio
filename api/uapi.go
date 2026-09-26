@@ -106,6 +106,10 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 		return uapi.AuthData{}, uapi.DefaultResponse(http.StatusUnauthorized), false
 	}
 
+	if authHeader == "" && r.AuthOptional {
+		return uapi.AuthData{}, uapi.HttpResponse{}, true
+	}
+
 	authData := uapi.AuthData{}
 
 	q := db.New(state.Pool)
@@ -129,6 +133,10 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 	sessId, targetId, targetType, permLimits := sess.ID, sess.TargetID, sess.TargetType, sess.PermLimits
 
 	if errors.Is(err, pgx.ErrNoRows) {
+		if r.AuthOptional {
+			return uapi.AuthData{}, uapi.HttpResponse{}, true
+		}
+
 		return uapi.AuthData{}, uapi.HttpResponse{
 			Status: http.StatusUnauthorized,
 			Json:   types.ApiError{Message: "Invalid session token"},
@@ -148,6 +156,10 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 	}
 
 	if authPrefix != "" && authPrefix != targetType {
+		if r.AuthOptional {
+			return uapi.AuthData{}, uapi.HttpResponse{}, true
+		}
+
 		return uapi.AuthData{}, uapi.HttpResponse{
 			Status: http.StatusUnauthorized,
 			Json:   types.ApiError{Message: "Invalid authorization prefix, expected " + authPrefix + " but got " + targetType},
