@@ -42,6 +42,12 @@ before deploying.
 
 ### Fixed
 
+- `GET /bots/@index` (the homepage's main call) took about 3.5s because
+  its seven bot sections and its recent packs were resolved one after
+  another, and every pack was resolved in sequence too (a 50-emoji pack
+  alone is ~50 queries). Sections now load concurrently and packs are
+  resolved four at a time.
+
 - Avatar/username changes could take 8h+ to appear, or stay stale
   indefinitely, because a failed refresh re-stamped the old data as fresh
   (Keel fix below). Combined with the refresh task above, changes now

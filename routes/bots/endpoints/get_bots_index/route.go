@@ -11,13 +11,14 @@ import (
 
 	"popplio/api/resp"
 
-	botAssets "popplio/routes/bots/assets"
 	"popplio/db"
+	botAssets "popplio/routes/bots/assets"
 	"popplio/routes/packs/assets"
 	"popplio/state"
 	"popplio/types"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -31,110 +32,104 @@ func Docs() *docs.Doc {
 	}
 }
 
+const packResolveConcurrency = 4
+
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	listIndex := types.ListIndexBot{}
 
 	q := db.New(state.Pool)
 
-	// Certified Bots
-	certRows, err := q.GetCertifiedIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting certified bots", err)
-	}
-	listIndex.Certified, err = processRow(d.Context, toIndexBotsFromCertified(certRows))
-	if err != nil {
-		return resp.Err("Error while processing certified bots", err)
+	g, ctx := errgroup.WithContext(d.Context)
+
+	section := func(name string, dst *[]types.IndexBot, load func(context.Context) ([]types.IndexBot, error)) {
+		g.Go(func() error {
+			bots, err := load(ctx)
+			if err != nil {
+				return fmt.Errorf("getting %s bots: %w", name, err)
+			}
+
+			*dst, err = processRow(ctx, bots)
+			if err != nil {
+				return fmt.Errorf("processing %s bots: %w", name, err)
+			}
+
+			return nil
+		})
 	}
 
-	// Premium Bots
-	premRows, err := q.GetPremiumIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting premium bots", err)
-	}
-	listIndex.Premium, err = processRow(d.Context, toIndexBotsFromPremium(premRows))
-	if err != nil {
-		return resp.Err("Error while processing premium bots", err)
-	}
+	section("certified", &listIndex.Certified, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetCertifiedIndexBots(ctx)
+		return toIndexBotsFromCertified(rows), err
+	})
+	section("premium", &listIndex.Premium, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetPremiumIndexBots(ctx)
+		return toIndexBotsFromPremium(rows), err
+	})
+	section("most viewed", &listIndex.MostViewed, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetMostViewedIndexBots(ctx)
+		return toIndexBotsFromMostViewed(rows), err
+	})
+	section("recently added", &listIndex.RecentlyAdded, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetRecentlyAddedIndexBots(ctx)
+		return toIndexBotsFromRecentlyAdded(rows), err
+	})
+	section("top voted", &listIndex.TopVoted, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetTopVotedIndexBots(ctx)
+		return toIndexBotsFromTopVoted(rows), err
+	})
+	section("featured", &listIndex.Featured, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetFeaturedIndexBots(ctx)
+		return toIndexBotsFromFeatured(rows), err
+	})
+	section("spotlight", &listIndex.Spotlight, func(ctx context.Context) ([]types.IndexBot, error) {
+		rows, err := q.GetSpotlightIndexBots(ctx)
+		return toIndexBotsFromSpotlight(rows), err
+	})
 
-	// Most Viewed Bots
-	mostViewedRows, err := q.GetMostViewedIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting most viewed bots", err)
-	}
-	listIndex.MostViewed, err = processRow(d.Context, toIndexBotsFromMostViewed(mostViewedRows))
-	if err != nil {
-		return resp.Err("Error while processing most viewed bots", err)
-	}
-
-	// Recently Added Bots
-	recentlyAddedRows, err := q.GetRecentlyAddedIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting recently added bots", err)
-	}
-	listIndex.RecentlyAdded, err = processRow(d.Context, toIndexBotsFromRecentlyAdded(recentlyAddedRows))
-	if err != nil {
-		return resp.Err("Error while processing recently added bots", err)
-	}
-
-	// Top Voted Bots
-	topVotedRows, err := q.GetTopVotedIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting top voted bots", err)
-	}
-	listIndex.TopVoted, err = processRow(d.Context, toIndexBotsFromTopVoted(topVotedRows))
-	if err != nil {
-		return resp.Err("Error while processing top voted bots", err)
-	}
-
-	// Featured Bots (purchased via the shop, not necessarily approved/certified-ranked)
-	featuredRows, err := q.GetFeaturedIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting featured bots", err)
-	}
-	listIndex.Featured, err = processRow(d.Context, toIndexBotsFromFeatured(featuredRows))
-	if err != nil {
-		return resp.Err("Error while processing featured bots", err)
-	}
-
-	// Spotlight Bots (set by staff, distinct from shop-purchased Featured)
-	spotlightRows, err := q.GetSpotlightIndexBots(d.Context)
-	if err != nil {
-		return resp.Err("Error while getting spotlight bots", err)
-	}
-	listIndex.Spotlight, err = processRow(d.Context, toIndexBotsFromSpotlight(spotlightRows))
-	if err != nil {
-		return resp.Err("Error while processing spotlight bots", err)
-	}
-
-	// Packs
-	packRows, err := q.GetRecentPacks(d.Context)
-
-	if err != nil {
-		return resp.Err("Error while getting packs [db fetch]", err)
-	}
-
-	listIndex.Packs = make([]types.BotPack, len(packRows))
-	for i, row := range packRows {
-		listIndex.Packs[i] = types.BotPack{
-			Owner:      row.Owner,
-			Name:       row.Name,
-			Short:      row.Short,
-			Tags:       row.Tags,
-			URL:        row.Url,
-			CreatedAt:  row.CreatedAt.Time,
-			PackType:   row.PackType,
-			Bots:       row.Bots,
-			Servers:    row.Servers,
-			VoteBanned: row.VoteBanned,
-		}
-	}
-
-	for i := range listIndex.Packs {
-		err = assets.ResolveBotPack(d.Context, &listIndex.Packs[i])
-
+	g.Go(func() error {
+		packRows, err := q.GetRecentPacks(ctx)
 		if err != nil {
-			return resp.ErrBody("Error while resolving user pack", "Error resolving user pack.", err, zap.String("url", listIndex.Packs[i].URL))
+			return fmt.Errorf("getting packs: %w", err)
 		}
+
+		packs := make([]types.BotPack, len(packRows))
+		for i, row := range packRows {
+			packs[i] = types.BotPack{
+				Owner:      row.Owner,
+				Name:       row.Name,
+				Short:      row.Short,
+				Tags:       row.Tags,
+				URL:        row.Url,
+				CreatedAt:  row.CreatedAt.Time,
+				PackType:   row.PackType,
+				Bots:       row.Bots,
+				Servers:    row.Servers,
+				VoteBanned: row.VoteBanned,
+			}
+		}
+
+		pg, pctx := errgroup.WithContext(ctx)
+		pg.SetLimit(packResolveConcurrency)
+
+		for i := range packs {
+			pg.Go(func() error {
+				if err := assets.ResolveBotPack(pctx, &packs[i]); err != nil {
+					return fmt.Errorf("resolving pack %s: %w", packs[i].URL, err)
+				}
+				return nil
+			})
+		}
+
+		if err := pg.Wait(); err != nil {
+			return err
+		}
+
+		listIndex.Packs = packs
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return resp.Err("Error while building bots index", err, zap.String("route", "get_bots_index"))
 	}
 
 	return uapi.HttpResponse{
