@@ -6,13 +6,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/db"
 	"popplio/listing"
 	botAssets "popplio/routes/bots/assets"
 	serverAssets "popplio/routes/servers/assets"
 	"popplio/state"
 	"popplio/types"
+
+	"github.com/PlexiOSS/Keel/uuidutil"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
