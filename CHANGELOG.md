@@ -23,8 +23,10 @@ before deploying.
   then everyone else, oldest first within each group. Users in a server
   the bot shares are refreshed for free from the gateway cache; everyone
   else goes through Discord REST with the japi.rest fallback. A user that
-  fails is backed off for an hour so it can't hog the batch, and each run
-  logs how many were refreshed, how many failed, and whether a backlog
+  fails is backed off for an hour so it can't hog the batch. If the first
+  8 attempts all fail (Discord and japi both unreachable), the run stops
+  early instead of spending ~13s on every remaining user. Each run logs
+  how many were refreshed, failed and skipped, and whether a backlog
   remains.
 - `popplio/japi`: one japi.rest client (user, application) that always
   sends `japi.key` and a User-Agent, maps japi's 400/404 and
@@ -54,11 +56,17 @@ before deploying.
   show up within about 8h at worst, and near-instantly for users in a
   server the bot shares.
 - Discord user lookups (dovewing's Discord platform) could hang behind
-  our own REST rate-limit bucket, because `GetUser` ignored its context.
-  The call is now bounded to 5s. If Discord fails for any reason other
-  than a definite "unknown user" (429, 5xx, timeout), the same public
-  profile is fetched from japi.rest instead, so refreshes keep
-  succeeding during rate-limit bursts.
+  our own REST rate-limit bucket. A lookup now waits at most 5s for
+  Discord, and if Discord fails for any reason other than a definite
+  "unknown user" (429, 5xx, timeout), the same public profile is fetched
+  from japi.rest instead, so refreshes keep succeeding during rate-limit
+  bursts. After a Discord timeout, lookups skip Discord for 30s and go
+  straight to japi so waiting calls can't pile up. The 5s limit is
+  enforced around the disgo call rather than passed to it as a context
+  deadline: disgo v0.18.11 leaks the bucket lock when a rate-limit reset
+  lands past a deadline (fixed upstream in v0.19), which left every
+  Discord user lookup failing with "error locking bucket" until restart.
+  The japi.rest client timeout is 5s.
 - JAPI updater: sends the configured key and a User-Agent, no longer
   aborts the whole run when one bot's request or save fails (it stops
   early only on a japi 429), and compares the bot name/avatar japi

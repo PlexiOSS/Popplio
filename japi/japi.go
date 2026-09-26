@@ -24,7 +24,7 @@ var (
 	ErrRateLimited = errors.New("japi: rate limited")
 )
 
-var client = &http.Client{Timeout: 8 * time.Second}
+var client = &http.Client{Timeout: 5 * time.Second}
 
 var apiKey atomic.Pointer[string]
 

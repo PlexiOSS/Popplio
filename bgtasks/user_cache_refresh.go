@@ -23,6 +23,7 @@ const (
 	userCacheRefreshLead        = time.Hour
 	userCacheRefreshFailBackoff = time.Hour
 	userCacheRefreshTimeout     = 20 * time.Second
+	userCacheRefreshAbortAfter  = 8
 )
 
 var userCacheRefreshFailures sync.Map
@@ -66,20 +67,37 @@ func UserCacheRefresh(ctx context.Context) error {
 		return nil
 	}
 
-	var refreshed, failed atomic.Int64
+	var refreshed, failed, skipped atomic.Int64
 
-	g, gctx := errgroup.WithContext(ctx)
+	runCtx, abort := context.WithCancel(ctx)
+	defer abort()
+
+	g, gctx := errgroup.WithContext(runCtx)
 	g.SetLimit(userCacheRefreshWorkers)
 
 	for _, id := range due {
 		g.Go(func() error {
+			if gctx.Err() != nil {
+				skipped.Add(1)
+				return nil
+			}
+
 			rctx, cancel := context.WithTimeout(gctx, userCacheRefreshTimeout)
 			defer cancel()
 
 			if _, err := dovewing.RefreshUser(rctx, id, state.DovewingPlatformDiscord); err != nil {
+				if gctx.Err() != nil {
+					skipped.Add(1)
+					return nil
+				}
+
 				userCacheRefreshFailures.Store(id, time.Now())
-				failed.Add(1)
 				state.Logger.Warn("user_cache_refresh: failed to refresh user", zap.String("id", id), zap.Error(err))
+
+				if failed.Add(1) >= userCacheRefreshAbortAfter && refreshed.Load() == 0 {
+					abort()
+				}
+
 				return nil
 			}
 
@@ -95,11 +113,12 @@ func UserCacheRefresh(ctx context.Context) error {
 		zap.Int("due", len(due)),
 		zap.Int64("refreshed", refreshed.Load()),
 		zap.Int64("failed", failed.Load()),
+		zap.Int64("skipped", skipped.Load()),
 		zap.Bool("backlog", len(candidates) > len(due)),
 	)
 
-	if failed.Load() == int64(len(due)) {
-		return fmt.Errorf("all %d user refreshes failed", len(due))
+	if refreshed.Load() == 0 && failed.Load() > 0 {
+		return fmt.Errorf("no user refreshes succeeded (%d failed, %d skipped); Discord and japi.rest both look unreachable", failed.Load(), skipped.Load())
 	}
 
 	return nil

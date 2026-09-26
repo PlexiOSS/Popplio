@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"popplio/japi"
@@ -180,7 +181,47 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 	return puser, err
 }
 
-const discordLookupTimeout = 5 * time.Second
+const (
+	discordLookupTimeout = 5 * time.Second
+	discordSlowBackoff   = 30 * time.Second
+)
+
+var (
+	errDiscordSlow       = errors.New("discord user lookup timed out")
+	errDiscordBackingOff = errors.New("discord user lookups backing off after a timeout")
+	discordBackoffUntil  atomic.Int64
+)
+
+type discordLookup struct {
+	user *discord.User
+	err  error
+}
+
+func (d *DisgoState) lookupDiscordUser(ctx context.Context, id snowflake.ID) (*discord.User, error) {
+	if time.Now().UnixNano() < discordBackoffUntil.Load() {
+		return nil, errDiscordBackingOff
+	}
+
+	done := make(chan discordLookup, 1)
+
+	go func() {
+		user, err := d.config.Client.Rest().GetUser(id)
+		done <- discordLookup{user: user, err: err}
+	}()
+
+	timer := time.NewTimer(discordLookupTimeout)
+	defer timer.Stop()
+
+	select {
+	case r := <-done:
+		return r.user, r.err
+	case <-timer.C:
+		discordBackoffUntil.Store(time.Now().Add(discordSlowBackoff).UnixNano())
+		return nil, errDiscordSlow
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.PlatformUser, error) {
 	id, err := snowflake.Parse(idStr)
@@ -189,10 +230,7 @@ func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.Plat
 		return nil, err
 	}
 
-	discordCtx, cancel := context.WithTimeout(ctx, discordLookupTimeout)
-	defer cancel()
-
-	user, err := d.config.Client.Rest().GetUser(id, rest.WithCtx(discordCtx))
+	user, err := d.lookupDiscordUser(ctx, id)
 
 	if err != nil {
 		if isDefinitiveMiss(err) {
