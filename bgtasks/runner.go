@@ -37,6 +37,13 @@ func All() []Task {
 			Interval:    30 * time.Minute,
 			Run:         ModerationScan,
 		},
+		{
+			Name:        "user_cache_refresh",
+			Description: "Refreshing cached Discord users (bots first, then listing owners/team members) before their cache entries expire",
+			Enabled:     true,
+			Interval:    5 * time.Minute,
+			Run:         UserCacheRefresh,
+		},
 	}
 }
 

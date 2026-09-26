@@ -1,9 +1,3 @@
--- Content versions for user-uploaded CDN assets (team avatars, bot/server/team
--- banners). The bytes live in the frontend's S3 bucket under a fixed per-entity
--- key; this table records a hash of the current upload so the frontend can
--- render `/cdn/...?v=<version>` URLs that are safe to cache forever, and so a
--- re-upload is picked up immediately instead of after a cache window.
-
 -- +goose Up
 -- +goose StatementBegin
 CREATE TABLE entity_assets (

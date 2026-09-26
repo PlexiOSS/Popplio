@@ -1,8 +1,5 @@
 // Copyright (C) 2026 NodeByte LTD
 
-// Package put_entity_asset implements PUT /{bots,servers,teams}/{id}/assets/{kind},
-// which records the content version of an asset the frontend just uploaded to
-// its CDN bucket. It is mounted once per entity router via Mount.
 package put_entity_asset
 
 import (
@@ -21,10 +18,6 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-// Mount registers the route for one entity type. urlPrefix is e.g. "/bots",
-// idVar the chi URL param holding the entity ID, and perm the entity
-// permission needed to change that entity's assets (the same one the
-// frontend's upload gateway checks before writing the bytes).
 func Mount(r *chi.Mux, targetType, urlPrefix, idVar string, perm perms.Perm) {
 	uapi.Route{
 		Pattern: urlPrefix + "/{" + idVar + "}/assets/{kind}",

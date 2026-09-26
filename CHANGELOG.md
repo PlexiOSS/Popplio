@@ -7,14 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.0] - 2026-09-26
 
+**Requires Keel `v1.0.2`** (see the Keel section below): Popplio no longer
+builds against `v1.0.1`, since the user cache refresh task uses
+`dovewing.RefreshUser`. Also run migration `20260926120000_entity_assets`
+before deploying.
+
 ### Added
 
-
+- `user_cache_refresh` background task (every 5 min). It refreshes cached
+  Discord users (`internal_user_cache__discord`) about an hour before
+  their 8h cache expiry, so avatar and name changes land within roughly
+  7-8h even for profiles nobody is viewing, and a view never has to wait
+  on an expired entry. Up to 60 users per run with 4 in parallel, in
+  priority order: bot accounts first, then bot owners and team members,
+  then everyone else, oldest first within each group. Users in a server
+  the bot shares are refreshed for free from the gateway cache; everyone
+  else goes through Discord REST with the japi.rest fallback. A user that
+  fails is backed off for an hour so it can't hog the batch, and each run
+  logs how many were refreshed, how many failed, and whether a backlog
+  remains.
 - `popplio/japi`: one japi.rest client (user, application) that always
   sends `japi.key` and a User-Agent, maps japi's 400/404 and
   "200 with only an error" responses to `ErrNotFound`, and distinguishes
   429s.
-
 - `entity_assets` table (migration `20260926120000_entity_assets`) and
   `PUT /{bots,servers,teams}/{id}/assets/{kind}`, which record the
   content version of an avatar/banner the frontend just uploaded to its
@@ -27,25 +42,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-
+- Avatar/username changes could take 8h+ to appear, or stay stale
+  indefinitely, because a failed refresh re-stamped the old data as fresh
+  (Keel fix below). Combined with the refresh task above, changes now
+  show up within about 8h at worst, and near-instantly for users in a
+  server the bot shares.
 - Discord user lookups (dovewing's Discord platform) could hang behind
   our own REST rate-limit bucket, because `GetUser` ignored its context.
   The call is now bounded to 5s. If Discord fails for any reason other
   than a definite "unknown user" (429, 5xx, timeout), the same public
-  profile is fetched from japi.rest instead. This keeps cache refreshes
-  succeeding during rate-limit bursts rather than leaving old avatars in
-  place.
+  profile is fetched from japi.rest instead, so refreshes keep
+  succeeding during rate-limit bursts.
 - JAPI updater: sends the configured key and a User-Agent, no longer
   aborts the whole run when one bot's request or save fails (it stops
   early only on a japi 429), and compares the bot name/avatar japi
   returns against the dovewing cache. On a mismatch it clears and
-  re-resolves that bot, so a changed bot avatar is picked up when the
-  bot comes due for its (3-day) JAPI refresh even if its cached row
-  isn't due yet.
-
-- Avatar/username changes could take 8h+ to appear, or stay stale
-  indefinitely. This needs Keel's dovewing fix (see below), so the Keel
-  dependency has to be bumped for it to take effect.
+  re-resolves that bot. This is a backstop to the refresh task, since
+  each bot only comes due for its JAPI check every 3 days.
 - Server sync (Infernoplex, every 30 min): one failed DB write aborted
   the entire run, including every server after it and the whole
   emoji/sticker pass. It also skipped servers it couldn't fetch without
@@ -53,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   emoji/sticker pass always runs, and the task reports how many servers
   failed.
 
-### Keel (dovewing) fix, pending a Keel release
+### Keel (dovewing) changes, shipped as Keel `v1.0.2`
 
 - An expired cached user was served and then written back with
   `last_updated = NOW()` while a background refresh ran. If that refresh
@@ -64,6 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retried, refreshes are deduped per user and run on the long-lived
   context instead of the request context, and a fresh row's Redis TTL
   now expires together with the row itself.
+- New `dovewing.RefreshUser(ctx, id, platform)`: re-fetches a user
+  (platform cache first, then the platform) and stores the result
+  without clearing the existing entry first, so a failed refresh keeps
+  the old data. It shares the per-user in-flight dedupe with the lazy
+  refresh and returns `(nil, nil)` if one is already running.
 
 ## [1.8.2] - 2026-09-03
 

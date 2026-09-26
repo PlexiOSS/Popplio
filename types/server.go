@@ -29,7 +29,7 @@ type IndexServer struct {
 	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
 	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the server appears in the home page's Spotlight section until this time"`
-	AssetVersions    map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"` // Must be handled internally
+	AssetVersions    map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
 }
 
 // @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users
@@ -78,7 +78,7 @@ type Server struct {
 	NSFWChannelCount       int                `db:"nsfw_channel_count" json:"nsfw_channel_count" description:"How many of the server's channels currently have Discord's own age-restricted flag set, synced periodically by the tracking bot. Compare against nsfw to catch a server with gated NSFW content that isn't tagged nsfw, or vice versa"`
 	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the server's short/long description at submission time. A signal for reviewers, not a verdict"`
 	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
-	AssetVersions          map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"` // Must be handled internally
+	AssetVersions          map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
 }
 
 type ServerEmojiPreview struct {

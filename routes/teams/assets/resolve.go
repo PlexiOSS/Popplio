@@ -26,7 +26,6 @@ func ResolveIndexTeams(teams []types.Team) {
 	}
 }
 
-// ResolveTeamAssetVersions fills in AssetVersions for every team in one query.
 func ResolveTeamAssetVersions(ctx context.Context, teams []types.Team) error {
 	ids := make([]string, len(teams))
 	for i := range teams {

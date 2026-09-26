@@ -40,7 +40,7 @@ type Team struct {
 	Service          string            `db:"service" json:"service" description:"The service which added the team (api/infernoplex) etc."`
 	CreatedAt        time.Time         `db:"created_at" json:"created_at" description:"The time the team was created"`
 	UpdatedAt        time.Time         `db:"updated_at" json:"updated_at" description:"The time the team was last updated"`
-	AssetVersions    map[string]string `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"` // Must be handled internally
+	AssetVersions    map[string]string `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
 }
 
 type TeamBulkFetch struct {
