@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Discord user lookups could get permanently stuck after a rate limit
+  (every lookup failing with "error locking bucket" until restart). 1.9.0
+  passed disgo a 5s context deadline, and disgo v0.18.11 leaks its bucket
+  lock when a rate-limit reset lands past a deadline (fixed upstream in
+  v0.19). The 5s limit is now enforced around the disgo call instead of
+  passed to it, so the call finishes in the background and releases the
+  lock normally. After a Discord timeout, lookups skip Discord for 30s and
+  go straight to japi.rest so waiting calls can't pile up.
+- `user_cache_refresh`: if the first 8 attempts in a run all fail
+  (Discord and japi both unreachable), the run stops early instead of
+  spending ~13s on every remaining user. Runs now also log how many users
+  were skipped.
+- `popplio/japi`: the client timeout is 5s (was 8s). After a timeout,
+  network error, 429 or 5xx it returns `ErrUnavailable` immediately for
+  60s instead of making every caller wait out the timeout again, and the
+  JAPI updater stops its run early when that happens.
+
 ## [1.9.0] - 2026-09-26
 
 **Requires Keel `v1.0.3`** (see the Keel section below): Popplio no longer
@@ -23,10 +44,8 @@ before deploying.
   then everyone else, oldest first within each group. Users in a server
   the bot shares are refreshed for free from the gateway cache; everyone
   else goes through Discord REST with the japi.rest fallback. A user that
-  fails is backed off for an hour so it can't hog the batch. If the first
-  8 attempts all fail (Discord and japi both unreachable), the run stops
-  early instead of spending ~13s on every remaining user. Each run logs
-  how many were refreshed, failed and skipped, and whether a backlog
+  fails is backed off for an hour so it can't hog the batch, and each run
+  logs how many were refreshed, how many failed, and whether a backlog
   remains.
 - `popplio/japi`: one japi.rest client (user, application) that always
   sends `japi.key` and a User-Agent, maps japi's 400/404 and
@@ -56,17 +75,11 @@ before deploying.
   show up within about 8h at worst, and near-instantly for users in a
   server the bot shares.
 - Discord user lookups (dovewing's Discord platform) could hang behind
-  our own REST rate-limit bucket. A lookup now waits at most 5s for
-  Discord, and if Discord fails for any reason other than a definite
-  "unknown user" (429, 5xx, timeout), the same public profile is fetched
-  from japi.rest instead, so refreshes keep succeeding during rate-limit
-  bursts. After a Discord timeout, lookups skip Discord for 30s and go
-  straight to japi so waiting calls can't pile up. The 5s limit is
-  enforced around the disgo call rather than passed to it as a context
-  deadline: disgo v0.18.11 leaks the bucket lock when a rate-limit reset
-  lands past a deadline (fixed upstream in v0.19), which left every
-  Discord user lookup failing with "error locking bucket" until restart.
-  The japi.rest client timeout is 5s.
+  our own REST rate-limit bucket, because `GetUser` ignored its context.
+  The call is now bounded to 5s. If Discord fails for any reason other
+  than a definite "unknown user" (429, 5xx, timeout), the same public
+  profile is fetched from japi.rest instead, so refreshes keep
+  succeeding during rate-limit bursts.
 - JAPI updater: sends the configured key and a User-Agent, no longer
   aborts the whole run when one bot's request or save fails (it stops
   early only on a japi 429), and compares the bot name/avatar japi

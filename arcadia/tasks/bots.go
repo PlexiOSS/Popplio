@@ -343,7 +343,7 @@ func JapiUpdater(ctx context.Context) error {
 
 		app, err := japi.GetApplication(ctx, botID)
 
-		if errors.Is(err, japi.ErrRateLimited) {
+		if errors.Is(err, japi.ErrRateLimited) || errors.Is(err, japi.ErrUnavailable) {
 			return err
 		}
 

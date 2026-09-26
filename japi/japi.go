@@ -22,9 +22,18 @@ const (
 var (
 	ErrNotFound    = errors.New("japi: not found")
 	ErrRateLimited = errors.New("japi: rate limited")
+	ErrUnavailable = errors.New("japi: temporarily unavailable, skipping")
 )
 
 var client = &http.Client{Timeout: 5 * time.Second}
+
+const unavailableBackoff = time.Minute
+
+var unavailableUntil atomic.Int64
+
+func markUnavailable() {
+	unavailableUntil.Store(time.Now().Add(unavailableBackoff).UnixNano())
+}
 
 var apiKey atomic.Pointer[string]
 
@@ -118,6 +127,10 @@ func get(ctx context.Context, path, id string, out any) error {
 		return fmt.Errorf("japi: invalid snowflake %q", id)
 	}
 
+	if time.Now().UnixNano() < unavailableUntil.Load() {
+		return ErrUnavailable
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+path, nil)
 
 	if err != nil {
@@ -133,6 +146,9 @@ func get(ctx context.Context, path, id string, out any) error {
 	resp, err := client.Do(req)
 
 	if err != nil {
+		if ctx.Err() == nil {
+			markUnavailable()
+		}
 		return fmt.Errorf("japi: %w", err)
 	}
 
@@ -140,10 +156,15 @@ func get(ctx context.Context, path, id string, out any) error {
 
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
+		markUnavailable()
 		return fmt.Errorf("%w (retry after %ss)", ErrRateLimited, resp.Header.Get("Retry-After"))
 	case resp.StatusCode == http.StatusNotFound, resp.StatusCode == http.StatusBadRequest:
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return ErrNotFound
+	case resp.StatusCode >= 500:
+		_, _ = io.Copy(io.Discard, resp.Body)
+		markUnavailable()
+		return fmt.Errorf("japi: upstream status %d", resp.StatusCode)
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return fmt.Errorf("japi: unexpected status %d", resp.StatusCode)
