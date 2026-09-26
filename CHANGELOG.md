@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.0] - 2026-09-26
 
-**Requires Keel `v1.0.2`** (see the Keel section below): Popplio no longer
+**Requires Keel `v1.0.3`** (see the Keel section below): Popplio no longer
 builds against `v1.0.1`, since the user cache refresh task uses
 `dovewing.RefreshUser`. Also run migration `20260926120000_entity_assets`
 before deploying.
@@ -66,7 +66,7 @@ before deploying.
   emoji/sticker pass always runs, and the task reports how many servers
   failed.
 
-### Keel (dovewing) changes, shipped as Keel `v1.0.2`
+### Keel (dovewing) changes, shipped as Keel `v1.0.3`
 
 - An expired cached user was served and then written back with
   `last_updated = NOW()` while a background refresh ran. If that refresh
