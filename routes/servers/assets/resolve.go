@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"popplio/api"
 	"popplio/db"
+	"popplio/entityassets"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
@@ -136,6 +138,24 @@ func ResolveIndexServers(ctx context.Context, servers []types.IndexServer) error
 			return nil
 		})
 	}
+
+	g.Go(func() error {
+		ids := make([]string, len(servers))
+		for i := range servers {
+			ids[i] = servers[i].ServerID
+		}
+
+		versions, err := entityassets.GetMany(ctx, api.TargetTypeServer, ids)
+		if err != nil {
+			return fmt.Errorf("error getting asset versions: %w", err)
+		}
+
+		for i := range servers {
+			servers[i].AssetVersions = versions[servers[i].ServerID]
+		}
+
+		return nil
+	})
 
 	return g.Wait()
 }

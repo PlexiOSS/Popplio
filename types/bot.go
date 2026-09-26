@@ -36,6 +36,7 @@ type IndexBot struct {
 	FeaturedUntil    pgtype.Timestamptz      `db:"featured_until" json:"featured_until" description:"If set and in the future, the bot appears in the home page's Featured section until this time"`
 	SpotlightedUntil pgtype.Timestamptz      `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the bot appears in the home page's Spotlight section until this time"`
 	VoteBlitzUntil   pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
+	AssetVersions    map[string]string       `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"` // Must be handled internally
 }
 
 type BotStats struct {
@@ -105,6 +106,7 @@ type Bot struct {
 	VoteBlitzUntil       pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
 	ModerationFlagged    bool                    `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the bot's short/long description at submission time. A signal for reviewers, not a verdict"`
 	ModerationCategories []string                `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
+	AssetVersions        map[string]string       `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"` // Must be handled internally
 }
 
 // @ci table=bots, unfilled=1

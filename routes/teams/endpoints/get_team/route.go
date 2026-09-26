@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"popplio/api"
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/entityassets"
 	"popplio/state"
 	"popplio/teams/resolvers"
 	"popplio/types"
@@ -86,6 +88,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		Service:          row.Service,
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
+	}
+
+	team.AssetVersions, err = entityassets.Get(d.Context, api.TargetTypeTeam, team.ID)
+
+	if err != nil {
+		return resp.Err("Error while getting team asset versions [db fetch]", err, zap.String("id", id))
 	}
 
 	if team.Tags == nil {

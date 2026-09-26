@@ -5,11 +5,17 @@ package discord_dovewing
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
+	"time"
+
+	"popplio/japi"
 
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
+	"go.uber.org/zap"
 
 	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
@@ -174,6 +180,8 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 	return puser, err
 }
 
+const discordLookupTimeout = 5 * time.Second
+
 func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.PlatformUser, error) {
 	id, err := snowflake.Parse(idStr)
 
@@ -181,10 +189,36 @@ func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.Plat
 		return nil, err
 	}
 
-	user, err := d.config.Client.Rest().GetUser(id)
+	discordCtx, cancel := context.WithTimeout(ctx, discordLookupTimeout)
+	defer cancel()
+
+	user, err := d.config.Client.Rest().GetUser(id, rest.WithCtx(discordCtx))
 
 	if err != nil {
-		return nil, err
+		if isDefinitiveMiss(err) {
+			return nil, err
+		}
+
+		fallback, japiErr := japi.GetUser(ctx, idStr)
+
+		if japiErr != nil {
+			return nil, errors.Join(err, japiErr)
+		}
+
+		d.config.BaseState.Logger.Info("Resolved user via japi.rest fallback", zap.String("id", idStr), zap.NamedError("discord_error", err))
+
+		return &dovetypes.PlatformUser{
+			ID:          idStr,
+			Username:    fallback.Username,
+			Avatar:      fallback.EffectiveAvatarURL(),
+			DisplayName: fallback.EffectiveName(),
+			Bot:         fallback.Bot,
+			Status:      dovetypes.PlatformStatusOffline,
+			Flags:       japiFlagsToArray(fallback),
+			ExtraData: map[string]any{
+				"cache": "japi",
+			},
+		}, nil
 	}
 
 	return &dovetypes.PlatformUser{
@@ -196,4 +230,36 @@ func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.Plat
 		Status:      dovetypes.PlatformStatusOffline,
 		Flags:       disgoFlagsToArray(user),
 	}, nil
+}
+
+func isDefinitiveMiss(err error) bool {
+	var restErr rest.Error
+
+	if !errors.As(err, &restErr) || restErr.Response == nil {
+		return false
+	}
+
+	switch restErr.Response.StatusCode {
+	case http.StatusNotFound, http.StatusBadRequest:
+		return true
+	default:
+		return false
+	}
+}
+
+func japiFlagsToArray(u *japi.User) []string {
+	var arr = []string{}
+
+	if !u.Bot {
+		return arr
+	}
+
+	for _, flag := range u.PublicFlagsArray {
+		switch flag {
+		case "BOT_HTTP_INTERACTIONS", "VERIFIED_BOT":
+			arr = append(arr, flag)
+		}
+	}
+
+	return arr
 }

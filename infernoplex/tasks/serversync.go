@@ -4,6 +4,8 @@ package tasks
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"popplio/db"
 	"popplio/infernoplex/dclient"
@@ -17,10 +19,16 @@ import (
 )
 
 func ServerSync(ctx context.Context) error {
-	if err := syncServerMeta(ctx); err != nil {
-		return err
+	metaErr := syncServerMeta(ctx)
+
+	if metaErr != nil {
+		state.Logger.Error("Server sync: meta pass failed, continuing with emoji/sticker pass", zap.Error(metaErr))
 	}
 
+	return errors.Join(metaErr, syncServerEmojisStickers(ctx))
+}
+
+func syncServerEmojisStickers(ctx context.Context) error {
 	q := db.New(state.Pool)
 
 	serverIDs, err := q.GetServersWithEmojisShown(ctx)
@@ -28,6 +36,8 @@ func ServerSync(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	var failed int
 
 	for _, serverID := range serverIDs {
 		guildID, err := snowflake.Parse(serverID)
@@ -82,8 +92,13 @@ func ServerSync(ctx context.Context) error {
 			Emojis:   syncedEmojis,
 			Stickers: syncedStickers,
 		}); err != nil {
-			return err
+			state.Logger.Error("Server sync: failed to save emojis/stickers, skipping", zap.Error(err), zap.String("server_id", serverID))
+			failed++
 		}
+	}
+
+	if failed > 0 {
+		return fmt.Errorf("emoji/sticker sync failed to save %d of %d servers", failed, len(serverIDs))
 	}
 
 	return nil
@@ -123,6 +138,8 @@ func syncServerMeta(ctx context.Context) error {
 		targets[i] = syncTarget{serverID: row.ServerID, statsSelfManaged: row.StatsSelfManaged}
 	}
 
+	var failed int
+
 	for _, target := range targets {
 		serverID := target.serverID
 		guildID, err := snowflake.Parse(serverID)
@@ -134,6 +151,7 @@ func syncServerMeta(ctx context.Context) error {
 		guild, err := dclient.Get().Rest().GetGuild(guildID, true)
 
 		if err != nil {
+			state.Logger.Warn("Server sync: failed to fetch guild, keeping last-known metadata", zap.Error(err), zap.String("server_id", serverID))
 			continue
 		}
 
@@ -158,7 +176,8 @@ func syncServerMeta(ctx context.Context) error {
 				DiscordNsfwLevel: int16(guild.NSFWLevel),
 				NsfwChannelCount: nsfwChannelCount,
 			}); err != nil {
-				return err
+				state.Logger.Error("Server sync: failed to save server metadata, skipping", zap.Error(err), zap.String("server_id", serverID))
+				failed++
 			}
 			continue
 		}
@@ -171,8 +190,13 @@ func syncServerMeta(ctx context.Context) error {
 			DiscordNsfwLevel: int16(guild.NSFWLevel),
 			NsfwChannelCount: nsfwChannelCount,
 		}); err != nil {
-			return err
+			state.Logger.Error("Server sync: failed to save server metadata, skipping", zap.Error(err), zap.String("server_id", serverID))
+			failed++
 		}
+	}
+
+	if failed > 0 {
+		return fmt.Errorf("meta sync failed to save %d of %d servers", failed, len(targets))
 	}
 
 	return nil

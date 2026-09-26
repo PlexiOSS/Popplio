@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-09-26
+
+### Added
+
+
+- `popplio/japi`: one japi.rest client (user, application) that always
+  sends `japi.key` and a User-Agent, maps japi's 400/404 and
+  "200 with only an error" responses to `ErrNotFound`, and distinguishes
+  429s.
+
+- `entity_assets` table (migration `20260926120000_entity_assets`) and
+  `PUT /{bots,servers,teams}/{id}/assets/{kind}`, which record the
+  content version of an avatar/banner the frontend just uploaded to its
+  CDN bucket. It needs the same `edit_bots`/`edit_servers`/`edit_team`
+  permission as the upload itself. Bot, server and team payloads (detail,
+  index/list, search, user profile, team owner) now include
+  `asset_versions` (`{ avatar?, banner? }`) so the frontend can render
+  cache-forever `?v=` URLs. A missing kind means unknown (uploaded
+  before this existed), not absent.
+
+### Fixed
+
+
+- Discord user lookups (dovewing's Discord platform) could hang behind
+  our own REST rate-limit bucket, because `GetUser` ignored its context.
+  The call is now bounded to 5s. If Discord fails for any reason other
+  than a definite "unknown user" (429, 5xx, timeout), the same public
+  profile is fetched from japi.rest instead. This keeps cache refreshes
+  succeeding during rate-limit bursts rather than leaving old avatars in
+  place.
+- JAPI updater: sends the configured key and a User-Agent, no longer
+  aborts the whole run when one bot's request or save fails (it stops
+  early only on a japi 429), and compares the bot name/avatar japi
+  returns against the dovewing cache. On a mismatch it clears and
+  re-resolves that bot, so a changed bot avatar is picked up when the
+  bot comes due for its (3-day) JAPI refresh even if its cached row
+  isn't due yet.
+
+- Avatar/username changes could take 8h+ to appear, or stay stale
+  indefinitely. This needs Keel's dovewing fix (see below), so the Keel
+  dependency has to be bumped for it to take effect.
+- Server sync (Infernoplex, every 30 min): one failed DB write aborted
+  the entire run, including every server after it and the whole
+  emoji/sticker pass. It also skipped servers it couldn't fetch without
+  logging anything. Per-server failures are now logged and skipped, the
+  emoji/sticker pass always runs, and the task reports how many servers
+  failed.
+
+### Keel (dovewing) fix, pending a Keel release
+
+- An expired cached user was served and then written back with
+  `last_updated = NOW()` while a background refresh ran. If that refresh
+  failed (easy to trigger with a Discord 429 during a list-page burst),
+  the stale avatar was locked in for another full 8h, and Redis cached
+  it for 8h too. Stale rows are no longer re-stamped. They're parked in
+  Redis for only `StaleRetryTime` (default 1 min) so a failed refresh is
+  retried, refreshes are deduped per user and run on the long-lived
+  context instead of the request context, and a fresh row's Redis TTL
+  now expires together with the row itself.
+
 ## [1.8.2] - 2026-09-03
 
 ### Fixed

@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"popplio/api"
 	"popplio/db"
+	"popplio/entityassets"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
@@ -74,12 +76,27 @@ func ResolveIndexBots(ctx context.Context, bots []types.IndexBot) error {
 		})
 	}
 
+	g.Go(func() error {
+		ids := make([]string, len(bots))
+		for i := range bots {
+			ids[i] = bots[i].BotID
+		}
+
+		versions, err := entityassets.GetMany(ctx, api.TargetTypeBot, ids)
+		if err != nil {
+			return fmt.Errorf("error getting asset versions: %w", err)
+		}
+
+		for i := range bots {
+			bots[i].AssetVersions = versions[bots[i].BotID]
+		}
+
+		return nil
+	})
+
 	return g.Wait()
 }
 
-// ResolveBotChangelogFeedEntries fills in `User` on each entry, one
-// dovewing lookup per distinct bot ID rather than per entry -- a page of
-// the feed routinely has several entries from the same bot.
 func ResolveBotChangelogFeedEntries(ctx context.Context, entries []types.BotChangelogFeedEntry) error {
 	uniqueBotIDs := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
@@ -116,10 +133,6 @@ func ResolveBotChangelogFeedEntries(ctx context.Context, entries []types.BotChan
 	return nil
 }
 
-// ResolveBotCommandSearchResults is ResolveBotChangelogFeedEntries'
-// counterpart for command search results -- same one-lookup-per-distinct-bot
-// batching, since a search page routinely surfaces several commands from
-// the same bot.
 func ResolveBotCommandSearchResults(ctx context.Context, results []types.BotCommandSearchResult) error {
 	uniqueBotIDs := make(map[string]struct{}, len(results))
 	for _, result := range results {

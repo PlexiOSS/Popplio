@@ -2,10 +2,10 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/db"
+	"popplio/japi"
 	"popplio/state"
 	ptypes "popplio/types"
 
@@ -20,6 +21,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+
+	"github.com/PlexiOSS/Keel/dovewing"
 )
 
 type unclaimNotification struct {
@@ -28,8 +31,6 @@ type unclaimNotification struct {
 	LastClaimed time.Time
 }
 
-// AutoUnclaim releases bots that have been claimed for over an hour without a
-// verdict, then announces each release.
 func AutoUnclaim(ctx context.Context) error {
 	tx, err := state.Pool.Begin(ctx)
 
@@ -312,8 +313,6 @@ func PremiumRemove(ctx context.Context) error {
 	return nil
 }
 
-// japiReqsMade and japiLastRefresh implement the self-imposed budget of 1800
-// requests per rolling hour.
 var (
 	japiReqsMade    atomic.Int64
 	japiLastRefresh atomic.Int64
@@ -321,37 +320,6 @@ var (
 
 const japiHourlyBudget = 1800
 
-type japiData struct {
-	Cached bool `json:"cached"`
-	Data   struct {
-		Message     *string `json:"message"`
-		Application *struct {
-			ID          string   `json:"id"`
-			BotPublic   bool     `json:"bot_public"`
-			Description string   `json:"description"`
-			Tags        []string `json:"tags"`
-		} `json:"application"`
-		Bot *struct {
-			ID                    string   `json:"id"`
-			ApproximateGuildCount *int32   `json:"approximate_guild_count"`
-			Username              *string  `json:"username"`
-			AvatarURL             *string  `json:"avatarURL"`
-			AvatarHash            *string  `json:"avatarHash"`
-			PublicFlagsArray      []string `json:"public_flags_array"`
-		} `json:"bot"`
-	} `json:"data"`
-}
-
-// JapiUpdater refreshes guild counts for up to ten stale approved/certified bots
-// per run.
-//
-// BUG FIXED (flagged): upstream computes the hour-reset check as
-// `LAST_REFRESH - now >= 3600` on unsigned integers, which underflows on every
-// call after the first and makes the budget reset erratically. The correct
-// comparison is used here.
-//
-// config.japi.key exists but upstream never sends it, and neither does this port
-// - see CONFORMANCE.md.
 func JapiUpdater(ctx context.Context) error {
 	now := time.Now().Unix()
 
@@ -373,34 +341,20 @@ func JapiUpdater(ctx context.Context) error {
 			return errors.New("Internal error: JAPI rate limit hit")
 		}
 
-		resp, err := httpGet(ctx, fmt.Sprintf("https://japi.rest/discord/v1/application/%s", botID))
+		app, err := japi.GetApplication(ctx, botID)
 
-		if err != nil {
+		if errors.Is(err, japi.ErrRateLimited) {
 			return err
 		}
 
-		if resp.StatusCode < 200 || resp.StatusCode > 299 {
-			resp.Body.Close()
-			state.Logger.Error("Failed to fetch bot from JAPI", zap.String("botID", botID))
+		if err != nil && !errors.Is(err, japi.ErrNotFound) {
+			state.Logger.Error("Failed to fetch bot from JAPI", zap.String("botID", botID), zap.Error(err))
 			continue
 		}
 
-		var data japiData
-
-		decodeErr := json.NewDecoder(resp.Body).Decode(&data)
-		resp.Body.Close()
-
-		if decodeErr != nil {
-			return decodeErr
-		}
-
-		// A nil ApproximateGuildCount used to be handed straight to the raw
-		// driver, which would try to write NULL into the NOT NULL servers
-		// column and fail the whole run -- fall back to just touching the
-		// update timestamp instead, same as the "no bot data at all" case.
-		if data.Data.Bot != nil && data.Data.Bot.ApproximateGuildCount != nil {
+		if app != nil && app.Bot != nil && app.Bot.ApproximateGuildCount != nil {
 			err = q.UpdateBotJapiServers(ctx, db.UpdateBotJapiServersParams{
-				Servers: *data.Data.Bot.ApproximateGuildCount,
+				Servers: *app.Bot.ApproximateGuildCount,
 				BotID:   botID,
 			})
 		} else {
@@ -408,9 +362,49 @@ func JapiUpdater(ctx context.Context) error {
 		}
 
 		if err != nil {
-			return err
+			state.Logger.Error("Failed to save JAPI update for bot", zap.String("botID", botID), zap.Error(err))
+			continue
+		}
+
+		if app != nil && app.Bot != nil {
+			refreshBotProfileIfChanged(ctx, botID, app.Bot.Username, app.Bot.Avatar)
 		}
 	}
 
 	return nil
+}
+
+var discordAvatarHashRe = regexp.MustCompile(`/avatars/[0-9]+/([A-Za-z0-9_]+)`)
+
+func refreshBotProfileIfChanged(ctx context.Context, botID, username string, avatarHash *string) {
+	cached, err := dovewing.GetUser(ctx, botID, state.DovewingPlatformDiscord)
+
+	if err != nil {
+		return
+	}
+
+	var cachedHash string
+	if m := discordAvatarHashRe.FindStringSubmatch(cached.Avatar); m != nil {
+		cachedHash = m[1]
+	}
+
+	var japiHash string
+	if avatarHash != nil {
+		japiHash = *avatarHash
+	}
+
+	if cached.Username == username && cachedHash == japiHash {
+		return
+	}
+
+	state.Logger.Info("Bot profile changed upstream, refreshing cached user", zap.String("botID", botID))
+
+	if _, err := dovewing.ClearUser(ctx, botID, state.DovewingPlatformDiscord, dovewing.ClearUserReq{}); err != nil {
+		state.Logger.Warn("Failed to clear cached bot user", zap.String("botID", botID), zap.Error(err))
+		return
+	}
+
+	if _, err := dovewing.GetUser(ctx, botID, state.DovewingPlatformDiscord); err != nil {
+		state.Logger.Warn("Failed to re-resolve bot user after clearing cache", zap.String("botID", botID), zap.Error(err))
+	}
 }

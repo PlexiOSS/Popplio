@@ -8,6 +8,7 @@ import (
 
 	"popplio/api"
 	"popplio/perms"
+	"popplio/routes/entityassets/put_entity_asset"
 	"popplio/routes/servers/endpoints/add_server"
 	"popplio/routes/servers/endpoints/get_all_servers"
 	"popplio/routes/servers/endpoints/get_flat_emojis"
@@ -36,6 +37,8 @@ func (b Router) Tag() (string, string) {
 }
 
 func (b Router) Routes(r *chi.Mux) {
+	put_entity_asset.Mount(r, api.TargetTypeServer, "/servers", "id", perms.EntityEditServers)
+
 	uapi.Route{
 		Pattern: "/servers/@all",
 		OpId:    "get_all_servers",

@@ -244,6 +244,14 @@ type DpMfa struct {
 	Validated pgtype.Bool `db:"validated" json:"validated"`
 }
 
+type EntityAsset struct {
+	TargetType string             `db:"target_type" json:"target_type"`
+	TargetID   string             `db:"target_id" json:"target_id"`
+	Kind       string             `db:"kind" json:"kind"`
+	Version    string             `db:"version" json:"version"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type EntityBadge struct {
 	Itag       pgtype.UUID        `db:"itag" json:"itag"`
 	TargetType string             `db:"target_type" json:"target_type"`

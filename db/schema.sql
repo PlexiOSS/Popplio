@@ -1221,6 +1221,21 @@ CREATE TABLE public.vanity (
 
 
 --
+-- Name: entity_assets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.entity_assets (
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    kind text NOT NULL,
+    version text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT entity_assets_target_type_check CHECK ((target_type = ANY (ARRAY['bot'::text, 'server'::text, 'team'::text]))),
+    CONSTRAINT entity_assets_kind_check CHECK ((kind = ANY (ARRAY['avatar'::text, 'banner'::text])))
+);
+
+
+--
 -- Name: vote_credit_tiers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1912,6 +1927,14 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.vanity
     ADD CONSTRAINT vanity_code_key UNIQUE (code);
+
+
+--
+-- Name: entity_assets entity_assets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entity_assets
+    ADD CONSTRAINT entity_assets_pkey PRIMARY KEY (target_type, target_id, kind);
 
 
 --

@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"strings"
 
+	"popplio/api"
 	"popplio/api/resp"
+	"popplio/entityassets"
 
 	"github.com/PlexiOSS/Keel/uuidutil"
 	"popplio/db"
@@ -256,6 +258,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			UpdatedAt:        teamRow.UpdatedAt.Time,
 		}
 
+		eto.AssetVersions, err = entityassets.Get(d.Context, api.TargetTypeTeam, eto.ID)
+
+		if err != nil {
+			return resp.ErrDetail("Error while getting team asset versions [db fetch]", err, zap.String("id", id), zap.String("target", target))
+		}
+
 		if r.URL.Query().Get("team_includes") != "" {
 			includesSplit := strings.Split(r.URL.Query().Get("team_includes"), ",")
 
@@ -293,6 +301,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	bot.UniqueClicks = int64(uniqueClicks)
+
+	bot.AssetVersions, err = entityassets.Get(d.Context, api.TargetTypeBot, bot.BotID)
+
+	if err != nil {
+		return resp.ErrDetail("Error while getting bot asset versions [db fetch]", err, zap.String("id", id), zap.String("target", target))
+	}
 
 	code, err := q.GetVanityCodeByItag(d.Context, bot.VanityRef)
 

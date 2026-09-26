@@ -15,6 +15,7 @@ import (
 
 	"popplio/config"
 	"popplio/db/dbmigrate"
+	"popplio/japi"
 	"popplio/seo"
 	"popplio/state/discord_dovewing"
 
@@ -178,6 +179,8 @@ func Setup() {
 	}()
 
 	Logger = snippets.CreateZap()
+
+	japi.SetKey(Config.JAPI.Key)
 
 	BaseDovewingState = dovewing.BaseState{
 		Pool:    Pool,

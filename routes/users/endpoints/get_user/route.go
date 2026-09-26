@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	teamAssets "popplio/routes/teams/assets"
 
 	"popplio/db"
 	botAssets "popplio/routes/bots/assets"
@@ -267,6 +268,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		user.UserTeams = append(user.UserTeams, eto)
+	}
+
+	if err := teamAssets.ResolveTeamAssetVersions(d.Context, user.UserTeams); err != nil {
+		return resp.Err("Error while getting team asset versions", err, zap.String("userID", user.ID))
 	}
 
 	packRows, err := q.GetUserPacksByOwner(d.Context, user.ID)

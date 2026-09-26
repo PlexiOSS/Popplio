@@ -7,6 +7,7 @@ import (
 
 	"popplio/api"
 	"popplio/perms"
+	"popplio/routes/entityassets/put_entity_asset"
 	"popplio/routes/teams/endpoints/add_team_member"
 	"popplio/routes/teams/endpoints/create_team"
 	"popplio/routes/teams/endpoints/delete_team"
@@ -32,6 +33,8 @@ func (b Router) Tag() (string, string) {
 }
 
 func (b Router) Routes(r *chi.Mux) {
+	put_entity_asset.Mount(r, api.TargetTypeTeam, "/teams", "tid", perms.EntityEditTeam)
+
 	uapi.Route{
 		Pattern: "/teams/meta/permissions",
 		OpId:    "get_team_permissions",

@@ -192,6 +192,11 @@ every exit path. Same status codes, same bodies.
 `now > LAST_REFRESH`, which is always after the first run, so the 1800-requests
 budget reset erratically. Implemented as `now - last >= 3600`.
 
+Later, deliberately diverging from upstream: requests go through `popplio/japi`,
+so they send `japi.key` and a User-Agent (upstream sent neither). One failed
+bot is logged and skipped instead of aborting the run, and a changed bot
+name/avatar in the response invalidates that bot's dovewing cache.
+
 **F3. `queue`'s previous-page handler underflowed (§11.3)** — `arcadia/bot/interactions.go`
 `if current == 0 { current = 0 } current -= 1` underflows on the first page.
 Both bounds are clamped.

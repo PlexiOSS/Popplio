@@ -219,6 +219,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 			teamAssets.ResolveIndexTeams(teams)
 
+			if err := teamAssets.ResolveTeamAssetVersions(d.Context, teams); err != nil {
+				return resp.Err("Failed to resolve team asset versions", err, zap.String("targetType", "team"))
+			}
+
 			sr.Teams = teams
 		case "pack":
 			sr.TargetTypes = append(sr.TargetTypes, "pack")
