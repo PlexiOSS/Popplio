@@ -68,6 +68,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(err.Error())
 	}
 
+	err = validators.ValidateBotInvite(payload.Invite)
+
+	if err != nil {
+		return resp.BadRequest(err.Error())
+	}
+
 	extraLinksJSON, err := json.Marshal(payload.ExtraLinks)
 
 	if err != nil {

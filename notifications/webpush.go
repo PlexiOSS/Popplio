@@ -74,6 +74,12 @@ func PushNotification(userId string, notif types.Alert) error {
 
 	var lastErr error
 
+	ttl := 30
+
+	if notif.PushTTL > 0 {
+		ttl = int(notif.PushTTL.Seconds())
+	}
+
 	for _, row := range subs {
 		notifId, auth, endpoint, p256dh := row.NotifID, row.Auth, row.Endpoint, row.P256dh
 
@@ -95,7 +101,7 @@ func PushNotification(userId string, notif types.Alert) error {
 			Subscriber:      "notifications@omniplex.gg",
 			VAPIDPublicKey:  state.Config.Notifications.VapidPublicKey,
 			VAPIDPrivateKey: state.Config.Notifications.VapidPrivateKey,
-			TTL:             30,
+			TTL:             ttl,
 		})
 
 		if err != nil {

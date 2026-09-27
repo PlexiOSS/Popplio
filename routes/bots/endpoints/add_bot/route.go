@@ -89,6 +89,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest(err.Error())
 	}
 
+	err = validators.ValidateBotInvite(payload.Invite)
+
+	if err != nil {
+		return resp.BadRequest(err.Error())
+	}
+
 	// Check if the bot is already in the database
 	q := db.New(state.Pool)
 

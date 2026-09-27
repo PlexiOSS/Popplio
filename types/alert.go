@@ -2,7 +2,11 @@
 
 package types
 
-import "github.com/jackc/pgx/v5/pgtype"
+import (
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
 
 type AlertType string
 
@@ -58,6 +62,7 @@ type Alert struct {
 	Priority  AlertPriority      `db:"priority" json:"priority" enum:"1,2,3"`
 	Category  AlertCategory      `db:"category" json:"category" validate:"required"`
 	NoSave    bool               `db:"-" json:"-"`
+	PushTTL   time.Duration      `db:"-" json:"-"`
 }
 
 type AlertList struct {

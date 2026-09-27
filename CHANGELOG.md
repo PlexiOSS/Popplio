@@ -5,10 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.1] - 2026-09-26
 
 ### Added
 
+- Bot submissions and bot settings updates are rejected with a 400 when the
+  invite link requests the Administrator permission. The check is done
+  locally by `validators.ValidateBotInvite`, with no network call, and only
+  applies to discord.com invite links that include a `permissions` value.
+  The error links to that invite's report on noadmin.info and to its
+  permission calculator. An invalid `permissions` value is also rejected.
+  Existing bots that already request Administrator have to fix their invite
+  the next time their settings are saved.
+- Migration `20260926150000_noadmin_staff_templates` rewrites the "Bot:
+  Requires Administrator Permission" denial template to link to
+  noadmin.info, and adds "Bot: Excessive Permissions" and "Bot: Broken
+  Invite Link" denial templates. The rewrite only applies if staff haven't
+  edited the template, and the inserts skip templates that already exist.
 - `GET /tickets/{id}` returns a `mentions` object resolving the Discord
   mentions in the ticket's messages and embeds: `users` (people mentioned who
   aren't already a message author, via dovewing, capped at 50), `roles`
@@ -17,6 +30,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caches roles and channels (`cache.FlagRoles | cache.FlagChannels`; both
   already arrive with the existing `IntentGuilds`). IDs that can't be
   resolved are left out, so clients fall back to a generic label.
+
+### Changed
+
+- Review verdict notifications (approve, deny and unverify, for bots and
+  servers) now name the bot or server in the title, for example "MyBot was
+  denied", instead of a generic "Bot Denied". Approvals include the
+  reviewer's feedback, which was previously dropped. Denials add a pointer
+  to resubmit from the dashboard. They are sent at medium priority, and
+  `alert_data` carries `target_type`, `target_id`, `verdict` and `reason`.
+  The six copies of this code are now one helper in
+  `arcadia/rpc/verdict_notify.go`.
+- Web push TTL can be set per alert with the new `Alert.PushTTL` field
+  (not serialised). Verdict notifications use 7 days, so a device that is
+  offline when the decision is made still receives it. Every other alert
+  keeps the previous 30 second TTL.
 
 ### Fixed
 

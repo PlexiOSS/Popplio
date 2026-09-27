@@ -10,11 +10,9 @@ import (
 	"popplio/arcadia/types"
 	"popplio/db"
 	"popplio/state"
-	ptypes "popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -94,13 +92,7 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		return Success{}, err
 	}
 
-	impls.NotifyOwners(owners.All(), ptypes.Alert{
-		Type:     ptypes.AlertTypeSuccess,
-		Title:    "Bot Approved!",
-		Message:  "Your bot has been approved and is now listed.",
-		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
-		Category: ptypes.AlertCategoryBotServerReviews,
-	})
+	notifyVerdict(ctx, owners.All(), types.TargetTypeBot, m.TargetID, verdictApproved, m.Reason)
 
 	managers, err := impls.GetEntityManagers(ctx, types.TargetTypeBot, m.TargetID)
 
@@ -217,13 +209,7 @@ func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		return Success{}, err
 	}
 
-	impls.NotifyOwners(owners.All(), ptypes.Alert{
-		Type:     ptypes.AlertTypeSuccess,
-		Title:    "Server Approved!",
-		Message:  "Your server has been approved and is now listed.",
-		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
-		Category: ptypes.AlertCategoryBotServerReviews,
-	})
+	notifyVerdict(ctx, owners.All(), types.TargetTypeServer, m.TargetID, verdictApproved, m.Reason)
 
 	return NoContent(), nil
 }
@@ -292,13 +278,7 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		return Success{}, err
 	}
 
-	impls.NotifyOwners(owners.All(), ptypes.Alert{
-		Type:     ptypes.AlertTypeError,
-		Title:    "Bot Denied",
-		Message:  m.Reason,
-		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
-		Category: ptypes.AlertCategoryBotServerReviews,
-	})
+	notifyVerdict(ctx, owners.All(), types.TargetTypeBot, m.TargetID, verdictDenied, m.Reason)
 
 	return NoContent(), nil
 }
@@ -362,13 +342,7 @@ func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		return Success{}, err
 	}
 
-	impls.NotifyOwners(owners.All(), ptypes.Alert{
-		Type:     ptypes.AlertTypeError,
-		Title:    "Server Denied",
-		Message:  m.Reason,
-		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
-		Category: ptypes.AlertCategoryBotServerReviews,
-	})
+	notifyVerdict(ctx, owners.All(), types.TargetTypeServer, m.TargetID, verdictDenied, m.Reason)
 
 	return NoContent(), nil
 }
@@ -419,13 +393,7 @@ func unverify(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success,
 		return Success{}, err
 	}
 
-	impls.NotifyOwners(owners.All(), ptypes.Alert{
-		Type:     ptypes.AlertTypeWarning,
-		Title:    "Bot Unverified",
-		Message:  "Your bot has been sent back for further review. " + m.Reason,
-		URL:      pgtype.Text{String: fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
-		Category: ptypes.AlertCategoryBotServerReviews,
-	})
+	notifyVerdict(ctx, owners.All(), types.TargetTypeBot, m.TargetID, verdictUnverified, m.Reason)
 
 	return NoContent(), nil
 }
@@ -472,13 +440,7 @@ func unverifyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Su
 		return Success{}, err
 	}
 
-	impls.NotifyOwners(owners.All(), ptypes.Alert{
-		Type:     ptypes.AlertTypeWarning,
-		Title:    "Server Unverified",
-		Message:  "Your server has been sent back for further review. " + m.Reason,
-		URL:      pgtype.Text{String: fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID), Valid: true},
-		Category: ptypes.AlertCategoryBotServerReviews,
-	})
+	notifyVerdict(ctx, owners.All(), types.TargetTypeServer, m.TargetID, verdictUnverified, m.Reason)
 
 	return NoContent(), nil
 }
