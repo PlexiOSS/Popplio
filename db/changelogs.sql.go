@@ -32,7 +32,7 @@ func (q *Queries) DeleteChangelogByItag(ctx context.Context, itag string) error 
 }
 
 const getChangelogList = `-- name: GetChangelogList :many
-SELECT itag, project, version, added, updated, fixed, removed, extra_description, prerelease, created_by, created_at
+SELECT itag, project, version, added, updated, fixed, security, removed, extra_description, prerelease, created_by, created_at
 FROM changelogs
 WHERE published = true AND ($1::text IS NULL OR project = $1)
 ORDER BY created_at DESC
@@ -45,6 +45,7 @@ type GetChangelogListRow struct {
 	Added            []string           `db:"added" json:"added"`
 	Updated          []string           `db:"updated" json:"updated"`
 	Fixed            []string           `db:"fixed" json:"fixed"`
+	Security         []string           `db:"security" json:"security"`
 	Removed          []string           `db:"removed" json:"removed"`
 	ExtraDescription string             `db:"extra_description" json:"extra_description"`
 	Prerelease       bool               `db:"prerelease" json:"prerelease"`
@@ -68,6 +69,7 @@ func (q *Queries) GetChangelogList(ctx context.Context, project pgtype.Text) ([]
 			&i.Added,
 			&i.Updated,
 			&i.Fixed,
+			&i.Security,
 			&i.Removed,
 			&i.ExtraDescription,
 			&i.Prerelease,
@@ -96,8 +98,8 @@ func (q *Queries) GetChangelogPublishedByItag(ctx context.Context, itag string) 
 }
 
 const insertChangelogEntry = `-- name: InsertChangelogEntry :exec
-INSERT INTO changelogs (project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::timestamptz, NOW()))
+INSERT INTO changelogs (project, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, NOW()))
 `
 
 type InsertChangelogEntryParams struct {
@@ -106,6 +108,7 @@ type InsertChangelogEntryParams struct {
 	Added            []string           `db:"added" json:"added"`
 	Updated          []string           `db:"updated" json:"updated"`
 	Fixed            []string           `db:"fixed" json:"fixed"`
+	Security         []string           `db:"security" json:"security"`
 	Removed          []string           `db:"removed" json:"removed"`
 	ExtraDescription string             `db:"extra_description" json:"extra_description"`
 	Prerelease       bool               `db:"prerelease" json:"prerelease"`
@@ -121,6 +124,7 @@ func (q *Queries) InsertChangelogEntry(ctx context.Context, arg InsertChangelogE
 		arg.Added,
 		arg.Updated,
 		arg.Fixed,
+		arg.Security,
 		arg.Removed,
 		arg.ExtraDescription,
 		arg.Prerelease,
@@ -133,7 +137,7 @@ func (q *Queries) InsertChangelogEntry(ctx context.Context, arg InsertChangelogE
 
 const listChangelogEntries = `-- name: ListChangelogEntries :many
 
-SELECT itag, project, version, added, updated, fixed, removed, extra_description, prerelease, published, created_by, created_at
+SELECT itag, project, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at
 FROM changelogs ORDER BY created_at DESC
 `
 
@@ -144,6 +148,7 @@ type ListChangelogEntriesRow struct {
 	Added            []string           `db:"added" json:"added"`
 	Updated          []string           `db:"updated" json:"updated"`
 	Fixed            []string           `db:"fixed" json:"fixed"`
+	Security         []string           `db:"security" json:"security"`
 	Removed          []string           `db:"removed" json:"removed"`
 	ExtraDescription string             `db:"extra_description" json:"extra_description"`
 	Prerelease       bool               `db:"prerelease" json:"prerelease"`
@@ -170,6 +175,7 @@ func (q *Queries) ListChangelogEntries(ctx context.Context) ([]ListChangelogEntr
 			&i.Added,
 			&i.Updated,
 			&i.Fixed,
+			&i.Security,
 			&i.Removed,
 			&i.ExtraDescription,
 			&i.Prerelease,
@@ -188,7 +194,7 @@ func (q *Queries) ListChangelogEntries(ctx context.Context) ([]ListChangelogEntr
 }
 
 const updateChangelogEntry = `-- name: UpdateChangelogEntry :exec
-UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, removed = $7, extra_description = $8, prerelease = $9, published = $10, created_at = COALESCE($11::timestamptz, created_at)
+UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, security = $7, removed = $8, extra_description = $9, prerelease = $10, published = $11, created_at = COALESCE($12::timestamptz, created_at)
 WHERE itag = $1
 `
 
@@ -199,6 +205,7 @@ type UpdateChangelogEntryParams struct {
 	Added            []string           `db:"added" json:"added"`
 	Updated          []string           `db:"updated" json:"updated"`
 	Fixed            []string           `db:"fixed" json:"fixed"`
+	Security         []string           `db:"security" json:"security"`
 	Removed          []string           `db:"removed" json:"removed"`
 	ExtraDescription string             `db:"extra_description" json:"extra_description"`
 	Prerelease       bool               `db:"prerelease" json:"prerelease"`
@@ -214,6 +221,7 @@ func (q *Queries) UpdateChangelogEntry(ctx context.Context, arg UpdateChangelogE
 		arg.Added,
 		arg.Updated,
 		arg.Fixed,
+		arg.Security,
 		arg.Removed,
 		arg.ExtraDescription,
 		arg.Prerelease,

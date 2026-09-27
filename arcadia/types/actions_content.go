@@ -125,6 +125,7 @@ type ChangelogDraft struct {
 	Updated          []string `json:"updated"`
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
+	Security         []string `json:"security"`
 	ExtraDescription string   `json:"extra_description"`
 }
 
@@ -140,6 +141,7 @@ type ChangelogCreateEntry struct {
 	Updated          []string `json:"updated"`
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
+	Security         []string `json:"security"`
 	// CreatedAt lets staff backfill a release's real date instead of the
 	// moment the entry happened to be drafted -- nil falls back to NOW().
 	CreatedAt *time.Time `json:"created_at"`
@@ -156,6 +158,7 @@ type ChangelogUpdateEntry struct {
 	Updated          []string `json:"updated"`
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
+	Security         []string `json:"security"`
 	// CreatedAt, like on Create, is nil to leave the entry's existing date
 	// untouched -- an update never resets it to "now" on its own.
 	CreatedAt *time.Time `json:"created_at"`
@@ -221,6 +224,7 @@ type ChangelogEntry struct {
 	Updated          []string  `json:"updated"`
 	Fixed            []string  `json:"fixed"`
 	Removed          []string  `json:"removed"`
+	Security         []string  `json:"security"`
 	CreatedBy        string    `json:"created_by"`
 	CreatedAt        Timestamp `json:"created_at"`
 	ExtraDescription string    `json:"extra_description"`

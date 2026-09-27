@@ -30,6 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caches roles and channels (`cache.FlagRoles | cache.FlagChannels`; both
   already arrive with the existing `IntentGuilds`). IDs that can't be
   resolved are left out, so clients fall back to a generic label.
+- Changelog entries have a `security` list alongside added, updated, fixed
+  and removed (migration `20260926160000_changelog_security`, `text[]`,
+  defaults to empty). It is returned by `GET /changelogs/@all`, accepted and
+  returned by the panel's changelog create, update and list actions, posted
+  as a "Security" field in the Discord release announcement, and produced
+  by the changelog generator, which is told to describe security fixes
+  without explaining how to exploit them. Commit titles starting with
+  `security` or `sec:` go to Security in the fallback draft.
 
 ### Changed
 

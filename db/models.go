@@ -235,6 +235,7 @@ type Changelog struct {
 	Published        bool               `db:"published" json:"published"`
 	CreatedBy        string             `db:"created_by" json:"created_by"`
 	Fixed            []string           `db:"fixed" json:"fixed"`
+	Security         []string           `db:"security" json:"security"`
 }
 
 type DpMfa struct {

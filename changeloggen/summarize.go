@@ -20,6 +20,7 @@ type Draft struct {
 	Updated          []string `json:"updated"`
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
+	Security         []string `json:"security"`
 	ExtraDescription string   `json:"extra_description"`
 }
 
@@ -50,15 +51,15 @@ type chatResponse struct {
 	} `json:"choices"`
 }
 
-const prSystemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. Given a list of merged pull request titles/descriptions and overall diff stats, categorize the changes into Added, Updated, Fixed, and Removed. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention PR numbers, internal file names, or implementation details unless they're the actual user-facing feature. Skip purely internal changes (refactors, test additions, CI/tooling, dependency bumps) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
+const prSystemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. Given a list of merged pull request titles/descriptions and overall diff stats, categorize the changes into Added, Updated, Fixed, Removed, and Security. Security is for fixes to vulnerabilities, data exposure, or access control, described without giving away how to exploit them. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention PR numbers, internal file names, or implementation details unless they're the actual user-facing feature. Skip purely internal changes (refactors, test additions, CI/tooling, dependency bumps) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
 
 Respond with ONLY a JSON object of this exact shape:
-{"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "extra_description": "..."}`
+{"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "security": ["..."], "extra_description": "..."}`
 
-const diffSystemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. This repository pushes commits straight to its branch instead of merging pull requests, so there are no PR titles to summarize -- instead you're given the raw commit subjects (often terse or unhelpful, e.g. "fix some stuff") AND the actual code diff for each changed file. Read the diff itself to figure out what really changed; do not just rephrase the commit messages, since they're often misleading or too vague to use directly. Categorize what you find into Added, Updated, Fixed, and Removed. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention file names, function names, or line numbers unless that's genuinely the most useful way to describe a developer-facing library change. Skip purely internal changes (formatting, comments, tests, CI/tooling) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
+const diffSystemPrompt = `You are writing a changelog entry for end users of a software product -- not developers. This repository pushes commits straight to its branch instead of merging pull requests, so there are no PR titles to summarize -- instead you're given the raw commit subjects (often terse or unhelpful, e.g. "fix some stuff") AND the actual code diff for each changed file. Read the diff itself to figure out what really changed; do not just rephrase the commit messages, since they're often misleading or too vague to use directly. Categorize what you find into Added, Updated, Fixed, Removed, and Security. Security is for fixes to vulnerabilities, data exposure, or access control, described without giving away how to exploit them. Each bullet should be one short, plain-language sentence describing what changed from a USER's perspective -- never mention file names, function names, or line numbers unless that's genuinely the most useful way to describe a developer-facing library change. Skip purely internal changes (formatting, comments, tests, CI/tooling) entirely unless they fix a user-visible bug. Also write a one-sentence "extra_description" summarizing the release's overall theme, or an empty string if there isn't one.
 
 Respond with ONLY a JSON object of this exact shape:
-{"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "extra_description": "..."}`
+{"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "security": ["..."], "extra_description": "..."}`
 
 func Summarize(ctx context.Context, cmp CompareResult) (Draft, error) {
 	apiKey := state.Config.Meta.OpenAIAPIKey
@@ -228,6 +229,8 @@ func heuristicDraftFromTitles(titles []string) Draft {
 		lower := strings.ToLower(title)
 
 		switch {
+		case hasAnyPrefix(lower, "security", "sec:", "sec("):
+			draft.Security = append(draft.Security, title)
 		case hasAnyPrefix(lower, "fix", "bug"):
 			draft.Fixed = append(draft.Fixed, title)
 		case hasAnyPrefix(lower, "feat", "add", "new"):

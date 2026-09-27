@@ -45,7 +45,7 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 		return
 	}
 
-	fields := make([]discord.EmbedField, 0, 4)
+	fields := make([]discord.EmbedField, 0, 5)
 
 	addField := func(name string, items []string) {
 		if len(items) == 0 {
@@ -61,6 +61,7 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 	addField("Updated", entry.Updated)
 	addField("Fixed", entry.Fixed)
 	addField("Removed", entry.Removed)
+	addField("Security", entry.Security)
 
 	var content string
 	if entry.Project == "omniplex" {

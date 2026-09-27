@@ -444,6 +444,7 @@ CREATE TABLE public.changelogs (
     published boolean DEFAULT false NOT NULL,
     created_by text DEFAULT 'unknown'::text NOT NULL,
     fixed text[] DEFAULT '{}'::text[] NOT NULL,
+    security text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT changelogs_project_check CHECK ((project = ANY (ARRAY['popplio'::text, 'omniplex'::text, 'keel'::text])))
 );
 

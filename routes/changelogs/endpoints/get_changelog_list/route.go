@@ -61,6 +61,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			Updated:          row.Updated,
 			Fixed:            row.Fixed,
 			Removed:          row.Removed,
+			Security:         row.Security,
 			ExtraDescription: row.ExtraDescription,
 			Prerelease:       row.Prerelease,
 			CreatedBy:        row.CreatedBy,

@@ -15,6 +15,7 @@ type ChangelogEntry struct {
 	Updated          []string                `db:"updated" json:"updated" description:"What was changed in this version"`
 	Fixed            []string                `db:"fixed" json:"fixed" description:"What was fixed in this version"`
 	Removed          []string                `db:"removed" json:"removed" description:"What was removed in this version"`
+	Security         []string                `db:"security" json:"security" description:"Security fixes in this version"`
 	ExtraDescription string                  `db:"extra_description" json:"extra_description" description:"Additional freeform notes about this release"`
 	Prerelease       bool                    `db:"prerelease" json:"prerelease" description:"Whether this is a prerelease"`
 	CreatedBy        string                  `db:"created_by" json:"-"` // Must be parsed internally

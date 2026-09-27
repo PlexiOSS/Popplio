@@ -278,6 +278,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 				Updated:          types.NonNilStrings(row.Updated),
 				Fixed:            types.NonNilStrings(row.Fixed),
 				Removed:          types.NonNilStrings(row.Removed),
+				Security:         types.NonNilStrings(row.Security),
 				ExtraDescription: row.ExtraDescription,
 				Prerelease:       row.Prerelease,
 				Published:        row.Published,
@@ -304,7 +305,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			createdAt = pgtype.Timestamptz{Time: *entry.CreatedAt, Valid: true}
 		}
 
-		// added/updated/fixed/removed are all NOT NULL columns; a client that
+		// added/updated/fixed/removed/security are all NOT NULL columns; a client that
 		// omits one of these keys leaves the Go slice nil, which pgx encodes
 		// as SQL NULL rather than an empty array.
 		err := queries.InsertChangelogEntry(ctx, db.InsertChangelogEntryParams{
@@ -314,6 +315,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			Updated:          types.NonNilStrings(entry.Updated),
 			Fixed:            types.NonNilStrings(entry.Fixed),
 			Removed:          types.NonNilStrings(entry.Removed),
+			Security:         types.NonNilStrings(entry.Security),
 			ExtraDescription: entry.ExtraDescription,
 			Prerelease:       entry.Prerelease,
 			Published:        entry.Published,
@@ -373,6 +375,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			Updated:          types.NonNilStrings(entry.Updated),
 			Fixed:            types.NonNilStrings(entry.Fixed),
 			Removed:          types.NonNilStrings(entry.Removed),
+			Security:         types.NonNilStrings(entry.Security),
 			ExtraDescription: entry.ExtraDescription,
 			Prerelease:       entry.Prerelease,
 			Published:        entry.Published,
@@ -391,6 +394,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 				Updated:          entry.Updated,
 				Fixed:            entry.Fixed,
 				Removed:          entry.Removed,
+				Security:         entry.Security,
 				ExtraDescription: entry.ExtraDescription,
 				Prerelease:       entry.Prerelease,
 				Published:        entry.Published,
@@ -458,6 +462,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			Updated:          draft.Updated,
 			Fixed:            draft.Fixed,
 			Removed:          draft.Removed,
+			Security:         types.NonNilStrings(draft.Security),
 			ExtraDescription: draft.ExtraDescription,
 		}), nil
 	default:
