@@ -52,6 +52,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	userId, err := q.GetTicketOwner(d.Context, ticketId)
 
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uapi.DefaultResponse(http.StatusNotFound)
+	}
+
 	if err != nil {
 		return resp.Err("Error getting ticket", err, zap.String("ticket_id", ticketId))
 	}
@@ -131,6 +135,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 		ticket.Messages[i].Timestamp = id.Time()
 	}
+
+	ticket.Mentions = resolveMentions(d.Context, &ticket)
 
 	return uapi.HttpResponse{
 		Json: ticket,

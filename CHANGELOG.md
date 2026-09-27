@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /tickets/{id}` returns a `mentions` object resolving the Discord
+  mentions in the ticket's messages and embeds: `users` (people mentioned who
+  aren't already a message author, via dovewing, capped at 50), `roles`
+  (name and colour) and `channels` (name). Roles and channels come from the
+  gateway cache for the main, staff and testing servers, which now also
+  caches roles and channels (`cache.FlagRoles | cache.FlagChannels`; both
+  already arrive with the existing `IntentGuilds`). IDs that can't be
+  resolved are left out, so clients fall back to a generic label.
+
 ### Fixed
 
+- `GET /tickets/{id}` returned a 500 instead of a 404 for a ticket ID that
+  doesn't exist, because the ownership lookup ran before the not-found check.
 - Pending, claimed, under-review and denied bots and servers were publicly
   readable. `GET /bots/{id}`, `GET /servers/{id}` and their `/seo`
   endpoints now 404 for them unless the caller is the entity's own token,
@@ -44,6 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   network error, 429 or 5xx it returns `ErrUnavailable` immediately for
   60s instead of making every caller wait out the timeout again, and the
   JAPI updater stops its run early when that happens.
+
+### Security
+
+- Ticket responses (`GET /tickets/{id}`, `GET /users/{id}/tickets`,
+  `GET /staff/tickets`) no longer include `enc_key`. It is a per-ticket key
+  left over from the old Discord-channel ticket system, set only on legacy
+  imported tickets and read by nothing, so there was no reason to send it to
+  clients. The column and `db` tag are unchanged.
 
 ## [1.9.0] - 2026-09-26
 

@@ -22,7 +22,19 @@ type Ticket struct {
 	CloseUser     *dovetypes.PlatformUser `db:"-" json:"close_user"`
 	Open          bool                    `db:"open" json:"open"`
 	CreatedAt     time.Time               `db:"created_at" json:"created_at"`
-	EncKey        pgtype.Text             `db:"enc_key" json:"enc_key"`
+	EncKey        pgtype.Text             `db:"enc_key" json:"-"`
+	Mentions      *TicketMentions         `db:"-" json:"mentions,omitempty"`
+}
+
+type TicketMentions struct {
+	Users    map[string]*dovetypes.PlatformUser `json:"users"`
+	Roles    map[string]TicketMentionRole       `json:"roles"`
+	Channels map[string]string                  `json:"channels"`
+}
+
+type TicketMentionRole struct {
+	Name  string `json:"name"`
+	Color int    `json:"color"`
 }
 
 type Message struct {

@@ -151,7 +151,7 @@ func Setup() {
 			),
 		),
 		bot.WithCacheConfigOpts(
-			cache.WithCaches(cache.FlagGuilds|cache.FlagMembers|cache.FlagPresences),
+			cache.WithCaches(cache.FlagGuilds|cache.FlagMembers|cache.FlagPresences|cache.FlagRoles|cache.FlagChannels),
 		),
 		bot.WithEventListeners(&events.ListenerAdapter{
 			OnGuildReady: func(event *events.GuildReady) {
