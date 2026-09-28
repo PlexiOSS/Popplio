@@ -38,6 +38,13 @@ func All() []Task {
 			Run:         ModerationScan,
 		},
 		{
+			Name:        "bot_presence_sync",
+			Description: "Fetching listed bots' Discord presence from japi.rest for bots our own gateway can't see",
+			Enabled:     true,
+			Interval:    5 * time.Minute,
+			Run:         BotPresenceSync,
+		},
+		{
 			Name:        "user_cache_refresh",
 			Description: "Refreshing cached Discord users (bots first, then listing owners/team members) before their cache entries expire",
 			Enabled:     true,

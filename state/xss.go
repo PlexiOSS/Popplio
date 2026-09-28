@@ -14,12 +14,12 @@ var xssPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)javascript\s*:`),
 	regexp.MustCompile(`(?i)vbscript\s*:`),
 	regexp.MustCompile(`(?i)data\s*:\s*text/html`),
-	regexp.MustCompile(`(?i)on[a-z]+\s*=\s*["']?`),
+	regexp.MustCompile(`(?i)<[a-z][^>]*[\s/"']on[a-z]+\s*=`),
 	regexp.MustCompile(`(?i)<\s*svg\b`),
 	regexp.MustCompile(`(?i)<\s*object\b`),
 	regexp.MustCompile(`(?i)<\s*embed\b`),
 	regexp.MustCompile(`(?i)<\s*meta\b`),
-	regexp.MustCompile(`(?i)expression\s*\(`),
+	regexp.MustCompile(`(?i)(style\s*=\s*["']?[^"'>]*|<style\b[^>]*>[^<]*)expression\s*\(`),
 }
 
 func ContainsSuspiciousMarkup(text string) bool {

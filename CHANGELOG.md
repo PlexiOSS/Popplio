@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Bot presence from japi.rest. A new `bot_presence_sync` task (every 5
+  min) fetches the Discord status of listed bots that our own gateway
+  can't see, 100 per run and 4 at a time, and keeps it in Redis for 15
+  min (bots japi can't see are marked unknown for an hour). Bot status
+  now resolves as: the owner's posted status, then live gateway presence,
+  then japi presence, then "online" if stats were posted in the last 24h,
+  otherwise offline, so bots no longer depend on their owner posting
+  stats to show as online. Uptime checks use japi presence too, so bots
+  outside our main server are no longer recorded as always offline.
+
+### Fixed
+
+- The `noxss` validator's event-handler check matched any `on<letters>=`
+  anywhere in the text, so an ordinary bot invite link
+  (`...applications.commands&permissions=...`) made a long description
+  "suspicious" and blocked every settings save for that bot. It now only
+  matches an `on*=` attribute inside an HTML tag.
+- The same validator's CSS `expression(` check matched ordinary text like
+  "a regular expression (regex)". It now only matches inside a `style`
+  attribute or a `<style>` block, the only places it can execute.
+
 ## [1.9.1] - 2026-09-26
 
 ### Added

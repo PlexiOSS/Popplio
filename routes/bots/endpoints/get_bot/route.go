@@ -13,6 +13,7 @@ import (
 
 	"popplio/api"
 	"popplio/api/resp"
+	"popplio/botpresence"
 	"popplio/entityassets"
 	"popplio/listing"
 
@@ -299,7 +300,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	bot.User = botUser
-	botassets.ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost)
+	botassets.ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost, botpresence.Get(d.Context, bot.BotID))
 
 	uniqueClicks, err := q.GetBotUniqueClicksCount(d.Context, bot.BotID)
 

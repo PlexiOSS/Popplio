@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"popplio/botpresence"
 	"popplio/db"
 	"popplio/state"
 
@@ -34,6 +35,13 @@ func BotUptimeCheck(ctx context.Context) error {
 		}
 
 		online := isOnline(mainGuild, userID)
+
+		if !online {
+			switch botpresence.Get(ctx, botID) {
+			case "online", "idle", "dnd":
+				online = true
+			}
+		}
 
 		err = q.RecordBotUptimeCheck(ctx, db.RecordBotUptimeCheckParams{
 			Online: online,

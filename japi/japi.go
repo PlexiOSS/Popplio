@@ -176,3 +176,22 @@ func get(ctx context.Context, path, id string, out any) error {
 
 	return nil
 }
+
+type Presence struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+}
+
+func GetPresence(ctx context.Context, id string) (*Presence, error) {
+	var out envelope[Presence]
+
+	if err := get(ctx, "/user/"+id+"/presence", id, &out); err != nil {
+		return nil, err
+	}
+
+	if out.Data.Status == "" {
+		return nil, ErrNotFound
+	}
+
+	return &out.Data, nil
+}
