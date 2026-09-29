@@ -193,6 +193,10 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 			if urlutil.DifferentHost(req.Header.Get("Origin"), state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
+				if r.AuthOptional {
+					return uapi.AuthData{}, uapi.HttpResponse{}, true
+				}
+
 				return uapi.AuthData{}, uapi.HttpResponse{
 					Status: http.StatusForbidden,
 					Json:   types.ApiError{Message: "This environment is limited to Bug Hunters."},
@@ -295,6 +299,10 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 			}
 
 			if authData.Banned && auth.AllowedScope != "ban_exempt" {
+				if r.AuthOptional {
+					return uapi.AuthData{}, uapi.HttpResponse{}, true
+				}
+
 				return uapi.AuthData{}, uapi.HttpResponse{
 					Status: http.StatusForbidden,
 					Json:   types.ApiError{Message: "You are banned from the list. If you think this is a mistake, please contact support."},

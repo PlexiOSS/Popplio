@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Optional-auth routes (`GET /bots/{id}`, `/servers/{id}`, `/teams/{id}`,
+  `/users/{id}`) rejected valid user sessions that failed the "limited to
+  Bug Hunters" Origin check or belonged to a banned user, with a 403
+  instead of serving the public response. Server-rendered pages send no
+  `Origin`, so every logged-in regular user got "Bot not found" on
+  approved bots. Those sessions are now treated as anonymous on
+  optional-auth routes.
+
 - The `noxss` validator's event-handler check matched any `on<letters>=`
   anywhere in the text, so an ordinary bot invite link
   (`...applications.commands&permissions=...`) made a long description
