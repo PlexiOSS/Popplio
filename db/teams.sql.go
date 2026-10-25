@@ -697,18 +697,34 @@ func (q *Queries) PromoteTeamMemberToOwner(ctx context.Context, arg PromoteTeamM
 }
 
 const searchTeamsPublic = `-- name: SearchTeamsPublic :many
-SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned, approximate_votes
+SELECT teams.id, teams.name, COALESCE(teams.short, '') AS short, teams.tags, teams.nsfw, teams.vote_banned, teams.approximate_votes,
+    COUNT(*) OVER ()::bigint AS total_count
 FROM teams
-WHERE ($1::text = '' OR id::text = $1::text OR name ILIKE $2::text)
+WHERE (
+    $1::text = ''
+    OR teams.id::text = $1::text
+    OR teams.name ILIKE $2::text
+    OR COALESCE(teams.short, '') ILIKE $2::text
+)
 AND (
     cardinality($3::text[]) = 0
-    OR ($4::text = '@>' AND tags @> $3::text[])
-    OR ($4::text = '&&' AND tags && $3::text[])
+    OR ($4::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(teams.tags) t) @> $3::text[])
+    OR ($4::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(teams.tags) t) && $3::text[])
 )
-AND ($5::int = 0 OR approximate_votes >= $5::int)
-AND ($6::int = 0 OR approximate_votes <= $6::int)
-ORDER BY approximate_votes DESC, created_at DESC
-LIMIT 12
+AND ($5::int = 0 OR teams.approximate_votes >= $5::int)
+AND ($6::int = 0 OR teams.approximate_votes <= $6::int)
+ORDER BY
+    CASE
+        WHEN $1::text = '' THEN 0
+        WHEN teams.id::text = $1::text THEN 100
+        WHEN lower(teams.name) = $1::text THEN 90
+        WHEN teams.name ILIKE $7::text THEN 70
+        WHEN teams.name ILIKE $2::text THEN 50
+        ELSE 10
+    END DESC,
+    teams.approximate_votes DESC,
+    teams.created_at DESC
+LIMIT $9 OFFSET $8
 `
 
 type SearchTeamsPublicParams struct {
@@ -718,6 +734,9 @@ type SearchTeamsPublicParams struct {
 	TagMode   string   `db:"tag_mode" json:"tag_mode"`
 	VotesFrom int32    `db:"votes_from" json:"votes_from"`
 	VotesTo   int32    `db:"votes_to" json:"votes_to"`
+	Prefix    string   `db:"prefix" json:"prefix"`
+	Off       int32    `db:"off" json:"off"`
+	Lim       int32    `db:"lim" json:"lim"`
 }
 
 type SearchTeamsPublicRow struct {
@@ -728,6 +747,7 @@ type SearchTeamsPublicRow struct {
 	Nsfw             bool     `db:"nsfw" json:"nsfw"`
 	VoteBanned       bool     `db:"vote_banned" json:"vote_banned"`
 	ApproximateVotes int32    `db:"approximate_votes" json:"approximate_votes"`
+	TotalCount       int64    `db:"total_count" json:"total_count"`
 }
 
 func (q *Queries) SearchTeamsPublic(ctx context.Context, arg SearchTeamsPublicParams) ([]SearchTeamsPublicRow, error) {
@@ -738,6 +758,9 @@ func (q *Queries) SearchTeamsPublic(ctx context.Context, arg SearchTeamsPublicPa
 		arg.TagMode,
 		arg.VotesFrom,
 		arg.VotesTo,
+		arg.Prefix,
+		arg.Off,
+		arg.Lim,
 	)
 	if err != nil {
 		return nil, err
@@ -754,6 +777,7 @@ func (q *Queries) SearchTeamsPublic(ctx context.Context, arg SearchTeamsPublicPa
 			&i.Nsfw,
 			&i.VoteBanned,
 			&i.ApproximateVotes,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

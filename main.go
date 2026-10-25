@@ -139,7 +139,7 @@ func main() {
 		Info: docs.Info{
 			Title:          "Omniplex API",
 			TermsOfService: "https://omniplex.gg/legal/terms",
-			Version:        "1.10.0",
+			Version:        "1.11.0",
 			Description:    "RESTful API and Backend Services for Omniplex",
 			Contact: docs.Contact{
 				Name: "Omniplex Support",

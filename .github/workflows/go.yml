@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "staging", "production", "develop" ]
 
+permissions:
+  contents: read
+
 jobs:
   build-and-vet:
     name: ${{ matrix.module.name }}

@@ -142,6 +142,7 @@ type ChangelogCreateEntry struct {
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
 	Security         []string `json:"security"`
+	PingRoles        *bool    `json:"ping_roles,omitempty"`
 	// CreatedAt lets staff backfill a release's real date instead of the
 	// moment the entry happened to be drafted -- nil falls back to NOW().
 	CreatedAt *time.Time `json:"created_at"`
@@ -159,6 +160,7 @@ type ChangelogUpdateEntry struct {
 	Fixed            []string `json:"fixed"`
 	Removed          []string `json:"removed"`
 	Security         []string `json:"security"`
+	PingRoles        *bool    `json:"ping_roles,omitempty"`
 	// CreatedAt, like on Create, is nil to leave the entry's existing date
 	// untouched -- an update never resets it to "now" on its own.
 	CreatedAt *time.Time `json:"created_at"`
@@ -256,6 +258,7 @@ type BlogUpdateEntry struct {
 	Content     string   `json:"content"`
 	Tags        []string `json:"tags"`
 	Draft       bool     `json:"draft"`
+	PingRoles   *bool    `json:"ping_roles,omitempty"`
 }
 
 type BlogDeleteEntry struct {

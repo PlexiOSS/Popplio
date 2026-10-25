@@ -51,13 +51,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := defaultLimit
 
 	if raw := r.URL.Query().Get("limit"); raw != "" {
-		parsed, err := strconv.Atoi(raw)
+		parsed, err := strconv.ParseInt(raw, 10, 32)
 
 		if err != nil || parsed <= 0 {
 			return resp.BadRequest("limit must be a positive integer")
 		}
 
-		limit = min(parsed, maxLimit)
+		limit = int(min(parsed, maxLimit))
 	}
 
 	entries, err := votes.Leaderboard(d.Context, r.URL.Query().Get("period"), limit)

@@ -4,6 +4,7 @@ package add_server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -96,6 +97,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	payload.Avatar = assets.GuildIconURL(invite.Guild)
 	payload.TotalMembers = invite.ApproximateMemberCount
 	payload.OnlineMembers = invite.ApproximatePresenceCount
+
+	if err := assets.VerifyServerManager(payload.ServerID, d.Auth.ID); err != nil {
+		if errors.Is(err, assets.ErrTrackingBotMissing) || errors.Is(err, assets.ErrNotServerManager) {
+			return resp.Forbidden(err.Error())
+		}
+
+		return resp.Err("Error while checking server ownership", err, zap.String("userID", d.Auth.ID), zap.String("serverID", payload.ServerID))
+	}
 
 	q := db.New(state.Pool)
 

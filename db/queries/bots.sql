@@ -9,16 +9,14 @@ FROM bots
 WHERE bot_id = $1;
 
 -- name: SearchBotsPublic :many
--- Backs POST /list/search's "bot" target type. iucd is the Discord user
--- cache (internal_user_cache__discord) -- left-joined unconditionally so
--- bots with no cached user row still show up when there's no text query,
--- same as the raw-SQL version this replaced only inner-joining when needed.
 SELECT bots.bot_id, bots.short, bots.type, bots.vanity_ref, bots.approximate_votes, bots.shards, bots.library,
     bots.invite_clicks, bots.clicks, bots.servers, bots.nsfw, bots.tags, bots.premium, bots.created_at,
     bots.self_status, bots.last_stats_post, bots.supporter_badge, bots.boosted_until, bots.featured_until,
-    bots.spotlighted_until, bots.vote_blitz_until
+    bots.spotlighted_until, bots.vote_blitz_until,
+    COUNT(*) OVER ()::bigint AS total_count
 FROM bots
 LEFT JOIN internal_user_cache__discord iucd ON bots.bot_id = iucd.id
+LEFT JOIN vanity v ON v.itag = bots.vanity_ref
 WHERE (bots.type = 'approved' OR bots.type = 'certified')
 AND (sqlc.arg('servers_from')::int = 0 OR bots.servers >= sqlc.arg('servers_from')::int)
 AND (sqlc.arg('servers_to')::int = 0 OR bots.servers <= sqlc.arg('servers_to')::int)
@@ -28,19 +26,31 @@ AND (sqlc.arg('shards_from')::int = 0 OR bots.shards >= sqlc.arg('shards_from'):
 AND (sqlc.arg('shards_to')::int = 0 OR bots.shards <= sqlc.arg('shards_to')::int)
 AND (
     cardinality(sqlc.arg('tags')::text[]) = 0
-    OR (sqlc.arg('tag_mode')::text = '@>' AND bots.tags @> sqlc.arg('tags')::text[])
-    OR (sqlc.arg('tag_mode')::text = '&&' AND bots.tags && sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(bots.tags) t) @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(bots.tags) t) && sqlc.arg('tags')::text[])
 )
 AND (
     sqlc.arg('query')::text = ''
-    OR bots.short @@ sqlc.arg('query')::text
     OR bots.bot_id = sqlc.arg('query')::text
     OR bots.client_id = sqlc.arg('query')::text
-    OR iucd.username @@ sqlc.arg('query')::text
+    OR lower(v.code::text) = sqlc.arg('query')::text
     OR iucd.username ILIKE sqlc.arg('pattern')::text
+    OR iucd.display_name ILIKE sqlc.arg('pattern')::text
+    OR bots.short ILIKE sqlc.arg('pattern')::text
+    OR bots.short @@ sqlc.arg('query')::text
 )
-ORDER BY bots.approximate_votes DESC, bots.type DESC
-LIMIT 12;
+ORDER BY
+    CASE
+        WHEN sqlc.arg('query')::text = '' THEN 0
+        WHEN bots.bot_id = sqlc.arg('query')::text OR bots.client_id = sqlc.arg('query')::text THEN 100
+        WHEN lower(iucd.username) = sqlc.arg('query')::text OR lower(iucd.display_name) = sqlc.arg('query')::text OR lower(v.code::text) = sqlc.arg('query')::text THEN 90
+        WHEN iucd.username ILIKE sqlc.arg('prefix')::text OR iucd.display_name ILIKE sqlc.arg('prefix')::text THEN 70
+        WHEN iucd.username ILIKE sqlc.arg('pattern')::text OR iucd.display_name ILIKE sqlc.arg('pattern')::text THEN 50
+        ELSE 10
+    END DESC,
+    bots.approximate_votes DESC,
+    bots.type DESC
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: GetBotsDueForModerationScan :many
 SELECT bot_id, short, long, nsfw

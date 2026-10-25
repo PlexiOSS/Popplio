@@ -25,12 +25,15 @@ type SearchQuery struct {
 	Shards       SearchFilter `json:"shards" msg:"Shards must be a valid filter"`
 	TotalMembers SearchFilter `json:"total_members" msg:"Total members must be a valid filter"`
 	TagFilter    TagFilter    `json:"tags" msg:"Tags must be a valid filter"`
+	Page         int          `json:"page" description:"The page of results to return for every target type, starting at 1"`
 }
 
 type SearchResponse struct {
-	TargetTypes []string      `json:"target_types"`
-	Bots        []IndexBot    `json:"bots,omitempty"`
-	Servers     []IndexServer `json:"servers,omitempty"`
-	Teams       []Team        `json:"teams,omitempty"`
-	Packs       []BotPack     `json:"packs,omitempty"`
+	TargetTypes []string       `json:"target_types"`
+	Bots        []IndexBot     `json:"bots,omitempty"`
+	Servers     []IndexServer  `json:"servers,omitempty"`
+	Teams       []Team         `json:"teams,omitempty"`
+	Packs       []BotPack      `json:"packs,omitempty"`
+	Counts      map[string]int `json:"counts" description:"The total number of matches for each searched target type, across all pages"`
+	PerPage     int            `json:"per_page" description:"How many results of each target type a page holds"`
 }

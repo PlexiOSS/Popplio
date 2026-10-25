@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-25
+
+**Search, Voters and Safer Listings.** Relevance-ranked search, voter
+leaderboards and activity, sorting and filters for browse pages, server
+deletion, and ownership checks before a server can be listed.
+
 ### Changed
+
+- Search results are ranked by relevance before votes: an exact ID match,
+  then an exact name or vanity match, then a name starting with the query,
+  then a name containing it, then description matches. Bots also match on
+  display name and vanity, and servers, teams and packs also match on their
+  short description.
+
+- Webhook requests send the User-Agent `Omniplex-Webhooks/1.0 (+<frontend
+  URL>)` instead of the old `Popplio/v8.0.0 (https://infinitybots.gg)`.
+- A webhook that accepts a request signed with the wrong secret now gets a
+  clear notification explaining the risk, instead of counting a failure
+  towards being disabled.
 
 - The packs on the bot index (`GET /bots/@index`, shown on the
   homepage) are now the 9 highest-voted packs, then the largest, instead
@@ -15,6 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   left out.
 
 ### Added
+
+- `badge_sync` background task (hourly): awards the `partner` badge to
+  approved or certified bots linked to a partner, and the `veteran` badge
+  to approved or certified bots and servers listed for more than two years.
+  Each badge is only touched if it exists in the catalog. Awards it makes
+  are marked `awarded_by: system`, and it removes only those once the
+  listing stops qualifying, so badges staff award by hand are never
+  changed.
+
+- `ping_roles` on the panel's changelog `CreateEntry`/`UpdateEntry` and
+  blog `UpdateEntry` actions chooses whether the Discord announcement
+  mentions the configured roles. It only matters on the save that
+  publishes the entry. Left out, nothing changes: Omniplex changelogs and
+  blog posts ping, other projects' changelogs don't.
+
+- `DELETE /servers/{id}` deletes a server listing. It needs the
+  `delete_servers` team permission, logs to the mod log channel, and
+  returns 204. Votes, reviews and other data tied to the server are cleared
+  by the existing cleanup task.
+
+- `POST /list/search` accepts `page` and returns `counts` (total matches
+  per target type across all pages) and `per_page`. It was capped at 12
+  results per type with no way to see the rest.
 
 - `GET /bots/@all` and `GET /servers/@all` accept `sort` (`new`, the
   default and unchanged; `trending`; `votes`; and `servers` for bots or
@@ -45,6 +86,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Search tag filters were case-sensitive, so "music" didn't match bots
+  tagged "Music". They now match regardless of case.
+- Search treated `%` and `_` in the query as wildcards. They're now matched
+  literally.
+
+- A failing webhook counted the failure against every webhook on the same
+  bot, server or team, and a Discord channel webhook returning 401/403/404/410
+  marked all of them broken. Failures and the broken flag now apply only to
+  the webhook that failed.
+- Webhook failure counts never reset, so a working webhook was silently
+  skipped after 20 failures spread over its whole lifetime. A successful
+  delivery now resets the count, so only 20 consecutive failures pause it.
+- A webhook returning 404 or 410 only counted a failure (despite the alert
+  saying it had been removed). It's now marked broken, with a notification
+  explaining how to turn it back on.
+- The Discord channel webhook sender never closed the response body.
+
 - `GET /servers/{id}/similar` had the same problems as similar bots: NSFW
   servers could be suggested for non-NSFW ones and tags were compared
   case-sensitively. It now uses the same rules (NSFW only for NSFW
@@ -63,7 +121,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - One voter whose profile couldn't be resolved made `GET
   /votes/leaderboard` return 500. That voter is now logged and left out.
 
+### Security
+
+- Anyone could list any Discord server by pasting its invite link.
+  `POST /servers` now requires the tracking bot to be in the server and the
+  submitter to be its owner or have Manage Server or Administrator there,
+  checked over Discord's REST API with the tracking bot's token. Without the
+  bot it returns 403 asking for the bot to be invited first.
+
+- Every paginated route accepted `?page=0`, which underflowed the offset,
+  and pages up to about 4.29 billion, which overflowed it when narrowed to
+  32 bits, so either returned a server error. `page` must now be between
+  1 and 100000.
+- `limit` on the voter leaderboard and entity voters, `votes` on vote
+  credit redemption (which also now has to be positive), and the panel bot's
+  top reviewers limit (now 1 to 25) are parsed as 32-bit values instead of
+  being narrowed after parsing, and redemptions check their vote and credit
+  totals fit before they're stored (CodeQL "incorrect conversion between
+  integer types").
+- The Go build workflow now runs with read-only repository permissions.
+
 ## [1.10.0] - 2026-10-25
+
+**Payments and Presence.** Purchases that can't be lost or granted twice,
+working Stripe webhooks and PayPal refunds, bot status from japi.rest,
+and automatic database migrations on startup.
 
 ### Added
 

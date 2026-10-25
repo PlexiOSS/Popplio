@@ -10,15 +10,20 @@ import (
 	"go.uber.org/zap"
 )
 
-func announceBlogPost(entry types.BlogCreateEntry) {
+func announceBlogPost(entry types.BlogCreateEntry, pingRoles *bool) {
 	channelID := state.Config.Channels.BlogAnnouncements
 
 	if channelID == 0 {
 		return
 	}
 
+	var content string
+	if pingRoles == nil || *pingRoles {
+		content = state.Config.Meta.BlogAnnounceMentions
+	}
+
 	_, err := state.Discord.Rest().CreateMessage(channelID, discord.MessageCreate{
-		Content: state.Config.Meta.BlogAnnounceMentions,
+		Content: content,
 		Embeds: []discord.Embed{
 			{
 				Title:       "New Blog Post: " + entry.Title,
@@ -63,8 +68,13 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 	addField("Removed", entry.Removed)
 	addField("Security", entry.Security)
 
+	ping := entry.Project == "omniplex"
+	if entry.PingRoles != nil {
+		ping = *entry.PingRoles
+	}
+
 	var content string
-	if entry.Project == "omniplex" {
+	if ping {
 		content = state.Config.Meta.ChangelogAnnounceMentions
 	}
 

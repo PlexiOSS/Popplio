@@ -398,6 +398,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 				ExtraDescription: entry.ExtraDescription,
 				Prerelease:       entry.Prerelease,
 				Published:        entry.Published,
+				PingRoles:        entry.PingRoles,
 			})
 		}
 
@@ -586,7 +587,7 @@ func (s *Server) updateBlog(ctx context.Context, q *types.QUpdateBlog) (response
 				Description: entry.Description,
 				Content:     entry.Content,
 				Tags:        entry.Tags,
-			})
+			}, entry.PingRoles)
 		}
 
 		return writeNoContent(), nil

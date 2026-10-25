@@ -94,18 +94,34 @@ SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned
 FROM teams WHERE id::text = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text ORDER BY created_at;
 
 -- name: SearchTeamsPublic :many
-SELECT id, name, COALESCE(short, '') AS short, tags, nsfw, vote_banned, approximate_votes
+SELECT teams.id, teams.name, COALESCE(teams.short, '') AS short, teams.tags, teams.nsfw, teams.vote_banned, teams.approximate_votes,
+    COUNT(*) OVER ()::bigint AS total_count
 FROM teams
-WHERE (sqlc.arg('query')::text = '' OR id::text = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text)
+WHERE (
+    sqlc.arg('query')::text = ''
+    OR teams.id::text = sqlc.arg('query')::text
+    OR teams.name ILIKE sqlc.arg('pattern')::text
+    OR COALESCE(teams.short, '') ILIKE sqlc.arg('pattern')::text
+)
 AND (
     cardinality(sqlc.arg('tags')::text[]) = 0
-    OR (sqlc.arg('tag_mode')::text = '@>' AND tags @> sqlc.arg('tags')::text[])
-    OR (sqlc.arg('tag_mode')::text = '&&' AND tags && sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(teams.tags) t) @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(teams.tags) t) && sqlc.arg('tags')::text[])
 )
-AND (sqlc.arg('votes_from')::int = 0 OR approximate_votes >= sqlc.arg('votes_from')::int)
-AND (sqlc.arg('votes_to')::int = 0 OR approximate_votes <= sqlc.arg('votes_to')::int)
-ORDER BY approximate_votes DESC, created_at DESC
-LIMIT 12;
+AND (sqlc.arg('votes_from')::int = 0 OR teams.approximate_votes >= sqlc.arg('votes_from')::int)
+AND (sqlc.arg('votes_to')::int = 0 OR teams.approximate_votes <= sqlc.arg('votes_to')::int)
+ORDER BY
+    CASE
+        WHEN sqlc.arg('query')::text = '' THEN 0
+        WHEN teams.id::text = sqlc.arg('query')::text THEN 100
+        WHEN lower(teams.name) = sqlc.arg('query')::text THEN 90
+        WHEN teams.name ILIKE sqlc.arg('prefix')::text THEN 70
+        WHEN teams.name ILIKE sqlc.arg('pattern')::text THEN 50
+        ELSE 10
+    END DESC,
+    teams.approximate_votes DESC,
+    teams.created_at DESC
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: DeleteTeamMembers :exec
 DELETE FROM team_members WHERE team_id = $1;

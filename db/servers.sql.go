@@ -1712,30 +1712,42 @@ func (q *Queries) RemoveServerPremium(ctx context.Context, serverID string) erro
 }
 
 const searchServersPublic = `-- name: SearchServersPublic :many
-SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes,
-    invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers
-WHERE (type = 'approved' OR type = 'certified')
-AND state = 'public'
-AND ($1::int = 0 OR total_members >= $1::int)
-AND ($2::int = 0 OR total_members <= $2::int)
-AND ($3::int = 0 OR approximate_votes >= $3::int)
-AND ($4::int = 0 OR approximate_votes <= $4::int)
+SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes,
+    s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until,
+    COUNT(*) OVER ()::bigint AS total_count
+FROM servers s
+LEFT JOIN vanity v ON v.itag = s.vanity_ref
+WHERE (s.type = 'approved' OR s.type = 'certified')
+AND s.state = 'public'
+AND ($1::int = 0 OR s.total_members >= $1::int)
+AND ($2::int = 0 OR s.total_members <= $2::int)
+AND ($3::int = 0 OR s.approximate_votes >= $3::int)
+AND ($4::int = 0 OR s.approximate_votes <= $4::int)
 AND (
     cardinality($5::text[]) = 0
-    OR ($6::text = '@>' AND tags @> $5::text[])
-    OR ($6::text = '&&' AND tags && $5::text[])
+    OR ($6::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(s.tags) t) @> $5::text[])
+    OR ($6::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(s.tags) t) && $5::text[])
 )
 AND (
     $7::text = ''
-    OR name ILIKE $8::text
-    OR name @@ $7::text
-    OR short @@ $7::text
-    OR server_id = $7::text
+    OR s.server_id = $7::text
+    OR lower(v.code::text) = $7::text
+    OR s.name ILIKE $8::text
+    OR s.short ILIKE $8::text
+    OR s.short @@ $7::text
 )
-GROUP BY server_id
-ORDER BY approximate_votes DESC, type DESC
-LIMIT 12
+ORDER BY
+    CASE
+        WHEN $7::text = '' THEN 0
+        WHEN s.server_id = $7::text THEN 100
+        WHEN lower(s.name) = $7::text OR lower(v.code::text) = $7::text THEN 90
+        WHEN s.name ILIKE $9::text THEN 70
+        WHEN s.name ILIKE $8::text THEN 50
+        ELSE 10
+    END DESC,
+    s.approximate_votes DESC,
+    s.type DESC
+LIMIT $11 OFFSET $10
 `
 
 type SearchServersPublicParams struct {
@@ -1747,6 +1759,9 @@ type SearchServersPublicParams struct {
 	TagMode     string   `db:"tag_mode" json:"tag_mode"`
 	Query       string   `db:"query" json:"query"`
 	Pattern     string   `db:"pattern" json:"pattern"`
+	Prefix      string   `db:"prefix" json:"prefix"`
+	Off         int32    `db:"off" json:"off"`
+	Lim         int32    `db:"lim" json:"lim"`
 }
 
 type SearchServersPublicRow struct {
@@ -1769,9 +1784,9 @@ type SearchServersPublicRow struct {
 	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
 	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	TotalCount       int64              `db:"total_count" json:"total_count"`
 }
 
-// Backs POST /list/search's "server" target type.
 func (q *Queries) SearchServersPublic(ctx context.Context, arg SearchServersPublicParams) ([]SearchServersPublicRow, error) {
 	rows, err := q.db.Query(ctx, searchServersPublic,
 		arg.MembersFrom,
@@ -1782,6 +1797,9 @@ func (q *Queries) SearchServersPublic(ctx context.Context, arg SearchServersPubl
 		arg.TagMode,
 		arg.Query,
 		arg.Pattern,
+		arg.Prefix,
+		arg.Off,
+		arg.Lim,
 	)
 	if err != nil {
 		return nil, err
@@ -1810,6 +1828,7 @@ func (q *Queries) SearchServersPublic(ctx context.Context, arg SearchServersPubl
 			&i.BoostedUntil,
 			&i.FeaturedUntil,
 			&i.SpotlightedUntil,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

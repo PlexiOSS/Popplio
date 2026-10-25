@@ -532,16 +532,30 @@ func (q *Queries) InsertPackEmoji(ctx context.Context, arg InsertPackEmojiParams
 }
 
 const searchPacksPublic = `-- name: SearchPacksPublic :many
-SELECT url, name, short, pack_type, owner, tags, bots, servers, vote_banned
+SELECT packs.url, packs.name, packs.short, packs.pack_type, packs.owner, packs.tags, packs.bots, packs.servers, packs.vote_banned,
+    COUNT(*) OVER ()::bigint AS total_count
 FROM packs
-WHERE ($1::text = '' OR url = $1::text OR name ILIKE $2::text)
+WHERE (
+    $1::text = ''
+    OR packs.url = $1::text
+    OR packs.name ILIKE $2::text
+    OR packs.short ILIKE $2::text
+)
 AND (
     cardinality($3::text[]) = 0
-    OR ($4::text = '@>' AND tags @> $3::text[])
-    OR ($4::text = '&&' AND tags && $3::text[])
+    OR ($4::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(packs.tags) t) @> $3::text[])
+    OR ($4::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(packs.tags) t) && $3::text[])
 )
-ORDER BY created_at DESC
-LIMIT 12
+ORDER BY
+    CASE
+        WHEN $1::text = '' THEN 0
+        WHEN packs.url = $1::text OR lower(packs.name) = $1::text THEN 90
+        WHEN packs.name ILIKE $5::text THEN 70
+        WHEN packs.name ILIKE $2::text THEN 50
+        ELSE 10
+    END DESC,
+    packs.created_at DESC
+LIMIT $7 OFFSET $6
 `
 
 type SearchPacksPublicParams struct {
@@ -549,6 +563,9 @@ type SearchPacksPublicParams struct {
 	Pattern string   `db:"pattern" json:"pattern"`
 	Tags    []string `db:"tags" json:"tags"`
 	TagMode string   `db:"tag_mode" json:"tag_mode"`
+	Prefix  string   `db:"prefix" json:"prefix"`
+	Off     int32    `db:"off" json:"off"`
+	Lim     int32    `db:"lim" json:"lim"`
 }
 
 type SearchPacksPublicRow struct {
@@ -561,6 +578,7 @@ type SearchPacksPublicRow struct {
 	Bots       []string `db:"bots" json:"bots"`
 	Servers    []string `db:"servers" json:"servers"`
 	VoteBanned bool     `db:"vote_banned" json:"vote_banned"`
+	TotalCount int64    `db:"total_count" json:"total_count"`
 }
 
 func (q *Queries) SearchPacksPublic(ctx context.Context, arg SearchPacksPublicParams) ([]SearchPacksPublicRow, error) {
@@ -569,6 +587,9 @@ func (q *Queries) SearchPacksPublic(ctx context.Context, arg SearchPacksPublicPa
 		arg.Pattern,
 		arg.Tags,
 		arg.TagMode,
+		arg.Prefix,
+		arg.Off,
+		arg.Lim,
 	)
 	if err != nil {
 		return nil, err
@@ -587,6 +608,7 @@ func (q *Queries) SearchPacksPublic(ctx context.Context, arg SearchPacksPublicPa
 			&i.Bots,
 			&i.Servers,
 			&i.VoteBanned,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

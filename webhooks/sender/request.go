@@ -27,8 +27,6 @@ import (
 	"github.com/PlexiOSS/Keel/crypto"
 )
 
-const userAgent = "Popplio/v8.0.0 (https://infinitybots.gg)"
-
 const dnsTimeout = 5 * time.Second
 
 var webhookClient = &http.Client{
@@ -108,7 +106,7 @@ func buildHmacAuthRequest(url, secret string, data []byte) (*http.Request, error
 	req.Header.Set("X-Webhook-Signature", "sha256="+sig)
 	req.Header.Set("X-Webhook-Protocol", "hmac-sha256")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	return req, nil
 }
@@ -123,7 +121,7 @@ func buildSimpleAuthRequest(url, secret string, data []byte) (*http.Request, err
 	req.Header.Set("Authorization", secret)
 	req.Header.Set("X-Webhook-Protocol", "simple-auth")
 	req.Header.Set("Content-Type", "text/plain")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	return req, nil
 }
@@ -145,7 +143,7 @@ func buildSplashtailRequest(url, secret string, data []byte) (*http.Request, err
 	req.Header.Set("X-Webhook-Protocol", "splashtail")
 	req.Header.Set("X-Webhook-Nonce", nonce)
 	req.Header.Set("Content-Type", "text/plain")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 
 	return req, nil
 }
@@ -180,4 +178,8 @@ func sealPayload(secret string, data []byte) (postData []byte, nonce, token stri
 	token = Secret{Raw: nonce}.Sign([]byte(inner))
 
 	return postData, nonce, token, nil
+}
+
+func userAgent() string {
+	return "Omniplex-Webhooks/1.0 (+" + state.Config.Sites.Frontend + ")"
 }

@@ -303,16 +303,11 @@ func (q *Queries) GetWebhooksForTarget(ctx context.Context, arg GetWebhooksForTa
 }
 
 const incrementWebhookFailedRequests = `-- name: IncrementWebhookFailedRequests :exec
-UPDATE webhooks SET failed_requests = failed_requests + 1 WHERE target_id = $1 AND target_type = $2
+UPDATE webhooks SET failed_requests = failed_requests + 1 WHERE id = $1
 `
 
-type IncrementWebhookFailedRequestsParams struct {
-	TargetID   string `db:"target_id" json:"target_id"`
-	TargetType string `db:"target_type" json:"target_type"`
-}
-
-func (q *Queries) IncrementWebhookFailedRequests(ctx context.Context, arg IncrementWebhookFailedRequestsParams) error {
-	_, err := q.db.Exec(ctx, incrementWebhookFailedRequests, arg.TargetID, arg.TargetType)
+func (q *Queries) IncrementWebhookFailedRequests(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, incrementWebhookFailedRequests, id)
 	return err
 }
 
@@ -390,17 +385,12 @@ func (q *Queries) InsertWebhookLogReturningID(ctx context.Context, arg InsertWeb
 	return id, err
 }
 
-const markWebhookBrokenForTarget = `-- name: MarkWebhookBrokenForTarget :exec
-UPDATE webhooks SET broken = true WHERE target_id = $1 AND target_type = $2
+const markWebhookBroken = `-- name: MarkWebhookBroken :exec
+UPDATE webhooks SET broken = true WHERE id = $1
 `
 
-type MarkWebhookBrokenForTargetParams struct {
-	TargetID   string `db:"target_id" json:"target_id"`
-	TargetType string `db:"target_type" json:"target_type"`
-}
-
-func (q *Queries) MarkWebhookBrokenForTarget(ctx context.Context, arg MarkWebhookBrokenForTargetParams) error {
-	_, err := q.db.Exec(ctx, markWebhookBrokenForTarget, arg.TargetID, arg.TargetType)
+func (q *Queries) MarkWebhookBroken(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markWebhookBroken, id)
 	return err
 }
 
@@ -415,6 +405,15 @@ type MarkWebhookLogNoWebhooksParams struct {
 
 func (q *Queries) MarkWebhookLogNoWebhooks(ctx context.Context, arg MarkWebhookLogNoWebhooksParams) error {
 	_, err := q.db.Exec(ctx, markWebhookLogNoWebhooks, arg.State, arg.ID)
+	return err
+}
+
+const resetWebhookFailedRequests = `-- name: ResetWebhookFailedRequests :exec
+UPDATE webhooks SET failed_requests = 0 WHERE id = $1 AND failed_requests > 0
+`
+
+func (q *Queries) ResetWebhookFailedRequests(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, resetWebhookFailedRequests, id)
 	return err
 }
 

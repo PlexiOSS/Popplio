@@ -15,9 +15,6 @@ import (
 	"github.com/disgoorg/disgo/discord"
 )
 
-// The read-only reporting commands: site analytics, build metadata and the
-// reviewer leaderboard. None of them write anything.
-
 func cmdAnalytics() *Command {
 	return &Command{
 		Name:        "analytics",
@@ -68,13 +65,6 @@ func cmdAnalytics() *Command {
 	}
 }
 
-// cmdInfo reports build metadata.
-//
-// DEVIATION (§14c): upstream reported the Rust toolchain version, the vergen git
-// sha/semver/commit message, the build CPU brand and the cargo profile. Go has no
-// equivalent of most of those. The Go toolchain version and the VCS revision and
-// dirty flag come from debug.ReadBuildInfo; the fields that no longer have a
-// meaning are reported as "unknown".
 func cmdInfo() *Command {
 	return &Command{
 		Name:        "info",
@@ -129,10 +119,10 @@ func cmdLeaderboard() *Command {
 			limit := 5
 
 			if raw := c.Option("limit", 0); raw != "" {
-				parsed, err := strconv.Atoi(raw)
+				parsed, err := strconv.ParseInt(raw, 10, 32)
 
-				if err == nil {
-					limit = parsed
+				if err == nil && parsed > 0 {
+					limit = int(min(parsed, 25))
 				}
 			}
 
@@ -162,7 +152,6 @@ func cmdLeaderboard() *Command {
 	}
 }
 
-// medal decorates the top three positions.
 func medal(index int) string {
 	switch index {
 	case 0:

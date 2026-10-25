@@ -34,15 +34,27 @@ func TestParseValidPage(t *testing.T) {
 	}
 }
 
-func TestParseZeroIsAcceptedByParseButIsTheCallers(t *testing.T) {
-	page, err := Parse(request("page=0"))
+func TestParseRejectsZero(t *testing.T) {
+	if _, err := Parse(request("page=0")); err == nil {
+		t.Error("expected an error for page 0")
+	}
+}
+
+func TestParseAcceptsMaxPage(t *testing.T) {
+	page, err := Parse(request("page=100000"))
 
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
 
-	if page != 0 {
-		t.Errorf("page = %d, want 0 — Parse does not reject it, callers must", page)
+	if page != MaxPage {
+		t.Errorf("page = %d, want %d", page, MaxPage)
+	}
+}
+
+func TestParseRejectsAboveMaxPage(t *testing.T) {
+	if _, err := Parse(request("page=100001")); err == nil {
+		t.Error("expected an error for a page above MaxPage")
 	}
 }
 
@@ -65,8 +77,6 @@ func TestParseRejectsDecimal(t *testing.T) {
 }
 
 func TestParseRejectsOverflow(t *testing.T) {
-	// ParseUint is called with a 32-bit size, so a value that fits in
-	// uint64 but not uint32 must still be rejected.
 	if _, err := Parse(request("page=4294967296")); err == nil {
 		t.Error("expected an error for a page number that overflows 32 bits")
 	}

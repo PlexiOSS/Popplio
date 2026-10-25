@@ -2314,9 +2314,11 @@ const searchBotsPublic = `-- name: SearchBotsPublic :many
 SELECT bots.bot_id, bots.short, bots.type, bots.vanity_ref, bots.approximate_votes, bots.shards, bots.library,
     bots.invite_clicks, bots.clicks, bots.servers, bots.nsfw, bots.tags, bots.premium, bots.created_at,
     bots.self_status, bots.last_stats_post, bots.supporter_badge, bots.boosted_until, bots.featured_until,
-    bots.spotlighted_until, bots.vote_blitz_until
+    bots.spotlighted_until, bots.vote_blitz_until,
+    COUNT(*) OVER ()::bigint AS total_count
 FROM bots
 LEFT JOIN internal_user_cache__discord iucd ON bots.bot_id = iucd.id
+LEFT JOIN vanity v ON v.itag = bots.vanity_ref
 WHERE (bots.type = 'approved' OR bots.type = 'certified')
 AND ($1::int = 0 OR bots.servers >= $1::int)
 AND ($2::int = 0 OR bots.servers <= $2::int)
@@ -2326,19 +2328,31 @@ AND ($5::int = 0 OR bots.shards >= $5::int)
 AND ($6::int = 0 OR bots.shards <= $6::int)
 AND (
     cardinality($7::text[]) = 0
-    OR ($8::text = '@>' AND bots.tags @> $7::text[])
-    OR ($8::text = '&&' AND bots.tags && $7::text[])
+    OR ($8::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(bots.tags) t) @> $7::text[])
+    OR ($8::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(bots.tags) t) && $7::text[])
 )
 AND (
     $9::text = ''
-    OR bots.short @@ $9::text
     OR bots.bot_id = $9::text
     OR bots.client_id = $9::text
-    OR iucd.username @@ $9::text
+    OR lower(v.code::text) = $9::text
     OR iucd.username ILIKE $10::text
+    OR iucd.display_name ILIKE $10::text
+    OR bots.short ILIKE $10::text
+    OR bots.short @@ $9::text
 )
-ORDER BY bots.approximate_votes DESC, bots.type DESC
-LIMIT 12
+ORDER BY
+    CASE
+        WHEN $9::text = '' THEN 0
+        WHEN bots.bot_id = $9::text OR bots.client_id = $9::text THEN 100
+        WHEN lower(iucd.username) = $9::text OR lower(iucd.display_name) = $9::text OR lower(v.code::text) = $9::text THEN 90
+        WHEN iucd.username ILIKE $11::text OR iucd.display_name ILIKE $11::text THEN 70
+        WHEN iucd.username ILIKE $10::text OR iucd.display_name ILIKE $10::text THEN 50
+        ELSE 10
+    END DESC,
+    bots.approximate_votes DESC,
+    bots.type DESC
+LIMIT $13 OFFSET $12
 `
 
 type SearchBotsPublicParams struct {
@@ -2352,6 +2366,9 @@ type SearchBotsPublicParams struct {
 	TagMode     string   `db:"tag_mode" json:"tag_mode"`
 	Query       string   `db:"query" json:"query"`
 	Pattern     string   `db:"pattern" json:"pattern"`
+	Prefix      string   `db:"prefix" json:"prefix"`
+	Off         int32    `db:"off" json:"off"`
+	Lim         int32    `db:"lim" json:"lim"`
 }
 
 type SearchBotsPublicRow struct {
@@ -2376,12 +2393,9 @@ type SearchBotsPublicRow struct {
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
 	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
 	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
+	TotalCount       int64              `db:"total_count" json:"total_count"`
 }
 
-// Backs POST /list/search's "bot" target type. iucd is the Discord user
-// cache (internal_user_cache__discord) -- left-joined unconditionally so
-// bots with no cached user row still show up when there's no text query,
-// same as the raw-SQL version this replaced only inner-joining when needed.
 func (q *Queries) SearchBotsPublic(ctx context.Context, arg SearchBotsPublicParams) ([]SearchBotsPublicRow, error) {
 	rows, err := q.db.Query(ctx, searchBotsPublic,
 		arg.ServersFrom,
@@ -2394,6 +2408,9 @@ func (q *Queries) SearchBotsPublic(ctx context.Context, arg SearchBotsPublicPara
 		arg.TagMode,
 		arg.Query,
 		arg.Pattern,
+		arg.Prefix,
+		arg.Off,
+		arg.Lim,
 	)
 	if err != nil {
 		return nil, err
@@ -2424,6 +2441,7 @@ func (q *Queries) SearchBotsPublic(ctx context.Context, arg SearchBotsPublicPara
 			&i.FeaturedUntil,
 			&i.SpotlightedUntil,
 			&i.VoteBlitzUntil,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}

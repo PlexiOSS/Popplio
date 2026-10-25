@@ -77,9 +77,40 @@ func (st *webhookSendState) notify(alertType types.AlertType, title, message str
 	}
 }
 
+func (st *webhookSendState) webhookUUID() (pgtype.UUID, error) {
+	var id pgtype.UUID
+	err := id.Scan(st.Webhook.ID)
+	return id, err
+}
+
 func (st *webhookSendState) markFailed() error {
-	return db.New(state.Pool).IncrementWebhookFailedRequests(state.Context, db.IncrementWebhookFailedRequestsParams{
-		TargetID:   st.Entity.EntityID,
-		TargetType: st.Entity.EntityType,
-	})
+	id, err := st.webhookUUID()
+
+	if err != nil {
+		return err
+	}
+
+	return db.New(state.Pool).IncrementWebhookFailedRequests(state.Context, id)
+}
+
+func (st *webhookSendState) markBroken() error {
+	id, err := st.webhookUUID()
+
+	if err != nil {
+		return err
+	}
+
+	return db.New(state.Pool).MarkWebhookBroken(state.Context, id)
+}
+
+func (st *webhookSendState) markSucceeded() {
+	id, err := st.webhookUUID()
+
+	if err != nil {
+		return
+	}
+
+	if err := db.New(state.Pool).ResetWebhookFailedRequests(state.Context, id); err != nil {
+		state.Logger.Error("Failed to reset webhook failure count", st.logFields(zap.Error(err))...)
+	}
 }

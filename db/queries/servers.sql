@@ -9,31 +9,42 @@ FROM servers
 WHERE server_id = $1;
 
 -- name: SearchServersPublic :many
--- Backs POST /list/search's "server" target type.
-SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes,
-    invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers
-WHERE (type = 'approved' OR type = 'certified')
-AND state = 'public'
-AND (sqlc.arg('members_from')::int = 0 OR total_members >= sqlc.arg('members_from')::int)
-AND (sqlc.arg('members_to')::int = 0 OR total_members <= sqlc.arg('members_to')::int)
-AND (sqlc.arg('votes_from')::int = 0 OR approximate_votes >= sqlc.arg('votes_from')::int)
-AND (sqlc.arg('votes_to')::int = 0 OR approximate_votes <= sqlc.arg('votes_to')::int)
+SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes,
+    s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until,
+    COUNT(*) OVER ()::bigint AS total_count
+FROM servers s
+LEFT JOIN vanity v ON v.itag = s.vanity_ref
+WHERE (s.type = 'approved' OR s.type = 'certified')
+AND s.state = 'public'
+AND (sqlc.arg('members_from')::int = 0 OR s.total_members >= sqlc.arg('members_from')::int)
+AND (sqlc.arg('members_to')::int = 0 OR s.total_members <= sqlc.arg('members_to')::int)
+AND (sqlc.arg('votes_from')::int = 0 OR s.approximate_votes >= sqlc.arg('votes_from')::int)
+AND (sqlc.arg('votes_to')::int = 0 OR s.approximate_votes <= sqlc.arg('votes_to')::int)
 AND (
     cardinality(sqlc.arg('tags')::text[]) = 0
-    OR (sqlc.arg('tag_mode')::text = '@>' AND tags @> sqlc.arg('tags')::text[])
-    OR (sqlc.arg('tag_mode')::text = '&&' AND tags && sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(s.tags) t) @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(s.tags) t) && sqlc.arg('tags')::text[])
 )
 AND (
     sqlc.arg('query')::text = ''
-    OR name ILIKE sqlc.arg('pattern')::text
-    OR name @@ sqlc.arg('query')::text
-    OR short @@ sqlc.arg('query')::text
-    OR server_id = sqlc.arg('query')::text
+    OR s.server_id = sqlc.arg('query')::text
+    OR lower(v.code::text) = sqlc.arg('query')::text
+    OR s.name ILIKE sqlc.arg('pattern')::text
+    OR s.short ILIKE sqlc.arg('pattern')::text
+    OR s.short @@ sqlc.arg('query')::text
 )
-GROUP BY server_id
-ORDER BY approximate_votes DESC, type DESC
-LIMIT 12;
+ORDER BY
+    CASE
+        WHEN sqlc.arg('query')::text = '' THEN 0
+        WHEN s.server_id = sqlc.arg('query')::text THEN 100
+        WHEN lower(s.name) = sqlc.arg('query')::text OR lower(v.code::text) = sqlc.arg('query')::text THEN 90
+        WHEN s.name ILIKE sqlc.arg('prefix')::text THEN 70
+        WHEN s.name ILIKE sqlc.arg('pattern')::text THEN 50
+        ELSE 10
+    END DESC,
+    s.approximate_votes DESC,
+    s.type DESC
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: GetIndexServersByTeamMembership :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until

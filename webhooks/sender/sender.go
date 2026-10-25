@@ -251,14 +251,20 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) (err error)
 			err = SendDiscord(
 				webhook.Url,
 				prefix,
-				d.Entity,
 				params,
 			)
+
+			if errors.Is(err, ErrDiscordWebhookGone) {
+				if markErr := d.markBroken(); markErr != nil {
+					state.Logger.Error("Failed to mark Discord webhook broken", d.logFields(zap.Error(markErr))...)
+				}
+			}
 
 			if err != nil {
 				return fmt.Errorf("failed to send discord webhook: %w", err)
 			}
 
+			d.markSucceeded()
 			d.cancelSend("SUCCESS")
 			return nil
 		}
@@ -394,14 +400,14 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) (err error)
 	case resp.StatusCode == 404 || resp.StatusCode == 410:
 		d.cancelSend("WEBHOOK_404_410")
 
-		if err := d.markFailed(); err != nil {
-			state.Logger.Error("Failed to update webhook logs with response", d.logFields(zap.Error(err))...)
-			return fmt.Errorf("webhook failed to validate auth and failed to remove webhook from db: %w", err)
+		if err := d.markBroken(); err != nil {
+			state.Logger.Error("Failed to mark webhook broken", d.logFields(zap.Error(err))...)
+			return fmt.Errorf("webhook returned %d and could not be marked broken: %w", resp.StatusCode, err)
 		}
 
-		d.notify(types.AlertTypeWarning, "Whoa!", "This bot seems to not have a working rewards system.")
+		d.notify(types.AlertTypeWarning, "Webhook disabled", fmt.Sprintf("A webhook for %s returned %d, so it's been disabled. Fix the URL and save the webhook again to turn it back on.", d.Entity.EntityName, resp.StatusCode))
 
-		return errors.New("webhook returned not found thus removing it from the database")
+		return fmt.Errorf("webhook returned %d and was marked broken", resp.StatusCode)
 
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		if d.BadIntent {
@@ -431,15 +437,12 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) (err error)
 		if d.BadIntent {
 			d.cancelSend("WEBHOOK_BROKEN_BAD_AUTHCODE")
 
-			d.notify(types.AlertTypeError, "Webhook Auth Error", "This webhook does not properly handle authentication at this time.")
+			d.notify(types.AlertTypeWarning, "Webhook isn't verifying signatures", fmt.Sprintf("A webhook for %s accepted a request signed with the wrong secret. Anyone could send it fake events. Check the signature on every request and reject invalid ones with a 401 or 403.", d.Entity.EntityName))
 
-			if err := d.markFailed(); err != nil {
-				return errors.New("webhook failed to validate auth and failed to mark request as failed")
-			}
-
-			return errors.New("webhook failed to validate auth")
+			return errors.New("webhook accepted a request with an invalid signature")
 		}
 
+		d.markSucceeded()
 		d.cancelSend("SUCCESS")
 
 		d.notify(types.AlertTypeSuccess, "Webhook Send Successful!", "Successfully notified "+d.Entity.EntityName+" of this action.")
@@ -448,7 +451,9 @@ func send(d *webhookSendState, webhook *webhookData, pBytes *[]byte) (err error)
 	return nil
 }
 
-func SendDiscord(url, prefix string, entity WebhookEntity, params *discord.Embed) error {
+var ErrDiscordWebhookGone = errors.New("discord webhook no longer exists or is unauthorized")
+
+func SendDiscord(url, prefix string, params *discord.Embed) error {
 	url = state.Config.Meta.PopplioProxy + "/" + strings.TrimPrefix(url, prefix)
 
 	payload, err := jsonimpl.Marshal(discord.WebhookMessageCreate{
@@ -465,20 +470,11 @@ func SendDiscord(url, prefix string, entity WebhookEntity, params *discord.Embed
 		return err
 	}
 
-	for _, code := range []int{404, 401, 403, 410} {
-		if resp.StatusCode == code {
-			err := db.New(state.Pool).MarkWebhookBrokenForTarget(state.Context, db.MarkWebhookBrokenForTargetParams{
-				TargetID:   entity.EntityID,
-				TargetType: entity.EntityType,
-			})
+	defer resp.Body.Close()
 
-			if err != nil {
-				state.Logger.Error("Failed to update webhook logs with response", zap.Error(err), zap.String("entityID", entity.EntityID), zap.String("entityType", entity.EntityType), zap.Int("status", resp.StatusCode))
-				return fmt.Errorf("webhook is broken (404/401/403/410) and failed to remove webhook from db: %w", err)
-			}
-
-			return errors.New("webhook is broken (404/401/403/410)")
-		}
+	switch resp.StatusCode {
+	case 401, 403, 404, 410:
+		return fmt.Errorf("%w: %d", ErrDiscordWebhookGone, resp.StatusCode)
 	}
 
 	return nil

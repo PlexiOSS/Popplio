@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	db "popplio/db"
@@ -99,6 +100,10 @@ func EntityRedeemVoteCredits(
 
 	if totalCredits == 0 {
 		return errors.New("no vote credits to redeem")
+	}
+
+	if totalCredits > math.MaxInt32 || votesToRedeem > math.MaxInt32 {
+		return errors.New("too many votes to redeem at once")
 	}
 
 	id, err := q.InsertVoteRedeemLog(ctx, db.InsertVoteRedeemLogParams{

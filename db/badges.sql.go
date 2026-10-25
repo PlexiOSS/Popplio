@@ -11,6 +11,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const awardSystemBadge = `-- name: AwardSystemBadge :execrows
+INSERT INTO entity_badges (target_type, target_id, badge_id, reason, awarded_by)
+SELECT $1::text, t, $2::text, $3::text, 'system'
+FROM unnest($4::text[]) AS t
+WHERE EXISTS (SELECT 1 FROM badges WHERE id = $2::text)
+ON CONFLICT (target_type, target_id, badge_id) DO NOTHING
+`
+
+type AwardSystemBadgeParams struct {
+	TargetType string   `db:"target_type" json:"target_type"`
+	BadgeID    string   `db:"badge_id" json:"badge_id"`
+	Reason     string   `db:"reason" json:"reason"`
+	TargetIds  []string `db:"target_ids" json:"target_ids"`
+}
+
+func (q *Queries) AwardSystemBadge(ctx context.Context, arg AwardSystemBadgeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, awardSystemBadge,
+		arg.TargetType,
+		arg.BadgeID,
+		arg.Reason,
+		arg.TargetIds,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countBadgeByID = `-- name: CountBadgeByID :one
 SELECT EXISTS(SELECT 1 FROM badges WHERE id = $1)
 `
@@ -87,6 +115,82 @@ func (q *Queries) GetEntityBadges(ctx context.Context, arg GetEntityBadgesParams
 	return items, nil
 }
 
+const getPartnerBotIDs = `-- name: GetPartnerBotIDs :many
+SELECT DISTINCT b.bot_id FROM partners p
+INNER JOIN bots b ON b.bot_id = p.bot_id
+WHERE b.type = 'approved' OR b.type = 'certified'
+`
+
+func (q *Queries) GetPartnerBotIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, getPartnerBotIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var bot_id string
+		if err := rows.Scan(&bot_id); err != nil {
+			return nil, err
+		}
+		items = append(items, bot_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getVeteranBotIDs = `-- name: GetVeteranBotIDs :many
+SELECT bot_id FROM bots
+WHERE (type = 'approved' OR type = 'certified') AND created_at < NOW() - INTERVAL '2 years'
+`
+
+func (q *Queries) GetVeteranBotIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, getVeteranBotIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var bot_id string
+		if err := rows.Scan(&bot_id); err != nil {
+			return nil, err
+		}
+		items = append(items, bot_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getVeteranServerIDs = `-- name: GetVeteranServerIDs :many
+SELECT server_id FROM servers
+WHERE (type = 'approved' OR type = 'certified') AND created_at < NOW() - INTERVAL '2 years'
+`
+
+func (q *Queries) GetVeteranServerIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, getVeteranServerIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var server_id string
+		if err := rows.Scan(&server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertBadge = `-- name: InsertBadge :exec
 INSERT INTO badges (id, name, description, icon, color, target_types, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
 `
@@ -150,6 +254,28 @@ func (q *Queries) ListBadges(ctx context.Context) ([]Badge, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeSystemBadge = `-- name: RevokeSystemBadge :execrows
+DELETE FROM entity_badges
+WHERE target_type = $1::text
+  AND badge_id = $2::text
+  AND awarded_by = 'system'
+  AND NOT (target_id = ANY($3::text[]))
+`
+
+type RevokeSystemBadgeParams struct {
+	TargetType string   `db:"target_type" json:"target_type"`
+	BadgeID    string   `db:"badge_id" json:"badge_id"`
+	TargetIds  []string `db:"target_ids" json:"target_ids"`
+}
+
+func (q *Queries) RevokeSystemBadge(ctx context.Context, arg RevokeSystemBadgeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSystemBadge, arg.TargetType, arg.BadgeID, arg.TargetIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateBadge = `-- name: UpdateBadge :exec

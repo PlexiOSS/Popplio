@@ -65,11 +65,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	votesParam := r.URL.Query().Get("votes")
 
-	votesInt, err := strconv.Atoi(votesParam)
+	votesParsed, err := strconv.ParseInt(votesParam, 10, 32)
 
-	if err != nil {
-		return resp.BadRequest("votes must be an integer")
+	if err != nil || votesParsed <= 0 {
+		return resp.BadRequest("votes must be a positive integer")
 	}
+
+	votesInt := int(votesParsed)
 
 	tx, err := state.Pool.Begin(d.Context)
 

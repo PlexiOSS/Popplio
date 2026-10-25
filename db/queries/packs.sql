@@ -105,16 +105,30 @@ SELECT url, name, short, pack_type, owner, tags, vote_banned
 FROM packs WHERE url = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text ORDER BY created_at;
 
 -- name: SearchPacksPublic :many
-SELECT url, name, short, pack_type, owner, tags, bots, servers, vote_banned
+SELECT packs.url, packs.name, packs.short, packs.pack_type, packs.owner, packs.tags, packs.bots, packs.servers, packs.vote_banned,
+    COUNT(*) OVER ()::bigint AS total_count
 FROM packs
-WHERE (sqlc.arg('query')::text = '' OR url = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text)
+WHERE (
+    sqlc.arg('query')::text = ''
+    OR packs.url = sqlc.arg('query')::text
+    OR packs.name ILIKE sqlc.arg('pattern')::text
+    OR packs.short ILIKE sqlc.arg('pattern')::text
+)
 AND (
     cardinality(sqlc.arg('tags')::text[]) = 0
-    OR (sqlc.arg('tag_mode')::text = '@>' AND tags @> sqlc.arg('tags')::text[])
-    OR (sqlc.arg('tag_mode')::text = '&&' AND tags && sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(packs.tags) t) @> sqlc.arg('tags')::text[])
+    OR (sqlc.arg('tag_mode')::text = '&&' AND ARRAY(SELECT lower(t) FROM unnest(packs.tags) t) && sqlc.arg('tags')::text[])
 )
-ORDER BY created_at DESC
-LIMIT 12;
+ORDER BY
+    CASE
+        WHEN sqlc.arg('query')::text = '' THEN 0
+        WHEN packs.url = sqlc.arg('query')::text OR lower(packs.name) = sqlc.arg('query')::text THEN 90
+        WHEN packs.name ILIKE sqlc.arg('prefix')::text THEN 70
+        WHEN packs.name ILIKE sqlc.arg('pattern')::text THEN 50
+        ELSE 10
+    END DESC,
+    packs.created_at DESC
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
 -- name: DeletePackEmojis :exec
 DELETE FROM pack_emojis WHERE pack_url = $1;

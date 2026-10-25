@@ -65,6 +65,13 @@ func All() []Task {
 			Interval:    5 * time.Minute,
 			Run:         UserCacheRefresh,
 		},
+		{
+			Name:        "badge_sync",
+			Description: "Awarding and revoking automatic badges (Partner on partnered bots, Veteran on listings older than two years)",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         BadgeSync,
+		},
 	}
 }
 

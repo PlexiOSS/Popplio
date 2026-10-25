@@ -10,6 +10,7 @@ import (
 	"popplio/perms"
 	"popplio/routes/entityassets/put_entity_asset"
 	"popplio/routes/servers/endpoints/add_server"
+	"popplio/routes/servers/endpoints/delete_server"
 	"popplio/routes/servers/endpoints/get_all_servers"
 	"popplio/routes/servers/endpoints/get_flat_emojis"
 	"popplio/routes/servers/endpoints/get_flat_stickers"
@@ -138,6 +139,30 @@ func (b Router) Routes(r *chi.Mux) {
 		},
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}",
+		OpId:    "delete_server",
+		Method:  uapi.DELETE,
+		Docs:    delete_server.Docs,
+		Handler: delete_server.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityDeleteServers),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeServer, chi.URLParam(r, "id")
+				},
+			},
 		},
 	}.Route(r)
 

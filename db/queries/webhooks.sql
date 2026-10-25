@@ -43,11 +43,14 @@ RETURNING id::text;
 UPDATE webhook_logs SET response = $1, status_code = $2, request_headers = $3, response_headers = $4
 WHERE id = $5;
 
--- name: MarkWebhookBrokenForTarget :exec
-UPDATE webhooks SET broken = true WHERE target_id = $1 AND target_type = $2;
+-- name: MarkWebhookBroken :exec
+UPDATE webhooks SET broken = true WHERE id = $1;
 
 -- name: IncrementWebhookFailedRequests :exec
-UPDATE webhooks SET failed_requests = failed_requests + 1 WHERE target_id = $1 AND target_type = $2;
+UPDATE webhooks SET failed_requests = failed_requests + 1 WHERE id = $1;
+
+-- name: ResetWebhookFailedRequests :exec
+UPDATE webhooks SET failed_requests = 0 WHERE id = $1 AND failed_requests > 0;
 
 -- name: GetWebhookLogsPage :many
 SELECT id, webhook_id, target_id, target_type, user_id, url, data, response, created_at, state, tries, last_try, bad_intent, status_code, request_headers, response_headers

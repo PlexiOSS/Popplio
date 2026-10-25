@@ -28,6 +28,13 @@ import (
 
 var compiledMessages = uapi.CompileValidationErrors(types.SearchQuery{})
 
+const (
+	perPage = 12
+	maxPage = 1000
+)
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Search List",
@@ -77,10 +84,26 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Invalid tag mode")
 	}
 
-	sr := types.SearchResponse{}
+	if payload.Page < 1 {
+		payload.Page = 1
+	}
+
+	if payload.Page > maxPage {
+		return resp.BadRequest("page is too high")
+	}
+
+	sr := types.SearchResponse{Counts: map[string]int{}, PerPage: perPage}
 	tagMode := string(payload.TagFilter.TagMode)
-	pattern := "%" + strings.ToLower(payload.Query) + "%"
-	lowerQuery := strings.ToLower(payload.Query)
+	lowerQuery := strings.ToLower(strings.TrimSpace(payload.Query))
+	escaped := likeEscaper.Replace(lowerQuery)
+	pattern := "%" + escaped + "%"
+	prefix := escaped + "%"
+	offset := int32((payload.Page - 1) * perPage)
+
+	tags := make([]string, len(payload.TagFilter.Tags))
+	for i, tag := range payload.TagFilter.Tags {
+		tags[i] = strings.ToLower(strings.TrimSpace(tag))
+	}
 	q := db.New(state.Pool)
 
 	for _, targetType := range payload.TargetTypes {
@@ -95,10 +118,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				VotesTo:     int32(payload.Votes.To),
 				ShardsFrom:  int32(payload.Shards.From),
 				ShardsTo:    int32(payload.Shards.To),
-				Tags:        payload.TagFilter.Tags,
+				Tags:        tags,
 				TagMode:     tagMode,
 				Query:       lowerQuery,
 				Pattern:     pattern,
+				Prefix:      prefix,
+				Lim:         perPage,
+				Off:         offset,
 			})
 
 			if err != nil {
@@ -138,6 +164,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 
 			sr.Bots = bots
+			if len(rows) > 0 {
+				sr.Counts["bot"] = int(rows[0].TotalCount)
+			} else {
+				sr.Counts["bot"] = 0
+			}
 		case "server":
 			sr.TargetTypes = append(sr.TargetTypes, "server")
 
@@ -146,10 +177,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				MembersTo:   int32(payload.TotalMembers.To),
 				VotesFrom:   int32(payload.Votes.From),
 				VotesTo:     int32(payload.Votes.To),
-				Tags:        payload.TagFilter.Tags,
+				Tags:        tags,
 				TagMode:     tagMode,
 				Query:       lowerQuery,
 				Pattern:     pattern,
+				Prefix:      prefix,
+				Lim:         perPage,
+				Off:         offset,
 			})
 
 			if err != nil {
@@ -187,14 +221,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 
 			sr.Servers = servers
+			if len(rows) > 0 {
+				sr.Counts["server"] = int(rows[0].TotalCount)
+			} else {
+				sr.Counts["server"] = 0
+			}
 		case "team":
 			sr.TargetTypes = append(sr.TargetTypes, "team")
 
 			rows, err := q.SearchTeamsPublic(d.Context, db.SearchTeamsPublicParams{
-				Query:     payload.Query,
-				Pattern:   "%" + payload.Query + "%",
-				Tags:      payload.TagFilter.Tags,
+				Query:     lowerQuery,
+				Pattern:   pattern,
+				Prefix:    prefix,
+				Tags:      tags,
 				TagMode:   tagMode,
+				Lim:       perPage,
+				Off:       offset,
 				VotesFrom: int32(payload.Votes.From),
 				VotesTo:   int32(payload.Votes.To),
 			})
@@ -224,14 +266,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 
 			sr.Teams = teams
+			if len(rows) > 0 {
+				sr.Counts["team"] = int(rows[0].TotalCount)
+			} else {
+				sr.Counts["team"] = 0
+			}
 		case "pack":
 			sr.TargetTypes = append(sr.TargetTypes, "pack")
 
 			rows, err := q.SearchPacksPublic(d.Context, db.SearchPacksPublicParams{
-				Query:   payload.Query,
-				Pattern: "%" + payload.Query + "%",
-				Tags:    payload.TagFilter.Tags,
+				Query:   lowerQuery,
+				Pattern: pattern,
+				Prefix:  prefix,
+				Tags:    tags,
 				TagMode: tagMode,
+				Lim:     perPage,
+				Off:     offset,
 			})
 
 			if err != nil {
@@ -259,6 +309,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 
 			sr.Packs = packs
+			if len(rows) > 0 {
+				sr.Counts["pack"] = int(rows[0].TotalCount)
+			} else {
+				sr.Counts["pack"] = 0
+			}
 		}
 	}
 

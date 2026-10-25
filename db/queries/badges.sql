@@ -23,3 +23,30 @@ UPDATE badges SET name = $1, description = $2, icon = $3, color = $4, target_typ
 
 -- name: DeleteBadge :exec
 DELETE FROM badges WHERE id = $1;
+
+-- name: GetPartnerBotIDs :many
+SELECT DISTINCT b.bot_id FROM partners p
+INNER JOIN bots b ON b.bot_id = p.bot_id
+WHERE b.type = 'approved' OR b.type = 'certified';
+
+-- name: GetVeteranBotIDs :many
+SELECT bot_id FROM bots
+WHERE (type = 'approved' OR type = 'certified') AND created_at < NOW() - INTERVAL '2 years';
+
+-- name: GetVeteranServerIDs :many
+SELECT server_id FROM servers
+WHERE (type = 'approved' OR type = 'certified') AND created_at < NOW() - INTERVAL '2 years';
+
+-- name: AwardSystemBadge :execrows
+INSERT INTO entity_badges (target_type, target_id, badge_id, reason, awarded_by)
+SELECT sqlc.arg(target_type)::text, t, sqlc.arg(badge_id)::text, sqlc.arg(reason)::text, 'system'
+FROM unnest(sqlc.arg(target_ids)::text[]) AS t
+WHERE EXISTS (SELECT 1 FROM badges WHERE id = sqlc.arg(badge_id)::text)
+ON CONFLICT (target_type, target_id, badge_id) DO NOTHING;
+
+-- name: RevokeSystemBadge :execrows
+DELETE FROM entity_badges
+WHERE target_type = sqlc.arg(target_type)::text
+  AND badge_id = sqlc.arg(badge_id)::text
+  AND awarded_by = 'system'
+  AND NOT (target_id = ANY(sqlc.arg(target_ids)::text[]));
