@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /votes/leaderboard` accepts `period` (`all`, the default, or
+  `month` for votes since the last monthly vote reset). Each entry now
+  includes `rank`, `bot_votes`, `server_votes`, `other_votes` and
+  `favorite` (the listed, non-NSFW bot or server the voter upvoted most
+  in the period, with its name, avatar and vanity). Results are cached in
+  Redis for 5 minutes.
+- `GET /votes/leaderboard/users/{user_id}`: one user's leaderboard rank,
+  vote count and the total number of voters for a period (rank `0` when
+  they have no counted votes), cached for 5 minutes.
+
+### Fixed
+
+- The voter leaderboard counted votes staff voided with a per-entity vote
+  reset and votes from vote-banned or banned users, so a caught vote
+  farmer stayed on the board. Both are now excluded. Monthly and
+  type-wide resets still count toward the all-time total.
+- One voter whose profile couldn't be resolved made `GET
+  /votes/leaderboard` return 500. That voter is now logged and left out.
+
 ## [1.10.0] - 2026-10-25
 
 ### Added

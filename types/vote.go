@@ -97,8 +97,31 @@ type EntityVoteRedeemLogSummary struct {
 	RedeemedCredits  int                    `json:"redeemed_credits" description:"The total amount of credits that have been redeemed"`
 }
 
+// The bot or server a leaderboard voter upvoted most in the period
+type VoterLeaderboardFavorite struct {
+	TargetType string `json:"target_type" description:"The entity type, bot or server"`
+	TargetID   string `json:"target_id" description:"The entity's ID"`
+	Name       string `json:"name" description:"The entity's display name"`
+	Avatar     string `json:"avatar" description:"The entity's avatar or icon URL, empty if it has none"`
+	Vanity     string `json:"vanity" description:"The entity's vanity code, empty if it has none"`
+	Votes      int    `json:"votes" description:"How many of the voter's upvotes in the period went to this entity"`
+}
+
 // One row of the voter leaderboard
 type VoterLeaderboardEntry struct {
-	User  *dovetypes.PlatformUser `json:"user" description:"The voter"`
-	Votes int                     `json:"votes" description:"The voter's all-time upvote count, across every entity"`
+	User        *dovetypes.PlatformUser   `json:"user" description:"The voter"`
+	Rank        int                       `json:"rank" description:"The voter's position on the leaderboard, starting at 1"`
+	Votes       int                       `json:"votes" description:"The voter's upvote count in the period, across every entity"`
+	BotVotes    int                       `json:"bot_votes" description:"How many of those upvotes went to bots"`
+	ServerVotes int                       `json:"server_votes" description:"How many of those upvotes went to servers"`
+	OtherVotes  int                       `json:"other_votes" description:"How many of those upvotes went to teams and packs"`
+	Favorite    *VoterLeaderboardFavorite `json:"favorite" description:"The listed bot or server the voter upvoted most in the period, null if none"`
+}
+
+// A single user's position on the voter leaderboard
+type VoterLeaderboardRank struct {
+	Rank        int        `json:"rank" description:"The user's position on the leaderboard, 0 if they have no counted upvotes in the period"`
+	Votes       int        `json:"votes" description:"The user's upvote count in the period"`
+	TotalVoters int        `json:"total_voters" description:"How many users have counted upvotes in the period"`
+	PeriodStart *time.Time `json:"period_start" description:"When the period started, null for all-time"`
 }

@@ -17,6 +17,7 @@ import (
 	"popplio/routes/votes/endpoints/get_vote_credit_tiers"
 	"popplio/routes/votes/endpoints/get_vote_redeem_logs"
 	"popplio/routes/votes/endpoints/get_voter_leaderboard"
+	"popplio/routes/votes/endpoints/get_voter_leaderboard_rank"
 	"popplio/routes/votes/endpoints/get_votes_user_list"
 	"popplio/routes/votes/endpoints/redeem_vote_credits"
 	"popplio/state"
@@ -50,6 +51,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_voter_leaderboard.Docs,
 		Handler: get_voter_leaderboard.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/votes/leaderboard/users/{user_id}",
+		OpId:    "get_voter_leaderboard_rank",
+		Method:  uapi.GET,
+		Docs:    get_voter_leaderboard_rank.Docs,
+		Handler: get_voter_leaderboard_rank.Route,
 	}.Route(r)
 
 	uapi.Route{

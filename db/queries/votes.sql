@@ -204,15 +204,64 @@ WHERE target_id = $1 AND target_type = $2
 ORDER BY created_at DESC;
 
 -- name: GetTopVoters :many
--- All-time, not scoped to the current post-reset cycle -- deliberately
--- counts every upvote a user has ever cast (void or not), same "lifetime
--- cumulative, no time window" shape as GetTopReviewers. Filtering to
--- void = false would wipe most of the board every time the monthly
--- automated reset runs, which defeats the point of recognizing a
--- consistently active voter.
-SELECT author, COUNT(*) AS vote_count
-FROM entity_votes
-WHERE upvote = true
-GROUP BY author
-ORDER BY vote_count DESC
-LIMIT $1;
+WITH counted AS (
+    SELECT ev.author,
+        COUNT(*) AS vote_count,
+        COUNT(*) FILTER (WHERE ev.target_type = 'bot') AS bot_votes,
+        COUNT(*) FILTER (WHERE ev.target_type = 'server') AS server_votes,
+        COUNT(*) FILTER (WHERE ev.target_type NOT IN ('bot', 'server')) AS other_votes,
+        MIN(ev.created_at) AS first_vote
+    FROM entity_votes ev
+    WHERE ev.upvote = true
+    AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+    AND (sqlc.narg('since')::timestamptz IS NULL OR ev.created_at >= sqlc.narg('since')::timestamptz)
+    AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
+    GROUP BY ev.author
+)
+SELECT author, vote_count, bot_votes, server_votes, other_votes,
+    ROW_NUMBER() OVER (ORDER BY vote_count DESC, first_vote ASC, author ASC)::bigint AS rank
+FROM counted
+ORDER BY rank
+LIMIT sqlc.arg('lim');
+
+-- name: GetVoterRank :one
+WITH counted AS (
+    SELECT ev.author,
+        COUNT(*) AS vote_count,
+        MIN(ev.created_at) AS first_vote
+    FROM entity_votes ev
+    WHERE ev.upvote = true
+    AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+    AND (sqlc.narg('since')::timestamptz IS NULL OR ev.created_at >= sqlc.narg('since')::timestamptz)
+    AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
+    GROUP BY ev.author
+), ranked AS (
+    SELECT author, vote_count,
+        ROW_NUMBER() OVER (ORDER BY vote_count DESC, first_vote ASC, author ASC)::bigint AS rank,
+        COUNT(*) OVER ()::bigint AS total_voters
+    FROM counted
+)
+SELECT rank, vote_count, total_voters
+FROM ranked
+WHERE author = sqlc.arg('author');
+
+-- name: GetVoterFavorites :many
+SELECT DISTINCT ON (ev.author) ev.author, ev.target_type, ev.target_id, COUNT(*) AS vote_count,
+    COALESCE(s.name, '')::text AS server_name, COALESCE(s.avatar, '')::text AS server_avatar, COALESCE(v.code::text, '')::text AS vanity
+FROM entity_votes ev
+LEFT JOIN bots b ON ev.target_type = 'bot' AND b.bot_id = ev.target_id
+LEFT JOIN servers s ON ev.target_type = 'server' AND s.server_id = ev.target_id
+LEFT JOIN vanity v ON v.itag = COALESCE(b.vanity_ref, s.vanity_ref)
+WHERE ev.author = ANY(sqlc.arg('authors')::text[])
+AND ev.upvote = true
+AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+AND (sqlc.narg('since')::timestamptz IS NULL OR ev.created_at >= sqlc.narg('since')::timestamptz)
+AND (
+    (b.bot_id IS NOT NULL AND b.type IN ('approved', 'certified') AND NOT b.nsfw)
+    OR (s.server_id IS NOT NULL AND s.type IN ('approved', 'certified') AND s.state = 'public' AND NOT s.nsfw)
+)
+GROUP BY ev.author, ev.target_type, ev.target_id, s.name, s.avatar, v.code
+ORDER BY ev.author, COUNT(*) DESC, MAX(ev.created_at) DESC;
+
+-- name: GetLatestAutomatedVoteReset :one
+SELECT created_at FROM automated_vote_resets ORDER BY created_at DESC LIMIT 1;

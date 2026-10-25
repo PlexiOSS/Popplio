@@ -192,6 +192,17 @@ func (q *Queries) GetEntityVotes(ctx context.Context, arg GetEntityVotesParams) 
 	return items, nil
 }
 
+const getLatestAutomatedVoteReset = `-- name: GetLatestAutomatedVoteReset :one
+SELECT created_at FROM automated_vote_resets ORDER BY created_at DESC LIMIT 1
+`
+
+func (q *Queries) GetLatestAutomatedVoteReset(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLatestAutomatedVoteReset)
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getPackVoteBanned = `-- name: GetPackVoteBanned :one
 SELECT vote_banned FROM packs WHERE url = $1
 `
@@ -334,27 +345,43 @@ func (q *Queries) GetTeamVoteStatus(ctx context.Context, id string) (GetTeamVote
 }
 
 const getTopVoters = `-- name: GetTopVoters :many
-SELECT author, COUNT(*) AS vote_count
-FROM entity_votes
-WHERE upvote = true
-GROUP BY author
-ORDER BY vote_count DESC
+WITH counted AS (
+    SELECT ev.author,
+        COUNT(*) AS vote_count,
+        COUNT(*) FILTER (WHERE ev.target_type = 'bot') AS bot_votes,
+        COUNT(*) FILTER (WHERE ev.target_type = 'server') AS server_votes,
+        COUNT(*) FILTER (WHERE ev.target_type NOT IN ('bot', 'server')) AS other_votes,
+        MIN(ev.created_at) AS first_vote
+    FROM entity_votes ev
+    WHERE ev.upvote = true
+    AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+    AND ($2::timestamptz IS NULL OR ev.created_at >= $2::timestamptz)
+    AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
+    GROUP BY ev.author
+)
+SELECT author, vote_count, bot_votes, server_votes, other_votes,
+    ROW_NUMBER() OVER (ORDER BY vote_count DESC, first_vote ASC, author ASC)::bigint AS rank
+FROM counted
+ORDER BY rank
 LIMIT $1
 `
 
-type GetTopVotersRow struct {
-	Author    string `db:"author" json:"author"`
-	VoteCount int64  `db:"vote_count" json:"vote_count"`
+type GetTopVotersParams struct {
+	Lim   int32              `db:"lim" json:"lim"`
+	Since pgtype.Timestamptz `db:"since" json:"since"`
 }
 
-// All-time, not scoped to the current post-reset cycle -- deliberately
-// counts every upvote a user has ever cast (void or not), same "lifetime
-// cumulative, no time window" shape as GetTopReviewers. Filtering to
-// void = false would wipe most of the board every time the monthly
-// automated reset runs, which defeats the point of recognizing a
-// consistently active voter.
-func (q *Queries) GetTopVoters(ctx context.Context, limit int32) ([]GetTopVotersRow, error) {
-	rows, err := q.db.Query(ctx, getTopVoters, limit)
+type GetTopVotersRow struct {
+	Author      string `db:"author" json:"author"`
+	VoteCount   int64  `db:"vote_count" json:"vote_count"`
+	BotVotes    int64  `db:"bot_votes" json:"bot_votes"`
+	ServerVotes int64  `db:"server_votes" json:"server_votes"`
+	OtherVotes  int64  `db:"other_votes" json:"other_votes"`
+	Rank        int64  `db:"rank" json:"rank"`
+}
+
+func (q *Queries) GetTopVoters(ctx context.Context, arg GetTopVotersParams) ([]GetTopVotersRow, error) {
+	rows, err := q.db.Query(ctx, getTopVoters, arg.Lim, arg.Since)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +389,14 @@ func (q *Queries) GetTopVoters(ctx context.Context, limit int32) ([]GetTopVoters
 	var items []GetTopVotersRow
 	for rows.Next() {
 		var i GetTopVotersRow
-		if err := rows.Scan(&i.Author, &i.VoteCount); err != nil {
+		if err := rows.Scan(
+			&i.Author,
+			&i.VoteCount,
+			&i.BotVotes,
+			&i.ServerVotes,
+			&i.OtherVotes,
+			&i.Rank,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -639,6 +673,108 @@ func (q *Queries) GetVoteRedeemLogs(ctx context.Context, arg GetVoteRedeemLogsPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const getVoterFavorites = `-- name: GetVoterFavorites :many
+SELECT DISTINCT ON (ev.author) ev.author, ev.target_type, ev.target_id, COUNT(*) AS vote_count,
+    COALESCE(s.name, '')::text AS server_name, COALESCE(s.avatar, '')::text AS server_avatar, COALESCE(v.code::text, '')::text AS vanity
+FROM entity_votes ev
+LEFT JOIN bots b ON ev.target_type = 'bot' AND b.bot_id = ev.target_id
+LEFT JOIN servers s ON ev.target_type = 'server' AND s.server_id = ev.target_id
+LEFT JOIN vanity v ON v.itag = COALESCE(b.vanity_ref, s.vanity_ref)
+WHERE ev.author = ANY($1::text[])
+AND ev.upvote = true
+AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+AND ($2::timestamptz IS NULL OR ev.created_at >= $2::timestamptz)
+AND (
+    (b.bot_id IS NOT NULL AND b.type IN ('approved', 'certified') AND NOT b.nsfw)
+    OR (s.server_id IS NOT NULL AND s.type IN ('approved', 'certified') AND s.state = 'public' AND NOT s.nsfw)
+)
+GROUP BY ev.author, ev.target_type, ev.target_id, s.name, s.avatar, v.code
+ORDER BY ev.author, COUNT(*) DESC, MAX(ev.created_at) DESC
+`
+
+type GetVoterFavoritesParams struct {
+	Authors []string           `db:"authors" json:"authors"`
+	Since   pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type GetVoterFavoritesRow struct {
+	Author       string `db:"author" json:"author"`
+	TargetType   string `db:"target_type" json:"target_type"`
+	TargetID     string `db:"target_id" json:"target_id"`
+	VoteCount    int64  `db:"vote_count" json:"vote_count"`
+	ServerName   string `db:"server_name" json:"server_name"`
+	ServerAvatar string `db:"server_avatar" json:"server_avatar"`
+	Vanity       string `db:"vanity" json:"vanity"`
+}
+
+func (q *Queries) GetVoterFavorites(ctx context.Context, arg GetVoterFavoritesParams) ([]GetVoterFavoritesRow, error) {
+	rows, err := q.db.Query(ctx, getVoterFavorites, arg.Authors, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetVoterFavoritesRow
+	for rows.Next() {
+		var i GetVoterFavoritesRow
+		if err := rows.Scan(
+			&i.Author,
+			&i.TargetType,
+			&i.TargetID,
+			&i.VoteCount,
+			&i.ServerName,
+			&i.ServerAvatar,
+			&i.Vanity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getVoterRank = `-- name: GetVoterRank :one
+WITH counted AS (
+    SELECT ev.author,
+        COUNT(*) AS vote_count,
+        MIN(ev.created_at) AS first_vote
+    FROM entity_votes ev
+    WHERE ev.upvote = true
+    AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+    AND ($2::timestamptz IS NULL OR ev.created_at >= $2::timestamptz)
+    AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
+    GROUP BY ev.author
+), ranked AS (
+    SELECT author, vote_count,
+        ROW_NUMBER() OVER (ORDER BY vote_count DESC, first_vote ASC, author ASC)::bigint AS rank,
+        COUNT(*) OVER ()::bigint AS total_voters
+    FROM counted
+)
+SELECT rank, vote_count, total_voters
+FROM ranked
+WHERE author = $1
+`
+
+type GetVoterRankParams struct {
+	Author string             `db:"author" json:"author"`
+	Since  pgtype.Timestamptz `db:"since" json:"since"`
+}
+
+type GetVoterRankRow struct {
+	Rank        int64 `db:"rank" json:"rank"`
+	VoteCount   int64 `db:"vote_count" json:"vote_count"`
+	TotalVoters int64 `db:"total_voters" json:"total_voters"`
+}
+
+func (q *Queries) GetVoterRank(ctx context.Context, arg GetVoterRankParams) (GetVoterRankRow, error) {
+	row := q.db.QueryRow(ctx, getVoterRank, arg.Author, arg.Since)
+	var i GetVoterRankRow
+	err := row.Scan(&i.Rank, &i.VoteCount, &i.TotalVoters)
+	return i, err
 }
 
 const insertAutomatedVoteReset = `-- name: InsertAutomatedVoteReset :exec
