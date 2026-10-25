@@ -125,3 +125,17 @@ type VoterLeaderboardRank struct {
 	TotalVoters int        `json:"total_voters" description:"How many users have counted upvotes in the period"`
 	PeriodStart *time.Time `json:"period_start" description:"When the period started, null for all-time"`
 }
+
+// One voter for an entity, with how many times they've upvoted it
+type EntityVoter struct {
+	User        *dovetypes.PlatformUser `json:"user" description:"The voter"`
+	Votes       int                     `json:"votes" description:"The voter's upvotes for this entity since the last vote reset"`
+	TotalVotes  int                     `json:"total_votes" description:"The voter's upvotes for this entity of all time"`
+	LastVotedAt time.Time               `json:"last_voted_at" description:"When the voter last voted for this entity"`
+}
+
+// The voters of an entity, most active first
+type EntityVoterList struct {
+	Voters []EntityVoter `json:"voters" description:"The voters, ordered by current votes, then all-time votes, then most recent vote"`
+	Total  int           `json:"total" description:"How many users have ever upvoted this entity"`
+}

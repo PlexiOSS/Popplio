@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The packs on the bot index (`GET /bots/@index`, shown on the
+  homepage) are now the 9 highest-voted packs, then the largest, instead
+  of the 12 newest, and packs with a description under 20 characters are
+  left out.
+
 ### Added
+
+- `GET /{target_type}/{target_id}/votes/voters`: the users who have
+  upvoted an entity, with their upvotes since the last vote reset and of
+  all time, most active first, plus the total number of voters. Profiles
+  are resolved server-side, and the same visibility rules as `user-list`
+  apply.
 
 - `GET /votes/leaderboard` accepts `period` (`all`, the default, or
   `month` for votes since the last monthly vote reset). Each entry now
@@ -20,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they have no counted votes), cached for 5 minutes.
 
 ### Fixed
+
+- `GET /bots/{id}/similar` could suggest NSFW bots for non-NSFW bots, and
+  compared tags case-sensitively so "Fun" and "fun" didn't match. NSFW
+  bots (by flag or tag) are now only suggested for NSFW bots, tags match
+  case-insensitively, and shared rare tags count for more than common ones
+  like "Configuration".
 
 - The voter leaderboard counted votes staff voided with a per-entity vote
   reset and votes from vote-banned or banned users, so a caught vote

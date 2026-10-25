@@ -1,8 +1,8 @@
 // Package get_similar_bots implements GET /bots/{id}/similar — "Get Similar
 // Bots".
 //
-// Returns other approved/certified bots sharing at least one tag with this
-// bot, ranked by how many tags they share
+// Returns up to 6 other approved/certified bots sharing at least one tag
+// with this bot, ranked by shared tags weighted towards rarer ones
 package get_similar_bots
 
 import (
@@ -23,7 +23,7 @@ import (
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get Similar Bots",
-		Description: "Returns other approved/certified bots sharing at least one tag with this bot, ranked by how many tags they share",
+		Description: "Returns up to 6 other approved/certified bots sharing at least one tag with this bot (case-insensitive), ranked by shared tags with rarer tags weighted higher, then votes. NSFW bots are only included when this bot is NSFW.",
 		Params: []docs.Parameter{
 			{
 				Name:        "id",

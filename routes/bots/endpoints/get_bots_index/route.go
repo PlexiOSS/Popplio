@@ -87,7 +87,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	})
 
 	g.Go(func() error {
-		packRows, err := q.GetRecentPacks(ctx)
+		packRows, err := q.GetHomepagePacks(ctx)
 		if err != nil {
 			return fmt.Errorf("getting packs: %w", err)
 		}

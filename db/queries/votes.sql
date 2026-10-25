@@ -105,6 +105,19 @@ AND void = false
 GROUP BY author
 ORDER BY score DESC;
 
+-- name: GetEntityVoters :many
+SELECT author,
+    COUNT(*) FILTER (WHERE upvote AND NOT void) AS current_votes,
+    COUNT(*) FILTER (WHERE upvote) AS total_votes,
+    MAX(created_at)::timestamptz AS last_voted_at,
+    COUNT(*) OVER () AS total_voters
+FROM entity_votes
+WHERE target_id = sqlc.arg('target_id') AND target_type = sqlc.arg('target_type')
+GROUP BY author
+HAVING COUNT(*) FILTER (WHERE upvote) > 0
+ORDER BY current_votes DESC, total_votes DESC, last_voted_at DESC
+LIMIT sqlc.arg('lim');
+
 -- name: GetVoteAuthorsPage :many
 SELECT author FROM entity_votes WHERE target_id = $1 AND target_type = $2 GROUP BY author LIMIT $3 OFFSET $4;
 

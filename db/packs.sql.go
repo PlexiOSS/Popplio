@@ -240,6 +240,63 @@ func (q *Queries) GetAllPacksByType(ctx context.Context, arg GetAllPacksByTypePa
 	return items, nil
 }
 
+const getHomepagePacks = `-- name: GetHomepagePacks :many
+SELECT p.owner, p.name, p.short, p.tags, p.url, p.created_at, p.pack_type, p.bots, p.servers, p.vote_banned
+FROM packs p
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'pack' AND ev.target_id = p.url AND ev.void = false
+) v ON true
+WHERE char_length(p.short) >= 20
+ORDER BY v.score DESC, cardinality(p.bots) + cardinality(p.servers) DESC, p.created_at DESC
+LIMIT 9
+`
+
+type GetHomepagePacksRow struct {
+	Owner      string             `db:"owner" json:"owner"`
+	Name       string             `db:"name" json:"name"`
+	Short      string             `db:"short" json:"short"`
+	Tags       []string           `db:"tags" json:"tags"`
+	Url        string             `db:"url" json:"url"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PackType   string             `db:"pack_type" json:"pack_type"`
+	Bots       []string           `db:"bots" json:"bots"`
+	Servers    []string           `db:"servers" json:"servers"`
+	VoteBanned bool               `db:"vote_banned" json:"vote_banned"`
+}
+
+func (q *Queries) GetHomepagePacks(ctx context.Context) ([]GetHomepagePacksRow, error) {
+	rows, err := q.db.Query(ctx, getHomepagePacks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetHomepagePacksRow
+	for rows.Next() {
+		var i GetHomepagePacksRow
+		if err := rows.Scan(
+			&i.Owner,
+			&i.Name,
+			&i.Short,
+			&i.Tags,
+			&i.Url,
+			&i.CreatedAt,
+			&i.PackType,
+			&i.Bots,
+			&i.Servers,
+			&i.VoteBanned,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPackByURL = `-- name: GetPackByURL :one
 SELECT owner, name, short, tags, url, created_at, pack_type, bots, servers, vote_banned
 FROM packs
@@ -390,57 +447,6 @@ func (q *Queries) GetPackSEO(ctx context.Context, url string) (GetPackSEORow, er
 	var i GetPackSEORow
 	err := row.Scan(&i.Name, &i.Short)
 	return i, err
-}
-
-const getRecentPacks = `-- name: GetRecentPacks :many
-SELECT owner, name, short, tags, url, created_at, pack_type, bots, servers, vote_banned
-FROM packs
-ORDER BY created_at DESC
-LIMIT 12
-`
-
-type GetRecentPacksRow struct {
-	Owner      string             `db:"owner" json:"owner"`
-	Name       string             `db:"name" json:"name"`
-	Short      string             `db:"short" json:"short"`
-	Tags       []string           `db:"tags" json:"tags"`
-	Url        string             `db:"url" json:"url"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	PackType   string             `db:"pack_type" json:"pack_type"`
-	Bots       []string           `db:"bots" json:"bots"`
-	Servers    []string           `db:"servers" json:"servers"`
-	VoteBanned bool               `db:"vote_banned" json:"vote_banned"`
-}
-
-func (q *Queries) GetRecentPacks(ctx context.Context) ([]GetRecentPacksRow, error) {
-	rows, err := q.db.Query(ctx, getRecentPacks)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetRecentPacksRow
-	for rows.Next() {
-		var i GetRecentPacksRow
-		if err := rows.Scan(
-			&i.Owner,
-			&i.Name,
-			&i.Short,
-			&i.Tags,
-			&i.Url,
-			&i.CreatedAt,
-			&i.PackType,
-			&i.Bots,
-			&i.Servers,
-			&i.VoteBanned,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getUserPacksByOwner = `-- name: GetUserPacksByOwner :many

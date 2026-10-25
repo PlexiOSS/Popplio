@@ -11,6 +11,7 @@ import (
 	"popplio/perms"
 	"popplio/routes/votes/endpoints/create_user_entity_vote"
 	"popplio/routes/votes/endpoints/get_all_user_votes"
+	"popplio/routes/votes/endpoints/get_entity_voters"
 	"popplio/routes/votes/endpoints/get_general_vote_credit_tiers"
 	"popplio/routes/votes/endpoints/get_user_entity_votes"
 	"popplio/routes/votes/endpoints/get_vote_captcha_challenge"
@@ -126,6 +127,23 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_all_user_votes.Docs,
 		Handler: get_all_user_votes.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/{target_type}/{target_id}/votes/voters",
+		OpId:    "get_entity_voters",
+		Method:  uapi.GET,
+		Docs:    get_entity_voters.Docs,
+		Handler: get_entity_voters.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{

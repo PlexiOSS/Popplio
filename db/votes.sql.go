@@ -131,6 +131,60 @@ func (q *Queries) GetBotVoteStatus(ctx context.Context, botID string) (GetBotVot
 	return i, err
 }
 
+const getEntityVoters = `-- name: GetEntityVoters :many
+SELECT author,
+    COUNT(*) FILTER (WHERE upvote AND NOT void) AS current_votes,
+    COUNT(*) FILTER (WHERE upvote) AS total_votes,
+    MAX(created_at)::timestamptz AS last_voted_at,
+    COUNT(*) OVER () AS total_voters
+FROM entity_votes
+WHERE target_id = $1 AND target_type = $2
+GROUP BY author
+HAVING COUNT(*) FILTER (WHERE upvote) > 0
+ORDER BY current_votes DESC, total_votes DESC, last_voted_at DESC
+LIMIT $3
+`
+
+type GetEntityVotersParams struct {
+	TargetID   string `db:"target_id" json:"target_id"`
+	TargetType string `db:"target_type" json:"target_type"`
+	Lim        int32  `db:"lim" json:"lim"`
+}
+
+type GetEntityVotersRow struct {
+	Author       string             `db:"author" json:"author"`
+	CurrentVotes int64              `db:"current_votes" json:"current_votes"`
+	TotalVotes   int64              `db:"total_votes" json:"total_votes"`
+	LastVotedAt  pgtype.Timestamptz `db:"last_voted_at" json:"last_voted_at"`
+	TotalVoters  int64              `db:"total_voters" json:"total_voters"`
+}
+
+func (q *Queries) GetEntityVoters(ctx context.Context, arg GetEntityVotersParams) ([]GetEntityVotersRow, error) {
+	rows, err := q.db.Query(ctx, getEntityVoters, arg.TargetID, arg.TargetType, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetEntityVotersRow
+	for rows.Next() {
+		var i GetEntityVotersRow
+		if err := rows.Scan(
+			&i.Author,
+			&i.CurrentVotes,
+			&i.TotalVotes,
+			&i.LastVotedAt,
+			&i.TotalVoters,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEntityVotes = `-- name: GetEntityVotes :many
 SELECT itag, target_id, target_type, author, upvote, void, void_reason, voided_at, created_at, vote_num, credit_redeem, immutable
 FROM entity_votes

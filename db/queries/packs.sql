@@ -9,11 +9,17 @@ FROM packs
 WHERE owner = $1
 ORDER BY created_at DESC;
 
--- name: GetRecentPacks :many
-SELECT owner, name, short, tags, url, created_at, pack_type, bots, servers, vote_banned
-FROM packs
-ORDER BY created_at DESC
-LIMIT 12;
+-- name: GetHomepagePacks :many
+SELECT p.owner, p.name, p.short, p.tags, p.url, p.created_at, p.pack_type, p.bots, p.servers, p.vote_banned
+FROM packs p
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'pack' AND ev.target_id = p.url AND ev.void = false
+) v ON true
+WHERE char_length(p.short) >= 20
+ORDER BY v.score DESC, cardinality(p.bots) + cardinality(p.servers) DESC, p.created_at DESC
+LIMIT 9;
 
 -- name: GetAllPacks :many
 SELECT owner, name, short, tags, url, created_at, pack_type, bots, servers, vote_banned

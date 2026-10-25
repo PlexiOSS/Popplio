@@ -1785,15 +1785,34 @@ func (q *Queries) GetRecentlyUpdatedChangelogBots(ctx context.Context, limit int
 }
 
 const getSimilarBots = `-- name: GetSimilarBots :many
-WITH source_tags AS (
-    SELECT tags FROM bots WHERE bot_id = $1
+WITH source AS (
+    SELECT bots.nsfw, bots.tags FROM bots WHERE bots.bot_id = $1
+), source_tags AS (
+    SELECT DISTINCT lower(st.tag) AS tag FROM source, unnest(source.tags) AS st(tag)
+), listed_tags AS (
+    SELECT b.bot_id, b.nsfw, lower(bt.tag) AS tag
+    FROM bots b, unnest(b.tags) AS bt(tag)
+    WHERE b.type IN ('approved', 'certified')
+), tag_weights AS (
+    SELECT lt.tag, 1.0 / ln(COUNT(DISTINCT lt.bot_id) + 1.0) AS weight
+    FROM listed_tags lt
+    JOIN source_tags s ON s.tag = lt.tag
+    GROUP BY lt.tag
+), excluded AS (
+    SELECT DISTINCT lt.bot_id FROM listed_tags lt WHERE lt.tag = 'nsfw'
+), scored AS (
+    SELECT lt.bot_id, SUM(tw.weight) AS score
+    FROM (SELECT DISTINCT listed_tags.bot_id, listed_tags.tag FROM listed_tags) lt
+    JOIN tag_weights tw ON tw.tag = lt.tag
+    WHERE lt.bot_id != $1
+    GROUP BY lt.bot_id
 )
 SELECT b.bot_id, b.short, b.type, b.vanity_ref, b.approximate_votes, b.shards, b.library, b.invite_clicks, b.clicks, b.servers, b.nsfw, b.tags, b.premium, b.created_at, b.self_status, b.last_stats_post, b.supporter_badge, b.boosted_until, b.featured_until, b.spotlighted_until, b.vote_blitz_until
-FROM bots b, source_tags st
-WHERE (b.type = 'approved' OR b.type = 'certified')
-AND b.bot_id != $1
-AND b.tags && st.tags
-ORDER BY cardinality(ARRAY(SELECT unnest(b.tags) INTERSECT SELECT unnest(st.tags))) DESC, b.approximate_votes DESC
+FROM scored sc
+JOIN bots b ON b.bot_id = sc.bot_id
+CROSS JOIN source src
+WHERE src.nsfw OR (NOT b.nsfw AND b.bot_id NOT IN (SELECT excluded.bot_id FROM excluded))
+ORDER BY sc.score DESC, b.approximate_votes DESC
 LIMIT 6
 `
 
@@ -1821,11 +1840,6 @@ type GetSimilarBotsRow struct {
 	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
 }
 
-// Tag-overlap similarity: other approved/certified bots sharing at least
-// one tag with bot_id, ranked by how many tags they share (most first),
-// votes as the tiebreak. No ML/embeddings -- tags are the only structured
-// signal bots already carry, and it's cheap, deterministic, and explains
-// itself ("shares N tags with this bot").
 func (q *Queries) GetSimilarBots(ctx context.Context, botID string) ([]GetSimilarBotsRow, error) {
 	rows, err := q.db.Query(ctx, getSimilarBots, botID)
 	if err != nil {
