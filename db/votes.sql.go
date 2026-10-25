@@ -530,6 +530,64 @@ func (q *Queries) GetUserEntityVotesPage(ctx context.Context, arg GetUserEntityV
 	return items, nil
 }
 
+const getUserTopVoted = `-- name: GetUserTopVoted :many
+SELECT ev.target_type, ev.target_id, COUNT(*) AS vote_count,
+    COALESCE(s.name, '')::text AS server_name, COALESCE(s.avatar, '')::text AS server_avatar, COALESCE(v.code::text, '')::text AS vanity
+FROM entity_votes ev
+LEFT JOIN bots b ON ev.target_type = 'bot' AND b.bot_id = ev.target_id
+LEFT JOIN servers s ON ev.target_type = 'server' AND s.server_id = ev.target_id
+LEFT JOIN vanity v ON v.itag = COALESCE(b.vanity_ref, s.vanity_ref)
+WHERE ev.author = $1
+AND ev.upvote = true
+AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+AND ((b.bot_id IS NOT NULL AND b.type IN ('approved', 'certified') AND NOT b.nsfw)
+    OR (s.server_id IS NOT NULL AND s.type IN ('approved', 'certified') AND s.state = 'public' AND NOT s.nsfw))
+GROUP BY ev.target_type, ev.target_id, s.name, s.avatar, v.code
+ORDER BY COUNT(*) DESC, MAX(ev.created_at) DESC
+LIMIT $2
+`
+
+type GetUserTopVotedParams struct {
+	Author string `db:"author" json:"author"`
+	Lim    int32  `db:"lim" json:"lim"`
+}
+
+type GetUserTopVotedRow struct {
+	TargetType   string `db:"target_type" json:"target_type"`
+	TargetID     string `db:"target_id" json:"target_id"`
+	VoteCount    int64  `db:"vote_count" json:"vote_count"`
+	ServerName   string `db:"server_name" json:"server_name"`
+	ServerAvatar string `db:"server_avatar" json:"server_avatar"`
+	Vanity       string `db:"vanity" json:"vanity"`
+}
+
+func (q *Queries) GetUserTopVoted(ctx context.Context, arg GetUserTopVotedParams) ([]GetUserTopVotedRow, error) {
+	rows, err := q.db.Query(ctx, getUserTopVoted, arg.Author, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserTopVotedRow
+	for rows.Next() {
+		var i GetUserTopVotedRow
+		if err := rows.Scan(
+			&i.TargetType,
+			&i.TargetID,
+			&i.VoteCount,
+			&i.ServerName,
+			&i.ServerAvatar,
+			&i.Vanity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserVoteBanned = `-- name: GetUserVoteBanned :one
 SELECT vote_banned FROM users WHERE user_id = $1
 `

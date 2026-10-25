@@ -272,36 +272,44 @@ WHERE src.nsfw OR (NOT b.nsfw AND b.bot_id NOT IN (SELECT excluded.bot_id FROM e
 ORDER BY sc.score DESC, b.approximate_votes DESC
 LIMIT 6;
 
--- name: GetIndexBotsPaged :many
-SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots
-WHERE (type = 'approved' OR type = 'certified')
-ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC
-LIMIT $1 OFFSET $2;
-
--- name: GetTrendingIndexBots :many
-WITH scored AS (
-	SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS score
-	FROM entity_votes
-	WHERE target_type = 'bot' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
+-- name: BrowseBots :many
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'bot' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND sqlc.arg('sort')::text = 'trending'
+    GROUP BY ev.target_id
 )
-SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots
-WHERE (type = 'approved' OR type = 'certified') AND bot_id IN (SELECT target_id FROM scored)
-ORDER BY (SELECT score FROM scored WHERE scored.target_id = bots.bot_id) DESC
-LIMIT $1 OFFSET $2;
+SELECT b.bot_id, b.short, b.type, b.vanity_ref, b.approximate_votes, b.shards, b.library, b.invite_clicks, b.clicks, b.servers, b.nsfw, b.tags, b.premium, b.created_at, b.self_status, b.last_stats_post, b.supporter_badge, b.boosted_until, b.featured_until, b.spotlighted_until, b.vote_blitz_until
+FROM bots b
+LEFT JOIN trending t ON t.target_id = b.bot_id
+WHERE b.type IN ('approved', 'certified')
+AND (sqlc.arg('sort')::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT sqlc.arg('certified_only')::boolean OR b.type = 'certified')
+AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) AS et(tag) WHERE lower(et.tag) = lower(sqlc.narg('tag')::text)))
+ORDER BY
+    CASE WHEN sqlc.arg('sort')::text = 'new' THEN (b.boosted_until IS NOT NULL AND b.boosted_until > NOW()) END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'trending' THEN t.score END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'votes' THEN b.approximate_votes END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'servers' THEN b.servers END DESC,
+    b.created_at DESC
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
--- name: CountBots :one
-SELECT COUNT(*) FROM bots WHERE (type = 'approved' OR type = 'certified');
-
--- name: CountTrendingBots :one
-SELECT COUNT(*) FROM bots
-WHERE (type = 'approved' OR type = 'certified') AND bot_id IN (
-	SELECT target_id FROM entity_votes
-	WHERE target_type = 'bot' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
-);
+-- name: CountBrowseBots :one
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'bot' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND sqlc.arg('sort')::text = 'trending'
+    GROUP BY ev.target_id
+)
+SELECT COUNT(*)
+FROM bots b
+LEFT JOIN trending t ON t.target_id = b.bot_id
+WHERE b.type IN ('approved', 'certified')
+AND (sqlc.arg('sort')::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT sqlc.arg('certified_only')::boolean OR b.type = 'certified')
+AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) AS et(tag) WHERE lower(et.tag) = lower(sqlc.narg('tag')::text)));
 
 -- name: GetCertifiedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until

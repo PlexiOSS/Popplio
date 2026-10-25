@@ -153,6 +153,68 @@ func (q *Queries) GetReviews(ctx context.Context, arg GetReviewsParams) ([]GetRe
 	return items, nil
 }
 
+const getUserRecentReviews = `-- name: GetUserRecentReviews :many
+SELECT r.id, r.target_type, r.target_id, r.stars, r.content, r.created_at,
+    COALESCE(s.name, '')::text AS server_name, COALESCE(s.avatar, '')::text AS server_avatar, COALESCE(v.code::text, '')::text AS vanity
+FROM reviews r
+LEFT JOIN bots b ON r.target_type = 'bot' AND b.bot_id = r.target_id
+LEFT JOIN servers s ON r.target_type = 'server' AND s.server_id = r.target_id
+LEFT JOIN vanity v ON v.itag = COALESCE(b.vanity_ref, s.vanity_ref)
+WHERE r.author = $1
+AND r.parent_id IS NULL
+AND ((b.bot_id IS NOT NULL AND b.type IN ('approved', 'certified') AND NOT b.nsfw)
+    OR (s.server_id IS NOT NULL AND s.type IN ('approved', 'certified') AND s.state = 'public' AND NOT s.nsfw))
+ORDER BY r.created_at DESC
+LIMIT $2
+`
+
+type GetUserRecentReviewsParams struct {
+	Author string `db:"author" json:"author"`
+	Lim    int32  `db:"lim" json:"lim"`
+}
+
+type GetUserRecentReviewsRow struct {
+	ID           pgtype.UUID        `db:"id" json:"id"`
+	TargetType   string             `db:"target_type" json:"target_type"`
+	TargetID     string             `db:"target_id" json:"target_id"`
+	Stars        int32              `db:"stars" json:"stars"`
+	Content      string             `db:"content" json:"content"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ServerName   string             `db:"server_name" json:"server_name"`
+	ServerAvatar string             `db:"server_avatar" json:"server_avatar"`
+	Vanity       string             `db:"vanity" json:"vanity"`
+}
+
+func (q *Queries) GetUserRecentReviews(ctx context.Context, arg GetUserRecentReviewsParams) ([]GetUserRecentReviewsRow, error) {
+	rows, err := q.db.Query(ctx, getUserRecentReviews, arg.Author, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserRecentReviewsRow
+	for rows.Next() {
+		var i GetUserRecentReviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Stars,
+			&i.Content,
+			&i.CreatedAt,
+			&i.ServerName,
+			&i.ServerAvatar,
+			&i.Vanity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertReview = `-- name: InsertReview :one
 INSERT INTO reviews (author, target_id, target_type, content, stars, parent_id, owner_review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
 `

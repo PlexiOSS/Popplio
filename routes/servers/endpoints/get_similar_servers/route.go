@@ -1,8 +1,9 @@
 // Package get_similar_servers implements GET /servers/{id}/similar — "Get
 // Similar Servers".
 //
-// Returns other approved/certified, publicly listed servers sharing at
-// least one tag with this server, ranked by how many tags they share
+// Returns up to 6 other approved/certified, publicly listed servers sharing
+// at least one tag with this server, ranked by shared tags weighted towards
+// rarer ones
 package get_similar_servers
 
 import (
@@ -23,7 +24,7 @@ import (
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get Similar Servers",
-		Description: "Returns other approved/certified, publicly listed servers sharing at least one tag with this server, ranked by how many tags they share",
+		Description: "Returns up to 6 other approved/certified, publicly listed servers sharing at least one tag with this server (case-insensitive), ranked by shared tags with rarer tags weighted higher, then votes. NSFW servers are only included when this server is NSFW.",
 		Params: []docs.Parameter{
 			{
 				Name:        "id",

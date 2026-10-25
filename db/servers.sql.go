@@ -36,6 +36,106 @@ func (q *Queries) ApproveServer(ctx context.Context, serverID string) error {
 	return err
 }
 
+const browseServers = `-- name: BrowseServers :many
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'server' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND $1::text = 'trending'
+    GROUP BY ev.target_id
+)
+SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes, s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until
+FROM servers s
+LEFT JOIN trending t ON t.target_id = s.server_id
+WHERE s.type IN ('approved', 'certified') AND s.state = 'public'
+AND ($1::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT $2::boolean OR s.type = 'certified')
+AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) AS et(tag) WHERE lower(et.tag) = lower($3::text)))
+ORDER BY
+    CASE WHEN $1::text = 'new' THEN (s.boosted_until IS NOT NULL AND s.boosted_until > NOW()) END DESC,
+    CASE WHEN $1::text = 'trending' THEN t.score END DESC,
+    CASE WHEN $1::text = 'votes' THEN s.approximate_votes END DESC,
+    CASE WHEN $1::text = 'members' THEN s.total_members END DESC,
+    s.created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type BrowseServersParams struct {
+	Sort          string      `db:"sort" json:"sort"`
+	CertifiedOnly bool        `db:"certified_only" json:"certified_only"`
+	Tag           pgtype.Text `db:"tag" json:"tag"`
+	Off           int32       `db:"off" json:"off"`
+	Lim           int32       `db:"lim" json:"lim"`
+}
+
+type BrowseServersRow struct {
+	ServerID         string             `db:"server_id" json:"server_id"`
+	Name             string             `db:"name" json:"name"`
+	Avatar           string             `db:"avatar" json:"avatar"`
+	TotalMembers     int32              `db:"total_members" json:"total_members"`
+	OnlineMembers    int32              `db:"online_members" json:"online_members"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	State            string             `db:"state" json:"state"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+}
+
+func (q *Queries) BrowseServers(ctx context.Context, arg BrowseServersParams) ([]BrowseServersRow, error) {
+	rows, err := q.db.Query(ctx, browseServers,
+		arg.Sort,
+		arg.CertifiedOnly,
+		arg.Tag,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BrowseServersRow
+	for rows.Next() {
+		var i BrowseServersRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.Name,
+			&i.Avatar,
+			&i.TotalMembers,
+			&i.OnlineMembers,
+			&i.Short,
+			&i.Type,
+			&i.State,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const certifyServer = `-- name: CertifyServer :exec
 UPDATE servers SET type = 'certified' WHERE server_id = $1
 `
@@ -79,6 +179,36 @@ func (q *Queries) ClearServerSpotlightedUntil(ctx context.Context, serverID stri
 	return err
 }
 
+const countBrowseServers = `-- name: CountBrowseServers :one
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'server' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND $1::text = 'trending'
+    GROUP BY ev.target_id
+)
+SELECT COUNT(*)
+FROM servers s
+LEFT JOIN trending t ON t.target_id = s.server_id
+WHERE s.type IN ('approved', 'certified') AND s.state = 'public'
+AND ($1::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT $2::boolean OR s.type = 'certified')
+AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) AS et(tag) WHERE lower(et.tag) = lower($3::text)))
+`
+
+type CountBrowseServersParams struct {
+	Sort          string      `db:"sort" json:"sort"`
+	CertifiedOnly bool        `db:"certified_only" json:"certified_only"`
+	Tag           pgtype.Text `db:"tag" json:"tag"`
+}
+
+func (q *Queries) CountBrowseServers(ctx context.Context, arg CountBrowseServersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBrowseServers, arg.Sort, arg.CertifiedOnly, arg.Tag)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countFlatEmojis = `-- name: CountFlatEmojis :one
 SELECT coalesce(SUM(jsonb_array_length(s.emojis)), 0)::bigint
 FROM servers s
@@ -116,17 +246,6 @@ func (q *Queries) CountServerEmojiPreviews(ctx context.Context) (int64, error) {
 	return count, err
 }
 
-const countServers = `-- name: CountServers :one
-SELECT COUNT(*) FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public'
-`
-
-func (q *Queries) CountServers(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countServers)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countServersByType = `-- name: CountServersByType :many
 SELECT type AS method, COUNT(*) FROM servers GROUP BY type
 `
@@ -154,22 +273,6 @@ func (q *Queries) CountServersByType(ctx context.Context) ([]CountServersByTypeR
 		return nil, err
 	}
 	return items, nil
-}
-
-const countTrendingServers = `-- name: CountTrendingServers :one
-SELECT COUNT(*) FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND state = 'public' AND server_id IN (
-	SELECT target_id FROM entity_votes
-	WHERE target_type = 'server' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
-)
-`
-
-func (q *Queries) CountTrendingServers(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countTrendingServers)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
 }
 
 const deleteServerByID = `-- name: DeleteServerByID :exec
@@ -595,81 +698,6 @@ func (q *Queries) GetIndexServersByTeamOwner(ctx context.Context, teamOwner pgty
 	var items []GetIndexServersByTeamOwnerRow
 	for rows.Next() {
 		var i GetIndexServersByTeamOwnerRow
-		if err := rows.Scan(
-			&i.ServerID,
-			&i.Name,
-			&i.Avatar,
-			&i.TotalMembers,
-			&i.OnlineMembers,
-			&i.Short,
-			&i.Type,
-			&i.State,
-			&i.VanityRef,
-			&i.ApproximateVotes,
-			&i.InviteClicks,
-			&i.Clicks,
-			&i.Nsfw,
-			&i.Tags,
-			&i.Premium,
-			&i.SupporterBadge,
-			&i.BoostedUntil,
-			&i.FeaturedUntil,
-			&i.SpotlightedUntil,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getIndexServersPaged = `-- name: GetIndexServersPaged :many
-SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND state = 'public'
-ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type GetIndexServersPagedParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
-}
-
-type GetIndexServersPagedRow struct {
-	ServerID         string             `db:"server_id" json:"server_id"`
-	Name             string             `db:"name" json:"name"`
-	Avatar           string             `db:"avatar" json:"avatar"`
-	TotalMembers     int32              `db:"total_members" json:"total_members"`
-	OnlineMembers    int32              `db:"online_members" json:"online_members"`
-	Short            string             `db:"short" json:"short"`
-	Type             string             `db:"type" json:"type"`
-	State            string             `db:"state" json:"state"`
-	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
-	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
-	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
-	Clicks           int32              `db:"clicks" json:"clicks"`
-	Nsfw             bool               `db:"nsfw" json:"nsfw"`
-	Tags             []string           `db:"tags" json:"tags"`
-	Premium          bool               `db:"premium" json:"premium"`
-	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
-	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
-	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
-	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
-}
-
-func (q *Queries) GetIndexServersPaged(ctx context.Context, arg GetIndexServersPagedParams) ([]GetIndexServersPagedRow, error) {
-	rows, err := q.db.Query(ctx, getIndexServersPaged, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetIndexServersPagedRow
-	for rows.Next() {
-		var i GetIndexServersPagedRow
 		if err := rows.Scan(
 			&i.ServerID,
 			&i.Name,
@@ -1392,16 +1420,34 @@ func (q *Queries) GetServersWithEmojisShown(ctx context.Context) ([]string, erro
 }
 
 const getSimilarServers = `-- name: GetSimilarServers :many
-WITH source_tags AS (
-    SELECT tags FROM servers WHERE server_id = $1
+WITH source AS (
+    SELECT servers.nsfw, servers.tags FROM servers WHERE servers.server_id = $1
+), source_tags AS (
+    SELECT DISTINCT lower(st.tag) AS tag FROM source, unnest(source.tags) AS st(tag)
+), listed_tags AS (
+    SELECT sv.server_id, lower(t.tag) AS tag
+    FROM servers sv, unnest(sv.tags) AS t(tag)
+    WHERE sv.type IN ('approved', 'certified') AND sv.state = 'public'
+), tag_weights AS (
+    SELECT lt.tag, 1.0 / ln(COUNT(DISTINCT lt.server_id) + 1.0) AS weight
+    FROM listed_tags lt
+    JOIN source_tags s ON s.tag = lt.tag
+    GROUP BY lt.tag
+), excluded AS (
+    SELECT DISTINCT lt.server_id FROM listed_tags lt WHERE lt.tag = 'nsfw'
+), scored AS (
+    SELECT lt.server_id, SUM(tw.weight) AS score
+    FROM (SELECT DISTINCT listed_tags.server_id, listed_tags.tag FROM listed_tags) lt
+    JOIN tag_weights tw ON tw.tag = lt.tag
+    WHERE lt.server_id != $1
+    GROUP BY lt.server_id
 )
 SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes, s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until
-FROM servers s, source_tags st
-WHERE (s.type = 'approved' OR s.type = 'certified')
-AND s.state = 'public'
-AND s.server_id != $1
-AND s.tags && st.tags
-ORDER BY cardinality(ARRAY(SELECT unnest(s.tags) INTERSECT SELECT unnest(st.tags))) DESC, s.approximate_votes DESC
+FROM scored sc
+JOIN servers s ON s.server_id = sc.server_id
+CROSS JOIN source src
+WHERE src.nsfw OR (NOT s.nsfw AND s.server_id NOT IN (SELECT excluded.server_id FROM excluded))
+ORDER BY sc.score DESC, s.approximate_votes DESC
 LIMIT 6
 `
 
@@ -1427,7 +1473,6 @@ type GetSimilarServersRow struct {
 	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
 }
 
-// Tag-overlap similarity, mirroring GetSimilarBots -- see its comment.
 func (q *Queries) GetSimilarServers(ctx context.Context, serverID string) ([]GetSimilarServersRow, error) {
 	rows, err := q.db.Query(ctx, getSimilarServers, serverID)
 	if err != nil {
@@ -1571,87 +1616,6 @@ func (q *Queries) GetTopVotedIndexServers(ctx context.Context) ([]GetTopVotedInd
 	var items []GetTopVotedIndexServersRow
 	for rows.Next() {
 		var i GetTopVotedIndexServersRow
-		if err := rows.Scan(
-			&i.ServerID,
-			&i.Name,
-			&i.Avatar,
-			&i.TotalMembers,
-			&i.OnlineMembers,
-			&i.Short,
-			&i.Type,
-			&i.State,
-			&i.VanityRef,
-			&i.ApproximateVotes,
-			&i.InviteClicks,
-			&i.Clicks,
-			&i.Nsfw,
-			&i.Tags,
-			&i.Premium,
-			&i.SupporterBadge,
-			&i.BoostedUntil,
-			&i.FeaturedUntil,
-			&i.SpotlightedUntil,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getTrendingIndexServers = `-- name: GetTrendingIndexServers :many
-WITH scored AS (
-	SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS score
-	FROM entity_votes
-	WHERE target_type = 'server' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
-)
-SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND state = 'public' AND server_id IN (SELECT target_id FROM scored)
-ORDER BY (SELECT score FROM scored WHERE scored.target_id = servers.server_id) DESC
-LIMIT $1 OFFSET $2
-`
-
-type GetTrendingIndexServersParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
-}
-
-type GetTrendingIndexServersRow struct {
-	ServerID         string             `db:"server_id" json:"server_id"`
-	Name             string             `db:"name" json:"name"`
-	Avatar           string             `db:"avatar" json:"avatar"`
-	TotalMembers     int32              `db:"total_members" json:"total_members"`
-	OnlineMembers    int32              `db:"online_members" json:"online_members"`
-	Short            string             `db:"short" json:"short"`
-	Type             string             `db:"type" json:"type"`
-	State            string             `db:"state" json:"state"`
-	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
-	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
-	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
-	Clicks           int32              `db:"clicks" json:"clicks"`
-	Nsfw             bool               `db:"nsfw" json:"nsfw"`
-	Tags             []string           `db:"tags" json:"tags"`
-	Premium          bool               `db:"premium" json:"premium"`
-	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
-	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
-	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
-	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
-}
-
-func (q *Queries) GetTrendingIndexServers(ctx context.Context, arg GetTrendingIndexServersParams) ([]GetTrendingIndexServersRow, error) {
-	rows, err := q.db.Query(ctx, getTrendingIndexServers, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetTrendingIndexServersRow
-	for rows.Next() {
-		var i GetTrendingIndexServersRow
 		if err := rows.Scan(
 			&i.ServerID,
 			&i.Name,

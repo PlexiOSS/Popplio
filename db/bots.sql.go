@@ -100,6 +100,110 @@ func (q *Queries) BotQueuePending(ctx context.Context) ([]BotQueuePendingRow, er
 	return items, nil
 }
 
+const browseBots = `-- name: BrowseBots :many
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'bot' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND $1::text = 'trending'
+    GROUP BY ev.target_id
+)
+SELECT b.bot_id, b.short, b.type, b.vanity_ref, b.approximate_votes, b.shards, b.library, b.invite_clicks, b.clicks, b.servers, b.nsfw, b.tags, b.premium, b.created_at, b.self_status, b.last_stats_post, b.supporter_badge, b.boosted_until, b.featured_until, b.spotlighted_until, b.vote_blitz_until
+FROM bots b
+LEFT JOIN trending t ON t.target_id = b.bot_id
+WHERE b.type IN ('approved', 'certified')
+AND ($1::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT $2::boolean OR b.type = 'certified')
+AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) AS et(tag) WHERE lower(et.tag) = lower($3::text)))
+ORDER BY
+    CASE WHEN $1::text = 'new' THEN (b.boosted_until IS NOT NULL AND b.boosted_until > NOW()) END DESC,
+    CASE WHEN $1::text = 'trending' THEN t.score END DESC,
+    CASE WHEN $1::text = 'votes' THEN b.approximate_votes END DESC,
+    CASE WHEN $1::text = 'servers' THEN b.servers END DESC,
+    b.created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type BrowseBotsParams struct {
+	Sort          string      `db:"sort" json:"sort"`
+	CertifiedOnly bool        `db:"certified_only" json:"certified_only"`
+	Tag           pgtype.Text `db:"tag" json:"tag"`
+	Off           int32       `db:"off" json:"off"`
+	Lim           int32       `db:"lim" json:"lim"`
+}
+
+type BrowseBotsRow struct {
+	BotID            string             `db:"bot_id" json:"bot_id"`
+	Short            string             `db:"short" json:"short"`
+	Type             string             `db:"type" json:"type"`
+	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
+	Shards           int32              `db:"shards" json:"shards"`
+	Library          string             `db:"library" json:"library"`
+	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks           int32              `db:"clicks" json:"clicks"`
+	Servers          int32              `db:"servers" json:"servers"`
+	Nsfw             bool               `db:"nsfw" json:"nsfw"`
+	Tags             []string           `db:"tags" json:"tags"`
+	Premium          bool               `db:"premium" json:"premium"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	SelfStatus       pgtype.Text        `db:"self_status" json:"self_status"`
+	LastStatsPost    pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
+}
+
+func (q *Queries) BrowseBots(ctx context.Context, arg BrowseBotsParams) ([]BrowseBotsRow, error) {
+	rows, err := q.db.Query(ctx, browseBots,
+		arg.Sort,
+		arg.CertifiedOnly,
+		arg.Tag,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BrowseBotsRow
+	for rows.Next() {
+		var i BrowseBotsRow
+		if err := rows.Scan(
+			&i.BotID,
+			&i.Short,
+			&i.Type,
+			&i.VanityRef,
+			&i.ApproximateVotes,
+			&i.Shards,
+			&i.Library,
+			&i.InviteClicks,
+			&i.Clicks,
+			&i.Servers,
+			&i.Nsfw,
+			&i.Tags,
+			&i.Premium,
+			&i.CreatedAt,
+			&i.SelfStatus,
+			&i.LastStatsPost,
+			&i.SupporterBadge,
+			&i.BoostedUntil,
+			&i.FeaturedUntil,
+			&i.SpotlightedUntil,
+			&i.VoteBlitzUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const certifyBot = `-- name: CertifyBot :exec
 UPDATE bots SET type = 'certified' WHERE bot_id = $1
 `
@@ -201,28 +305,31 @@ func (q *Queries) CountBotCommandsSearch(ctx context.Context, arg CountBotComman
 	return count, err
 }
 
-const countBots = `-- name: CountBots :one
-SELECT COUNT(*) FROM bots WHERE (type = 'approved' OR type = 'certified')
+const countBrowseBots = `-- name: CountBrowseBots :one
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'bot' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND $1::text = 'trending'
+    GROUP BY ev.target_id
+)
+SELECT COUNT(*)
+FROM bots b
+LEFT JOIN trending t ON t.target_id = b.bot_id
+WHERE b.type IN ('approved', 'certified')
+AND ($1::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT $2::boolean OR b.type = 'certified')
+AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) AS et(tag) WHERE lower(et.tag) = lower($3::text)))
 `
 
-func (q *Queries) CountBots(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countBots)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+type CountBrowseBotsParams struct {
+	Sort          string      `db:"sort" json:"sort"`
+	CertifiedOnly bool        `db:"certified_only" json:"certified_only"`
+	Tag           pgtype.Text `db:"tag" json:"tag"`
 }
 
-const countTrendingBots = `-- name: CountTrendingBots :one
-SELECT COUNT(*) FROM bots
-WHERE (type = 'approved' OR type = 'certified') AND bot_id IN (
-	SELECT target_id FROM entity_votes
-	WHERE target_type = 'bot' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
-)
-`
-
-func (q *Queries) CountTrendingBots(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countTrendingBots)
+func (q *Queries) CountBrowseBots(ctx context.Context, arg CountBrowseBotsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBrowseBots, arg.Sort, arg.CertifiedOnly, arg.Tag)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1358,85 +1465,6 @@ func (q *Queries) GetIndexBotsByTeamOwner(ctx context.Context, teamOwner pgtype.
 	return items, nil
 }
 
-const getIndexBotsPaged = `-- name: GetIndexBotsPaged :many
-SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots
-WHERE (type = 'approved' OR type = 'certified')
-ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type GetIndexBotsPagedParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
-}
-
-type GetIndexBotsPagedRow struct {
-	BotID            string             `db:"bot_id" json:"bot_id"`
-	Short            string             `db:"short" json:"short"`
-	Type             string             `db:"type" json:"type"`
-	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
-	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
-	Shards           int32              `db:"shards" json:"shards"`
-	Library          string             `db:"library" json:"library"`
-	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
-	Clicks           int32              `db:"clicks" json:"clicks"`
-	Servers          int32              `db:"servers" json:"servers"`
-	Nsfw             bool               `db:"nsfw" json:"nsfw"`
-	Tags             []string           `db:"tags" json:"tags"`
-	Premium          bool               `db:"premium" json:"premium"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	SelfStatus       pgtype.Text        `db:"self_status" json:"self_status"`
-	LastStatsPost    pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
-	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
-	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
-	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
-	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
-	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
-}
-
-func (q *Queries) GetIndexBotsPaged(ctx context.Context, arg GetIndexBotsPagedParams) ([]GetIndexBotsPagedRow, error) {
-	rows, err := q.db.Query(ctx, getIndexBotsPaged, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetIndexBotsPagedRow
-	for rows.Next() {
-		var i GetIndexBotsPagedRow
-		if err := rows.Scan(
-			&i.BotID,
-			&i.Short,
-			&i.Type,
-			&i.VanityRef,
-			&i.ApproximateVotes,
-			&i.Shards,
-			&i.Library,
-			&i.InviteClicks,
-			&i.Clicks,
-			&i.Servers,
-			&i.Nsfw,
-			&i.Tags,
-			&i.Premium,
-			&i.CreatedAt,
-			&i.SelfStatus,
-			&i.LastStatsPost,
-			&i.SupporterBadge,
-			&i.BoostedUntil,
-			&i.FeaturedUntil,
-			&i.SpotlightedUntil,
-			&i.VoteBlitzUntil,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getListedBotIDs = `-- name: GetListedBotIDs :many
 SELECT bot_id FROM bots WHERE type = 'approved' OR type = 'certified'
 `
@@ -2021,91 +2049,6 @@ func (q *Queries) GetTopVotedIndexBots(ctx context.Context) ([]GetTopVotedIndexB
 	var items []GetTopVotedIndexBotsRow
 	for rows.Next() {
 		var i GetTopVotedIndexBotsRow
-		if err := rows.Scan(
-			&i.BotID,
-			&i.Short,
-			&i.Type,
-			&i.VanityRef,
-			&i.ApproximateVotes,
-			&i.Shards,
-			&i.Library,
-			&i.InviteClicks,
-			&i.Clicks,
-			&i.Servers,
-			&i.Nsfw,
-			&i.Tags,
-			&i.Premium,
-			&i.CreatedAt,
-			&i.SelfStatus,
-			&i.LastStatsPost,
-			&i.SupporterBadge,
-			&i.BoostedUntil,
-			&i.FeaturedUntil,
-			&i.SpotlightedUntil,
-			&i.VoteBlitzUntil,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getTrendingIndexBots = `-- name: GetTrendingIndexBots :many
-WITH scored AS (
-	SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS score
-	FROM entity_votes
-	WHERE target_type = 'bot' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
-)
-SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots
-WHERE (type = 'approved' OR type = 'certified') AND bot_id IN (SELECT target_id FROM scored)
-ORDER BY (SELECT score FROM scored WHERE scored.target_id = bots.bot_id) DESC
-LIMIT $1 OFFSET $2
-`
-
-type GetTrendingIndexBotsParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
-}
-
-type GetTrendingIndexBotsRow struct {
-	BotID            string             `db:"bot_id" json:"bot_id"`
-	Short            string             `db:"short" json:"short"`
-	Type             string             `db:"type" json:"type"`
-	VanityRef        pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
-	ApproximateVotes int32              `db:"approximate_votes" json:"approximate_votes"`
-	Shards           int32              `db:"shards" json:"shards"`
-	Library          string             `db:"library" json:"library"`
-	InviteClicks     int32              `db:"invite_clicks" json:"invite_clicks"`
-	Clicks           int32              `db:"clicks" json:"clicks"`
-	Servers          int32              `db:"servers" json:"servers"`
-	Nsfw             bool               `db:"nsfw" json:"nsfw"`
-	Tags             []string           `db:"tags" json:"tags"`
-	Premium          bool               `db:"premium" json:"premium"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	SelfStatus       pgtype.Text        `db:"self_status" json:"self_status"`
-	LastStatsPost    pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
-	SupporterBadge   bool               `db:"supporter_badge" json:"supporter_badge"`
-	BoostedUntil     pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
-	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
-	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
-	VoteBlitzUntil   pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
-}
-
-func (q *Queries) GetTrendingIndexBots(ctx context.Context, arg GetTrendingIndexBotsParams) ([]GetTrendingIndexBotsRow, error) {
-	rows, err := q.db.Query(ctx, getTrendingIndexBots, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetTrendingIndexBotsRow
-	for rows.Next() {
-		var i GetTrendingIndexBotsRow
 		if err := rows.Scan(
 			&i.BotID,
 			&i.Short,

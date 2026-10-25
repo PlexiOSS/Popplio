@@ -2,6 +2,7 @@ package get_all_servers
 
 import (
 	"net/http"
+	"strings"
 
 	"popplio/api/resp"
 
@@ -11,18 +12,28 @@ import (
 	"popplio/state"
 	"popplio/types"
 
-	"go.uber.org/zap"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-const perPage = 12
+const (
+	perPage      = 12
+	maxTagLength = 64
+)
+
+var sorts = map[string]bool{
+	"new":      true,
+	"trending": true,
+	"votes":    true,
+	"members":  true,
+}
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get All Servers",
-		Description: "Gets all servers on the list. Returns a set of paginated ``IndexServer`` objects",
+		Description: "Gets approved and certified, publicly listed servers, filtered and sorted. Returns a set of paginated ``IndexServer`` objects",
 		Resp:        types.PagedResult[[]types.IndexServer]{},
 		RespName:    "PagedResultIndexServer",
 		Params: []docs.Parameter{
@@ -35,7 +46,21 @@ func Docs() *docs.Doc {
 			},
 			{
 				Name:        "sort",
-				Description: "Sort order. Omit for newest-first; \"trending\" ranks by net votes in the last 7 days instead, and only returns servers with at least one vote in that window.",
+				Description: "Sort order: new (default; newest first, with boosted listings on top), trending (net votes in the last 7 days, only servers with at least one vote in that window), votes (most votes this cycle) or members (highest member count).",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "tag",
+				Description: "Only servers with this tag (case-insensitive).",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "certified",
+				Description: "true to only return certified servers.",
 				Required:    false,
 				In:          "query",
 				Schema:      docs.IdSchema,
@@ -51,109 +76,89 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Invalid page number")
 	}
 
-	limit := perPage
-	offset := (pageNum - 1) * perPage
-	trending := r.URL.Query().Get("sort") == "trending"
+	query := r.URL.Query()
+
+	sort := query.Get("sort")
+
+	if sort == "" {
+		sort = "new"
+	}
+
+	if !sorts[sort] {
+		return resp.BadRequest("sort must be new, trending, votes or members")
+	}
+
+	var tag pgtype.Text
+
+	if raw := strings.TrimSpace(query.Get("tag")); raw != "" {
+		if len(raw) > maxTagLength {
+			return resp.BadRequest("tag is too long")
+		}
+
+		tag = pgtype.Text{String: raw, Valid: true}
+	}
+
+	certifiedOnly := query.Get("certified") == "true"
 
 	q := db.New(state.Pool)
 
-	var servers []types.IndexServer
-
-	if trending {
-		rows, err := q.GetTrendingIndexServers(d.Context, db.GetTrendingIndexServersParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
-		})
-
-		if err != nil {
-			return resp.Err("Failed to query servers [db query]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
-		}
-
-		servers = make([]types.IndexServer, len(rows))
-		for i, row := range rows {
-			servers[i] = types.IndexServer{
-				ServerID:         row.ServerID,
-				Name:             row.Name,
-				Avatar:           row.Avatar,
-				TotalMembers:     int(row.TotalMembers),
-				OnlineMembers:    int(row.OnlineMembers),
-				Short:            row.Short,
-				Type:             row.Type,
-				State:            row.State,
-				VanityRef:        row.VanityRef,
-				ApproximateVotes: int(row.ApproximateVotes),
-				InviteClicks:     int(row.InviteClicks),
-				Clicks:           int(row.Clicks),
-				NSFW:             row.Nsfw,
-				Tags:             row.Tags,
-				Premium:          row.Premium,
-				SupporterBadge:   row.SupporterBadge,
-				BoostedUntil:     row.BoostedUntil,
-				FeaturedUntil:    row.FeaturedUntil,
-				SpotlightedUntil: row.SpotlightedUntil,
-			}
-		}
-	} else {
-		rows, err := q.GetIndexServersPaged(d.Context, db.GetIndexServersPagedParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
-		})
-
-		if err != nil {
-			return resp.Err("Failed to query servers [db query]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
-		}
-
-		servers = make([]types.IndexServer, len(rows))
-		for i, row := range rows {
-			servers[i] = types.IndexServer{
-				ServerID:         row.ServerID,
-				Name:             row.Name,
-				Avatar:           row.Avatar,
-				TotalMembers:     int(row.TotalMembers),
-				OnlineMembers:    int(row.OnlineMembers),
-				Short:            row.Short,
-				Type:             row.Type,
-				State:            row.State,
-				VanityRef:        row.VanityRef,
-				ApproximateVotes: int(row.ApproximateVotes),
-				InviteClicks:     int(row.InviteClicks),
-				Clicks:           int(row.Clicks),
-				NSFW:             row.Nsfw,
-				Tags:             row.Tags,
-				Premium:          row.Premium,
-				SupporterBadge:   row.SupporterBadge,
-				BoostedUntil:     row.BoostedUntil,
-				FeaturedUntil:    row.FeaturedUntil,
-				SpotlightedUntil: row.SpotlightedUntil,
-			}
-		}
-	}
-
-	if err := assets.ResolveIndexServers(d.Context, servers); err != nil {
-		return resp.ErrBody("Error resolving indexserver", "An error occurred while resolving index server.", err)
-	}
-
-	var countRaw int64
-
-	if trending {
-		countRaw, err = q.CountTrendingServers(d.Context)
-	} else {
-		countRaw, err = q.CountServers(d.Context)
-	}
+	rows, err := q.BrowseServers(d.Context, db.BrowseServersParams{
+		Sort:          sort,
+		CertifiedOnly: certifiedOnly,
+		Tag:           tag,
+		Lim:           perPage,
+		Off:           int32((pageNum - 1) * perPage),
+	})
 
 	if err != nil {
-		return resp.Err("Failed to query servers [db count]", err, zap.Uint64("page", pageNum), zap.Int("limit", limit), zap.Uint64("offset", offset))
+		return resp.Err("Error while getting servers [db fetch]", err)
 	}
 
-	count := uint64(countRaw)
+	results := make([]types.IndexServer, len(rows))
 
-	data := types.PagedResult[[]types.IndexServer]{
-		Count:   count,
-		Results: servers,
-		PerPage: perPage,
+	for i, row := range rows {
+		results[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+
+	if err := assets.ResolveIndexServers(d.Context, results); err != nil {
+		return resp.ErrBody("Error resolving indexserver", "An error occurred while resolving servers.", err)
+	}
+
+	count, err := q.CountBrowseServers(d.Context, db.CountBrowseServersParams{
+		Sort:          sort,
+		CertifiedOnly: certifiedOnly,
+		Tag:           tag,
+	})
+
+	if err != nil {
+		return resp.Err("Error while getting server count", err)
 	}
 
 	return uapi.HttpResponse{
-		Json: data,
+		Json: types.PagedResult[[]types.IndexServer]{
+			Count:   uint64(count),
+			Results: results,
+			PerPage: perPage,
+		},
 	}
 }

@@ -278,3 +278,19 @@ ORDER BY ev.author, COUNT(*) DESC, MAX(ev.created_at) DESC;
 
 -- name: GetLatestAutomatedVoteReset :one
 SELECT created_at FROM automated_vote_resets ORDER BY created_at DESC LIMIT 1;
+
+-- name: GetUserTopVoted :many
+SELECT ev.target_type, ev.target_id, COUNT(*) AS vote_count,
+    COALESCE(s.name, '')::text AS server_name, COALESCE(s.avatar, '')::text AS server_avatar, COALESCE(v.code::text, '')::text AS vanity
+FROM entity_votes ev
+LEFT JOIN bots b ON ev.target_type = 'bot' AND b.bot_id = ev.target_id
+LEFT JOIN servers s ON ev.target_type = 'server' AND s.server_id = ev.target_id
+LEFT JOIN vanity v ON v.itag = COALESCE(b.vanity_ref, s.vanity_ref)
+WHERE ev.author = sqlc.arg('author')
+AND ev.upvote = true
+AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
+AND ((b.bot_id IS NOT NULL AND b.type IN ('approved', 'certified') AND NOT b.nsfw)
+    OR (s.server_id IS NOT NULL AND s.type IN ('approved', 'certified') AND s.state = 'public' AND NOT s.nsfw))
+GROUP BY ev.target_type, ev.target_id, s.name, s.avatar, v.code
+ORDER BY COUNT(*) DESC, MAX(ev.created_at) DESC
+LIMIT sqlc.arg('lim');

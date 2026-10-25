@@ -14,6 +14,7 @@ import (
 
 	"popplio/routes/packs/assets"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
@@ -25,7 +26,7 @@ const perPage = 12
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get All Packs",
-		Description: "Gets all packs on the list. This endpoint is paginated.",
+		Description: "Gets packs on the list, filtered and sorted. Packs with a description under 20 characters are left out unless all=true. This endpoint is paginated.",
 		Resp:        types.PagedResult[[]types.BotPack]{},
 		RespName:    "PagedResultIndexBotPack",
 		Params: []docs.Parameter{
@@ -43,6 +44,20 @@ func Docs() *docs.Doc {
 				In:          "query",
 				Schema:      docs.IdSchema,
 			},
+			{
+				Name:        "sort",
+				Description: "new (default, newest first) or votes (net votes, then most bots and servers, then newest).",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "all",
+				Description: "true to include packs with a description under 20 characters.",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
 		},
 	}
 }
@@ -54,82 +69,68 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Invalid page number")
 	}
 
-	limit := perPage
-	offset := (pageNum - 1) * perPage
+	query := r.URL.Query()
 
-	packType := r.URL.Query().Get("pack_type")
+	var packType pgtype.Text
 
-	q := db.New(state.Pool)
-	var packs []types.BotPack
-	var count int64
-
-	if packType != "" {
-		if packType != types.PackTypeBot && packType != types.PackTypeServer && packType != types.PackTypeEmoji && packType != types.PackTypeSticker && packType != types.PackTypeSound {
+	if raw := query.Get("pack_type"); raw != "" {
+		if raw != types.PackTypeBot && raw != types.PackTypeServer && raw != types.PackTypeEmoji && raw != types.PackTypeSticker && raw != types.PackTypeSound {
 			return resp.BadRequest("pack_type must be one of bot, server, emoji, sticker, or sound")
 		}
 
-		rows, err := q.GetAllPacksByType(d.Context, db.GetAllPacksByTypeParams{
-			PackType: packType,
-			Limit:    int32(limit),
-			Offset:   int32(offset),
-		})
+		packType = pgtype.Text{String: raw, Valid: true}
+	}
 
-		if err != nil {
-			return resp.Err("Error while querying packs [db fetch]", err)
+	sort := query.Get("sort")
+
+	if sort == "" {
+		sort = "new"
+	}
+
+	if sort != "new" && sort != "votes" {
+		return resp.BadRequest("sort must be new or votes")
+	}
+
+	includeAll := query.Get("all") == "true"
+
+	q := db.New(state.Pool)
+
+	rows, err := q.BrowsePacks(d.Context, db.BrowsePacksParams{
+		PackType:   packType,
+		IncludeAll: includeAll,
+		Sort:       sort,
+		Lim:        perPage,
+		Off:        int32((pageNum - 1) * perPage),
+	})
+
+	if err != nil {
+		return resp.Err("Error while querying packs [db fetch]", err)
+	}
+
+	packs := make([]types.BotPack, len(rows))
+
+	for i, row := range rows {
+		packs[i] = types.BotPack{
+			Owner:      row.Owner,
+			Name:       row.Name,
+			Short:      row.Short,
+			Tags:       row.Tags,
+			URL:        row.Url,
+			CreatedAt:  row.CreatedAt.Time,
+			PackType:   row.PackType,
+			Bots:       row.Bots,
+			Servers:    row.Servers,
+			VoteBanned: row.VoteBanned,
 		}
+	}
 
-		packs = make([]types.BotPack, len(rows))
-		for i, row := range rows {
-			packs[i] = types.BotPack{
-				Owner:      row.Owner,
-				Name:       row.Name,
-				Short:      row.Short,
-				Tags:       row.Tags,
-				URL:        row.Url,
-				CreatedAt:  row.CreatedAt.Time,
-				PackType:   row.PackType,
-				Bots:       row.Bots,
-				Servers:    row.Servers,
-				VoteBanned: row.VoteBanned,
-			}
-		}
+	count, err := q.CountBrowsePacks(d.Context, db.CountBrowsePacksParams{
+		PackType:   packType,
+		IncludeAll: includeAll,
+	})
 
-		count, err = q.CountPacksByType(d.Context, packType)
-
-		if err != nil {
-			return resp.Err("Error while querying packs [db count]", err)
-		}
-	} else {
-		rows, err := q.GetAllPacks(d.Context, db.GetAllPacksParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
-		})
-
-		if err != nil {
-			return resp.Err("Error while querying packs [db fetch]", err)
-		}
-
-		packs = make([]types.BotPack, len(rows))
-		for i, row := range rows {
-			packs[i] = types.BotPack{
-				Owner:      row.Owner,
-				Name:       row.Name,
-				Short:      row.Short,
-				Tags:       row.Tags,
-				URL:        row.Url,
-				CreatedAt:  row.CreatedAt.Time,
-				PackType:   row.PackType,
-				Bots:       row.Bots,
-				Servers:    row.Servers,
-				VoteBanned: row.VoteBanned,
-			}
-		}
-
-		count, err = q.CountPacks(d.Context)
-
-		if err != nil {
-			return resp.Err("Error while querying packs [db count]", err)
-		}
+	if err != nil {
+		return resp.Err("Error while querying packs [db count]", err)
 	}
 
 	for i := range packs {

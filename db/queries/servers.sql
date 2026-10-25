@@ -160,17 +160,34 @@ ORDER BY RANDOM()
 LIMIT 3;
 
 -- name: GetSimilarServers :many
--- Tag-overlap similarity, mirroring GetSimilarBots -- see its comment.
-WITH source_tags AS (
-    SELECT tags FROM servers WHERE server_id = sqlc.arg('server_id')
+WITH source AS (
+    SELECT servers.nsfw, servers.tags FROM servers WHERE servers.server_id = sqlc.arg('server_id')
+), source_tags AS (
+    SELECT DISTINCT lower(st.tag) AS tag FROM source, unnest(source.tags) AS st(tag)
+), listed_tags AS (
+    SELECT sv.server_id, lower(t.tag) AS tag
+    FROM servers sv, unnest(sv.tags) AS t(tag)
+    WHERE sv.type IN ('approved', 'certified') AND sv.state = 'public'
+), tag_weights AS (
+    SELECT lt.tag, 1.0 / ln(COUNT(DISTINCT lt.server_id) + 1.0) AS weight
+    FROM listed_tags lt
+    JOIN source_tags s ON s.tag = lt.tag
+    GROUP BY lt.tag
+), excluded AS (
+    SELECT DISTINCT lt.server_id FROM listed_tags lt WHERE lt.tag = 'nsfw'
+), scored AS (
+    SELECT lt.server_id, SUM(tw.weight) AS score
+    FROM (SELECT DISTINCT listed_tags.server_id, listed_tags.tag FROM listed_tags) lt
+    JOIN tag_weights tw ON tw.tag = lt.tag
+    WHERE lt.server_id != sqlc.arg('server_id')
+    GROUP BY lt.server_id
 )
 SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes, s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until
-FROM servers s, source_tags st
-WHERE (s.type = 'approved' OR s.type = 'certified')
-AND s.state = 'public'
-AND s.server_id != sqlc.arg('server_id')
-AND s.tags && st.tags
-ORDER BY cardinality(ARRAY(SELECT unnest(s.tags) INTERSECT SELECT unnest(st.tags))) DESC, s.approximate_votes DESC
+FROM scored sc
+JOIN servers s ON s.server_id = sc.server_id
+CROSS JOIN source src
+WHERE src.nsfw OR (NOT s.nsfw AND s.server_id NOT IN (SELECT excluded.server_id FROM excluded))
+ORDER BY sc.score DESC, s.approximate_votes DESC
 LIMIT 6;
 
 -- name: GetFlatEmojis :many
@@ -211,28 +228,44 @@ LIMIT $1 OFFSET $2;
 -- name: CountServerEmojiPreviews :one
 SELECT COUNT(*) FROM servers WHERE show_emojis = true AND (type = 'approved' OR type = 'certified') AND state = 'public';
 
--- name: GetIndexServersPaged :many
-SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND state = 'public'
-ORDER BY (boosted_until IS NOT NULL AND boosted_until > NOW()) DESC, created_at DESC
-LIMIT $1 OFFSET $2;
-
--- name: GetTrendingIndexServers :many
-WITH scored AS (
-	SELECT target_id, COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote) AS score
-	FROM entity_votes
-	WHERE target_type = 'server' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
+-- name: BrowseServers :many
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'server' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND sqlc.arg('sort')::text = 'trending'
+    GROUP BY ev.target_id
 )
-SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND state = 'public' AND server_id IN (SELECT target_id FROM scored)
-ORDER BY (SELECT score FROM scored WHERE scored.target_id = servers.server_id) DESC
-LIMIT $1 OFFSET $2;
+SELECT s.server_id, s.name, s.avatar, s.total_members, s.online_members, s.short, s.type, s.state, s.vanity_ref, s.approximate_votes, s.invite_clicks, s.clicks, s.nsfw, s.tags, s.premium, s.supporter_badge, s.boosted_until, s.featured_until, s.spotlighted_until
+FROM servers s
+LEFT JOIN trending t ON t.target_id = s.server_id
+WHERE s.type IN ('approved', 'certified') AND s.state = 'public'
+AND (sqlc.arg('sort')::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT sqlc.arg('certified_only')::boolean OR s.type = 'certified')
+AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) AS et(tag) WHERE lower(et.tag) = lower(sqlc.narg('tag')::text)))
+ORDER BY
+    CASE WHEN sqlc.arg('sort')::text = 'new' THEN (s.boosted_until IS NOT NULL AND s.boosted_until > NOW()) END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'trending' THEN t.score END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'votes' THEN s.approximate_votes END DESC,
+    CASE WHEN sqlc.arg('sort')::text = 'members' THEN s.total_members END DESC,
+    s.created_at DESC
+LIMIT sqlc.arg('lim') OFFSET sqlc.arg('off');
 
--- name: CountServers :one
-SELECT COUNT(*) FROM servers WHERE (type = 'approved' OR type = 'certified') AND state = 'public';
+-- name: CountBrowseServers :one
+WITH trending AS (
+    SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'server' AND ev.void = false AND ev.created_at > NOW() - INTERVAL '7 days'
+    AND sqlc.arg('sort')::text = 'trending'
+    GROUP BY ev.target_id
+)
+SELECT COUNT(*)
+FROM servers s
+LEFT JOIN trending t ON t.target_id = s.server_id
+WHERE s.type IN ('approved', 'certified') AND s.state = 'public'
+AND (sqlc.arg('sort')::text != 'trending' OR t.target_id IS NOT NULL)
+AND (NOT sqlc.arg('certified_only')::boolean OR s.type = 'certified')
+AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) AS et(tag) WHERE lower(et.tag) = lower(sqlc.narg('tag')::text)));
 
 -- name: CountServersByType :many
 SELECT type AS method, COUNT(*) FROM servers GROUP BY type;
@@ -250,14 +283,6 @@ SELECT server_id, name, avatar, total_members, online_members, short, type, appr
        approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
        tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories
 FROM servers WHERE server_id = sqlc.arg('query')::text OR name ILIKE sqlc.arg('pattern')::text ORDER BY created_at;
-
--- name: CountTrendingServers :one
-SELECT COUNT(*) FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND state = 'public' AND server_id IN (
-	SELECT target_id FROM entity_votes
-	WHERE target_type = 'server' AND void = false AND created_at > now() - interval '7 days'
-	GROUP BY target_id
-);
 
 -- name: GetCertifiedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until

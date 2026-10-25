@@ -1,10 +1,12 @@
 // Package get_all_bots implements GET /bots/@all — "Get All Bots".
 //
-// Gets all bots on the list. Returns a set of paginated `IndexBot` objects
+// Gets approved and certified bots, filtered and sorted. Returns a set of
+// paginated `IndexBot` objects
 package get_all_bots
 
 import (
 	"net/http"
+	"strings"
 
 	"popplio/api/resp"
 
@@ -14,16 +16,28 @@ import (
 	"popplio/state"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-const perPage = 12
+const (
+	perPage      = 12
+	maxTagLength = 64
+)
+
+var sorts = map[string]bool{
+	"new":      true,
+	"trending": true,
+	"votes":    true,
+	"servers":  true,
+}
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get All Bots",
-		Description: "Gets all bots on the list. Returns a set of paginated ``IndexBot`` objects",
+		Description: "Gets approved and certified bots, filtered and sorted. Returns a set of paginated ``IndexBot`` objects",
 		Resp:        types.PagedResult[[]types.IndexBot]{},
 		RespName:    "PagedResultIndexBot",
 		Params: []docs.Parameter{
@@ -36,7 +50,21 @@ func Docs() *docs.Doc {
 			},
 			{
 				Name:        "sort",
-				Description: "Sort order. Omit for newest-first; \"trending\" ranks by net votes in the last 7 days instead, and only returns bots with at least one vote in that window.",
+				Description: "Sort order: new (default; newest first, with boosted listings on top), trending (net votes in the last 7 days, only bots with at least one vote in that window), votes (most votes this cycle) or servers (highest server count).",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "tag",
+				Description: "Only bots with this tag (case-insensitive).",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "certified",
+				Description: "true to only return certified bots.",
 				Required:    false,
 				In:          "query",
 				Schema:      docs.IdSchema,
@@ -52,114 +80,91 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Invalid page number")
 	}
 
-	limit := perPage
-	offset := (pageNum - 1) * perPage
-	trending := r.URL.Query().Get("sort") == "trending"
+	query := r.URL.Query()
+
+	sort := query.Get("sort")
+
+	if sort == "" {
+		sort = "new"
+	}
+
+	if !sorts[sort] {
+		return resp.BadRequest("sort must be new, trending, votes or servers")
+	}
+
+	var tag pgtype.Text
+
+	if raw := strings.TrimSpace(query.Get("tag")); raw != "" {
+		if len(raw) > maxTagLength {
+			return resp.BadRequest("tag is too long")
+		}
+
+		tag = pgtype.Text{String: raw, Valid: true}
+	}
+
+	certifiedOnly := query.Get("certified") == "true"
 
 	q := db.New(state.Pool)
 
-	var bots []types.IndexBot
+	rows, err := q.BrowseBots(d.Context, db.BrowseBotsParams{
+		Sort:          sort,
+		CertifiedOnly: certifiedOnly,
+		Tag:           tag,
+		Lim:           perPage,
+		Off:           int32((pageNum - 1) * perPage),
+	})
 
-	if trending {
-		rows, err := q.GetTrendingIndexBots(d.Context, db.GetTrendingIndexBotsParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
-		})
+	if err != nil {
+		return resp.Err("Error while getting bots [db fetch]", err)
+	}
 
-		if err != nil {
-			return resp.Err("Error while getting all bots [db fetch]", err)
-		}
+	results := make([]types.IndexBot, len(rows))
 
-		bots = make([]types.IndexBot, len(rows))
-		for i, row := range rows {
-			bots[i] = types.IndexBot{
-				BotID:            row.BotID,
-				Short:            row.Short,
-				Type:             row.Type,
-				VanityRef:        row.VanityRef,
-				ApproximateVotes: int(row.ApproximateVotes),
-				Shards:           int(row.Shards),
-				Library:          row.Library,
-				InviteClick:      int(row.InviteClicks),
-				Clicks:           int(row.Clicks),
-				Servers:          int(row.Servers),
-				NSFW:             row.Nsfw,
-				Tags:             row.Tags,
-				Premium:          row.Premium,
-				CreatedAt:        row.CreatedAt,
-				SelfStatus:       row.SelfStatus,
-				LastStatsPost:    row.LastStatsPost,
-				SupporterBadge:   row.SupporterBadge,
-				BoostedUntil:     row.BoostedUntil,
-				FeaturedUntil:    row.FeaturedUntil,
-				SpotlightedUntil: row.SpotlightedUntil,
-				VoteBlitzUntil:   row.VoteBlitzUntil,
-			}
-		}
-	} else {
-		rows, err := q.GetIndexBotsPaged(d.Context, db.GetIndexBotsPagedParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
-		})
-
-		if err != nil {
-			return resp.Err("Error while getting all bots [db fetch]", err)
-		}
-
-		bots = make([]types.IndexBot, len(rows))
-		for i, row := range rows {
-			bots[i] = types.IndexBot{
-				BotID:            row.BotID,
-				Short:            row.Short,
-				Type:             row.Type,
-				VanityRef:        row.VanityRef,
-				ApproximateVotes: int(row.ApproximateVotes),
-				Shards:           int(row.Shards),
-				Library:          row.Library,
-				InviteClick:      int(row.InviteClicks),
-				Clicks:           int(row.Clicks),
-				Servers:          int(row.Servers),
-				NSFW:             row.Nsfw,
-				Tags:             row.Tags,
-				Premium:          row.Premium,
-				CreatedAt:        row.CreatedAt,
-				SelfStatus:       row.SelfStatus,
-				LastStatsPost:    row.LastStatsPost,
-				SupporterBadge:   row.SupporterBadge,
-				BoostedUntil:     row.BoostedUntil,
-				FeaturedUntil:    row.FeaturedUntil,
-				SpotlightedUntil: row.SpotlightedUntil,
-				VoteBlitzUntil:   row.VoteBlitzUntil,
-			}
+	for i, row := range rows {
+		results[i] = types.IndexBot{
+			BotID:            row.BotID,
+			Short:            row.Short,
+			Type:             row.Type,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			Shards:           int(row.Shards),
+			Library:          row.Library,
+			InviteClick:      int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			Servers:          int(row.Servers),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			CreatedAt:        row.CreatedAt,
+			SelfStatus:       row.SelfStatus,
+			LastStatsPost:    row.LastStatsPost,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+			VoteBlitzUntil:   row.VoteBlitzUntil,
 		}
 	}
 
-	// Resolve all bots concurrently, since each bot's resolution is independent
-	if err := assets.ResolveIndexBots(d.Context, bots); err != nil {
-		return resp.ErrBody("Error resolving indexbot", "An error occurred while resolving index bot.", err)
+	if err := assets.ResolveIndexBots(d.Context, results); err != nil {
+		return resp.ErrBody("Error resolving indexbot", "An error occurred while resolving bots.", err)
 	}
 
-	var countRaw int64
-
-	if trending {
-		countRaw, err = q.CountTrendingBots(d.Context)
-	} else {
-		countRaw, err = q.CountBots(d.Context)
-	}
+	count, err := q.CountBrowseBots(d.Context, db.CountBrowseBotsParams{
+		Sort:          sort,
+		CertifiedOnly: certifiedOnly,
+		Tag:           tag,
+	})
 
 	if err != nil {
 		return resp.Err("Error while getting bot count", err)
 	}
 
-	count := uint64(countRaw)
-
-	data := types.PagedResult[[]types.IndexBot]{
-		Count:   count,
-		Results: bots,
-		PerPage: perPage,
-	}
-
 	return uapi.HttpResponse{
-		Json: data,
+		Json: types.PagedResult[[]types.IndexBot]{
+			Count:   uint64(count),
+			Results: results,
+			PerPage: perPage,
+		},
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"popplio/routes/users/endpoints/check_booster_status"
 	"popplio/routes/users/endpoints/create_data_task"
 	"popplio/routes/users/endpoints/get_user"
+	"popplio/routes/users/endpoints/get_user_activity"
 	"popplio/routes/users/endpoints/get_user_perms"
 	"popplio/routes/users/endpoints/get_user_seo"
 	"popplio/routes/users/endpoints/patch_user_profile"
@@ -74,6 +75,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_user_perms.Docs,
 		Handler: get_user_perms.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/activity",
+		OpId:    "get_user_activity",
+		Method:  uapi.GET,
+		Docs:    get_user_activity.Docs,
+		Handler: get_user_activity.Route,
 	}.Route(r)
 
 	uapi.Route{

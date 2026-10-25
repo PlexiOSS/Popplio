@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET /bots/@all` and `GET /servers/@all` accept `sort` (`new`, the
+  default and unchanged; `trending`; `votes`; and `servers` for bots or
+  `members` for servers), `tag` (case-insensitive) and `certified=true`,
+  and the count respects the filters.
+- `GET /packs/@all` accepts `sort` (`new`, the default, or `votes`) and
+  `all=true`. Packs with a description under 20 characters are now left
+  out unless `all=true`.
+- `GET /users/{id}/activity`: a user's voter leaderboard rank this month
+  and all time, the listed non-NSFW bots and servers they've upvoted most,
+  and their latest top-level reviews on listed non-NSFW bots and servers.
+
 - `GET /{target_type}/{target_id}/votes/voters`: the users who have
   upvoted an entity, with their upvotes since the last vote reset and of
   all time, most active first, plus the total number of voters. Profiles
@@ -33,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they have no counted votes), cached for 5 minutes.
 
 ### Fixed
+
+- `GET /servers/{id}/similar` had the same problems as similar bots: NSFW
+  servers could be suggested for non-NSFW ones and tags were compared
+  case-sensitively. It now uses the same rules (NSFW only for NSFW
+  servers, case-insensitive tags, rarer tags weighted higher).
 
 - `GET /bots/{id}/similar` could suggest NSFW bots for non-NSFW bots, and
   compared tags case-sensitively so "Fun" and "fun" didn't match. NSFW

@@ -11,6 +11,100 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const browsePacks = `-- name: BrowsePacks :many
+SELECT p.owner, p.name, p.short, p.tags, p.url, p.created_at, p.pack_type, p.bots, p.servers, p.vote_banned
+FROM packs p
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
+    FROM entity_votes ev
+    WHERE ev.target_type = 'pack' AND ev.target_id = p.url AND ev.void = false
+) v ON true
+WHERE ($1::text IS NULL OR p.pack_type = $1::text)
+AND ($2::boolean OR char_length(p.short) >= 20)
+ORDER BY
+    CASE WHEN $3::text = 'votes' THEN v.score END DESC,
+    CASE WHEN $3::text = 'votes' THEN cardinality(p.bots) + cardinality(p.servers) END DESC,
+    p.created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type BrowsePacksParams struct {
+	PackType   pgtype.Text `db:"pack_type" json:"pack_type"`
+	IncludeAll bool        `db:"include_all" json:"include_all"`
+	Sort       string      `db:"sort" json:"sort"`
+	Off        int32       `db:"off" json:"off"`
+	Lim        int32       `db:"lim" json:"lim"`
+}
+
+type BrowsePacksRow struct {
+	Owner      string             `db:"owner" json:"owner"`
+	Name       string             `db:"name" json:"name"`
+	Short      string             `db:"short" json:"short"`
+	Tags       []string           `db:"tags" json:"tags"`
+	Url        string             `db:"url" json:"url"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PackType   string             `db:"pack_type" json:"pack_type"`
+	Bots       []string           `db:"bots" json:"bots"`
+	Servers    []string           `db:"servers" json:"servers"`
+	VoteBanned bool               `db:"vote_banned" json:"vote_banned"`
+}
+
+func (q *Queries) BrowsePacks(ctx context.Context, arg BrowsePacksParams) ([]BrowsePacksRow, error) {
+	rows, err := q.db.Query(ctx, browsePacks,
+		arg.PackType,
+		arg.IncludeAll,
+		arg.Sort,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BrowsePacksRow
+	for rows.Next() {
+		var i BrowsePacksRow
+		if err := rows.Scan(
+			&i.Owner,
+			&i.Name,
+			&i.Short,
+			&i.Tags,
+			&i.Url,
+			&i.CreatedAt,
+			&i.PackType,
+			&i.Bots,
+			&i.Servers,
+			&i.VoteBanned,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countBrowsePacks = `-- name: CountBrowsePacks :one
+SELECT COUNT(*)
+FROM packs p
+WHERE ($1::text IS NULL OR p.pack_type = $1::text)
+AND ($2::boolean OR char_length(p.short) >= 20)
+`
+
+type CountBrowsePacksParams struct {
+	PackType   pgtype.Text `db:"pack_type" json:"pack_type"`
+	IncludeAll bool        `db:"include_all" json:"include_all"`
+}
+
+func (q *Queries) CountBrowsePacks(ctx context.Context, arg CountBrowsePacksParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBrowsePacks, arg.PackType, arg.IncludeAll)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPackByURL = `-- name: CountPackByURL :one
 SELECT COUNT(*) FROM packs WHERE url = $1
 `
@@ -28,28 +122,6 @@ SELECT COUNT(*) FROM pack_emojis
 
 func (q *Queries) CountPackEmojis(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countPackEmojis)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countPacks = `-- name: CountPacks :one
-SELECT COUNT(*) FROM packs
-`
-
-func (q *Queries) CountPacks(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countPacks)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countPacksByType = `-- name: CountPacksByType :one
-SELECT COUNT(*) FROM packs WHERE pack_type = $1
-`
-
-func (q *Queries) CountPacksByType(ctx context.Context, packType string) (int64, error) {
-	row := q.db.QueryRow(ctx, countPacksByType, packType)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -115,120 +187,6 @@ func (q *Queries) GetAllPackEmojisPaged(ctx context.Context, arg GetAllPackEmoji
 			&i.CreatedAt,
 			&i.PackUrl,
 			&i.PackName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAllPacks = `-- name: GetAllPacks :many
-SELECT owner, name, short, tags, url, created_at, pack_type, bots, servers, vote_banned
-FROM packs
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type GetAllPacksParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
-}
-
-type GetAllPacksRow struct {
-	Owner      string             `db:"owner" json:"owner"`
-	Name       string             `db:"name" json:"name"`
-	Short      string             `db:"short" json:"short"`
-	Tags       []string           `db:"tags" json:"tags"`
-	Url        string             `db:"url" json:"url"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	PackType   string             `db:"pack_type" json:"pack_type"`
-	Bots       []string           `db:"bots" json:"bots"`
-	Servers    []string           `db:"servers" json:"servers"`
-	VoteBanned bool               `db:"vote_banned" json:"vote_banned"`
-}
-
-func (q *Queries) GetAllPacks(ctx context.Context, arg GetAllPacksParams) ([]GetAllPacksRow, error) {
-	rows, err := q.db.Query(ctx, getAllPacks, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllPacksRow
-	for rows.Next() {
-		var i GetAllPacksRow
-		if err := rows.Scan(
-			&i.Owner,
-			&i.Name,
-			&i.Short,
-			&i.Tags,
-			&i.Url,
-			&i.CreatedAt,
-			&i.PackType,
-			&i.Bots,
-			&i.Servers,
-			&i.VoteBanned,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getAllPacksByType = `-- name: GetAllPacksByType :many
-SELECT owner, name, short, tags, url, created_at, pack_type, bots, servers, vote_banned
-FROM packs
-WHERE pack_type = $1
-ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
-`
-
-type GetAllPacksByTypeParams struct {
-	PackType string `db:"pack_type" json:"pack_type"`
-	Limit    int32  `db:"limit" json:"limit"`
-	Offset   int32  `db:"offset" json:"offset"`
-}
-
-type GetAllPacksByTypeRow struct {
-	Owner      string             `db:"owner" json:"owner"`
-	Name       string             `db:"name" json:"name"`
-	Short      string             `db:"short" json:"short"`
-	Tags       []string           `db:"tags" json:"tags"`
-	Url        string             `db:"url" json:"url"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	PackType   string             `db:"pack_type" json:"pack_type"`
-	Bots       []string           `db:"bots" json:"bots"`
-	Servers    []string           `db:"servers" json:"servers"`
-	VoteBanned bool               `db:"vote_banned" json:"vote_banned"`
-}
-
-func (q *Queries) GetAllPacksByType(ctx context.Context, arg GetAllPacksByTypeParams) ([]GetAllPacksByTypeRow, error) {
-	rows, err := q.db.Query(ctx, getAllPacksByType, arg.PackType, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetAllPacksByTypeRow
-	for rows.Next() {
-		var i GetAllPacksByTypeRow
-		if err := rows.Scan(
-			&i.Owner,
-			&i.Name,
-			&i.Short,
-			&i.Tags,
-			&i.Url,
-			&i.CreatedAt,
-			&i.PackType,
-			&i.Bots,
-			&i.Servers,
-			&i.VoteBanned,
 		); err != nil {
 			return nil, err
 		}

@@ -139,3 +139,20 @@ type EntityVoterList struct {
 	Voters []EntityVoter `json:"voters" description:"The voters, ordered by current votes, then all-time votes, then most recent vote"`
 	Total  int           `json:"total" description:"How many users have ever upvoted this entity"`
 }
+
+// A review a user wrote, with the listed bot or server it's on
+type UserActivityReview struct {
+	ID        string                    `json:"id" description:"The review's ID"`
+	Stars     int                       `json:"stars" description:"The review's star rating"`
+	Content   string                    `json:"content" description:"The review's text"`
+	CreatedAt time.Time                 `json:"created_at" description:"When the review was posted"`
+	Target    *VoterLeaderboardFavorite `json:"target" description:"The reviewed bot or server (votes is always 0 here)"`
+}
+
+// A user's public voting and review activity
+type UserActivity struct {
+	Month    VoterLeaderboardRank       `json:"month" description:"The user's voter leaderboard position since the last monthly vote reset"`
+	AllTime  VoterLeaderboardRank       `json:"all_time" description:"The user's all-time voter leaderboard position"`
+	TopVoted []VoterLeaderboardFavorite `json:"top_voted" description:"The listed, non-NSFW bots and servers the user has upvoted most, all time"`
+	Reviews  []UserActivityReview       `json:"reviews" description:"The user's most recent top-level reviews on listed, non-NSFW bots and servers"`
+}

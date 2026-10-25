@@ -27,3 +27,17 @@ SELECT author, content, stars, owner_review FROM reviews WHERE id = $1 AND targe
 
 -- name: UpdateReview :exec
 UPDATE reviews SET content = $1, stars = $2 WHERE id = $3;
+
+-- name: GetUserRecentReviews :many
+SELECT r.id, r.target_type, r.target_id, r.stars, r.content, r.created_at,
+    COALESCE(s.name, '')::text AS server_name, COALESCE(s.avatar, '')::text AS server_avatar, COALESCE(v.code::text, '')::text AS vanity
+FROM reviews r
+LEFT JOIN bots b ON r.target_type = 'bot' AND b.bot_id = r.target_id
+LEFT JOIN servers s ON r.target_type = 'server' AND s.server_id = r.target_id
+LEFT JOIN vanity v ON v.itag = COALESCE(b.vanity_ref, s.vanity_ref)
+WHERE r.author = sqlc.arg('author')
+AND r.parent_id IS NULL
+AND ((b.bot_id IS NOT NULL AND b.type IN ('approved', 'certified') AND NOT b.nsfw)
+    OR (s.server_id IS NOT NULL AND s.type IN ('approved', 'certified') AND s.state = 'public' AND NOT s.nsfw))
+ORDER BY r.created_at DESC
+LIMIT sqlc.arg('lim');
