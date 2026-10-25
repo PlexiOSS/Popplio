@@ -38,6 +38,20 @@ func All() []Task {
 			Run:         ModerationScan,
 		},
 		{
+			Name:        "changelog_drafts",
+			Description: "Creating unpublished public changelog drafts for new CHANGELOG.md releases",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         ChangelogDrafts,
+		},
+		{
+			Name:        "stripe_reconcile",
+			Description: "Fulfilling paid Stripe checkout sessions that the webhook missed",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         StripeReconcile,
+		},
+		{
 			Name:        "bot_presence_sync",
 			Description: "Fetching listed bots' Discord presence from japi.rest for bots our own gateway can't see",
 			Enabled:     true,

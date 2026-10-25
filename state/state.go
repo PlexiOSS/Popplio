@@ -227,35 +227,44 @@ func Setup() {
 	stripe.Key = Config.Meta.StripeSecretKey
 
 	go func() {
+		webhookURL := Config.Sites.API + "/payments/stripe/webhook"
 
-		i := webhookendpoint.List(&stripe.WebhookEndpointListParams{})
+		if Config.Meta.StripeWebhookSecret != "" {
+			StripeWebhSecret = Config.Meta.StripeWebhookSecret
+		} else {
+			i := webhookendpoint.List(&stripe.WebhookEndpointListParams{})
 
-		for i.Next() {
-			_, err := webhookendpoint.Del(i.WebhookEndpoint().ID, nil)
+			for i.Next() {
+				if i.WebhookEndpoint().URL != webhookURL {
+					continue
+				}
+
+				_, err := webhookendpoint.Del(i.WebhookEndpoint().ID, nil)
+
+				if err != nil {
+					Logger.Error("Stripe webhook setup failed [delete existing], disabling stripe webhook support", zap.Error(err))
+					return
+				}
+			}
+
+			params := &stripe.WebhookEndpointParams{
+				URL: stripe.String(webhookURL),
+				EnabledEvents: stripe.StringSlice([]string{
+					"checkout.session.completed",
+					"checkout.session.async_payment_succeeded",
+					"checkout.session.async_payment_failed",
+				}),
+				APIVersion: stripe.String("2023-08-16"),
+			}
+			wh, err := webhookendpoint.New(params)
 
 			if err != nil {
-				Logger.Error("Stripe webhook setup failed [delete existing], disabling stripe webhook support", zap.Error(err))
+				Logger.Error("Stripe webhook setup failed [create], disabling stripe webhook support", zap.Error(err))
 				return
 			}
-		}
 
-		params := &stripe.WebhookEndpointParams{
-			URL: stripe.String(Config.Sites.API + "/payments/stripe/webhook"),
-			EnabledEvents: stripe.StringSlice([]string{
-				"checkout.session.completed",
-				"checkout.session.async_payment_succeeded",
-				"checkout.session.async_payment_failed",
-			}),
-			APIVersion: stripe.String("2023-08-16"),
+			StripeWebhSecret = wh.Secret
 		}
-		wh, err := webhookendpoint.New(params)
-
-		if err != nil {
-			Logger.Error("Stripe webhook setup failed [create], disabling stripe webhook support", zap.Error(err))
-			return
-		}
-
-		StripeWebhSecret = wh.Secret
 
 		resp, err := http.Get("https://stripe.com/files/ips/ips_webhooks.txt")
 

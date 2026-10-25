@@ -14,4 +14,6 @@ go run ./cmd/migrate up                       # apply every pending migration
 
 Applied versions are tracked in a `goose_db_version` table goose creates automatically on first run no manual bookkeeping needed.
 
-This is deliberately a manual step, not wired into `make`/deploy run it yourself before restarting the service, so a migration is never something that happens silently as a side effect of a deploy.
+Popplio also applies pending migrations itself on startup, before it serves requests or starts background tasks. The `.sql` files are embedded into the binary (`migrations.go`), so a deploy always migrates with exactly the migrations it was built with. A Postgres advisory lock stops two instances migrating at once, and if a migration fails Popplio logs it and refuses to start rather than running against an outdated schema. Each applied migration is logged as "Applied database migration". Set `meta.skip_auto_migrate: true` to turn this off and run `go run ./cmd/migrate up` yourself instead.
+
+Because a deploy now runs migrations, review every migration as part of the change that adds it, and keep `-- +goose Down` sections working so a bad one can be rolled back with goose.

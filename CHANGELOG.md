@@ -7,7 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-25
+
 ### Added
+
+- `GET /bots/@commands` (command search) also matches command
+  descriptions, accepts optional `bot` and `tag` filters (at least one of
+  `query`, `bot` or `tag` is required), and keeps each bot's commands
+  together in the results.
+- `GET /bots/@commands/bots`: approved and certified bots that have
+  documented commands, most-voted first, with their command count and a
+  preview of up to five command names.
+
+- `GET /bots/@changelogs` accepts optional `q` (searches the title,
+  content and bot name; up to 100 characters, matched literally), `tag`
+  (case-insensitive bot tag) and `bot` (one bot's entries), and its count
+  respects the same filters.
+- `GET /bots/@changelogs/recent`: the 8 approved or certified bots that
+  most recently posted a changelog entry, with their latest update time
+  and update count.
+
+- `GET /list/partners` includes `bot` (the bot's Discord profile) for
+  partners whose `bot_id` is an approved or certified bot listed on the
+  site.
+
+- Popplio applies pending database migrations on startup, before serving
+  requests or starting background tasks. Migrations are embedded in the
+  binary, a Postgres advisory lock stops concurrent instances from
+  migrating at once, and a failed migration stops startup instead of
+  running against an outdated schema. Set `meta.skip_auto_migrate: true`
+  to keep running `go run ./cmd/migrate up` by hand.
+- `changelog_drafts` background task (hourly): reads `CHANGELOG.md` from
+  each project's GitHub repo and creates an unpublished public changelog
+  draft for every release newer than that project's latest entry (a
+  project with no entries only gets its newest release). Drafts are
+  rewritten for end users by the same OpenAI model as the panel's
+  Generate action, falling back to the first sentence of each bullet
+  without a key, and are credited to the first `arcadia.owners` entry.
+  Staff still review and publish them in the admin panel, which is what
+  triggers the Discord announcement. Repos without a `CHANGELOG.md` are
+  skipped.
+
+- `payment_fulfillments` table (migration
+  `20261025120000_payment_fulfillments`) recording every Stripe checkout
+  session and PayPal order that has been fulfilled. Fulfilment records the
+  payment and applies premium in one transaction, so a webhook retry,
+  manual resend or reconciliation can never grant the same purchase twice.
+- `stripe_reconcile` background task (hourly): fulfils paid Stripe
+  checkout sessions that have no fulfilment record, so a missed or failed
+  webhook no longer means a customer paid and got nothing. It only
+  considers sessions at least 15 minutes old, newer than the first
+  recorded fulfilment (so purchases from before this tracking existed are
+  never re-granted) and at most 30 days old. Purchases that can't be
+  applied are logged for manual review.
 
 - Bot presence from japi.rest. A new `bot_presence_sync` task (every 5
   min) fetches the Discord status of listed bots that our own gateway
@@ -20,6 +72,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outside our main server are no longer recorded as always offline.
 
 ### Fixed
+
+- Command search inserted the search text into its `ILIKE` pattern
+  unescaped, so `%` and `_` acted as wildcards. They're now matched
+  literally.
+
+- The sitewide bot changelog feed included entries from pending and
+  denied bots. It now only shows approved and certified bots.
+
+- `GET /list/partners` returned 500 for everyone because one partner had
+  four links and the `Partner` type still capped links at two, a limit the
+  admin panel never enforced and the site never relied on. The cap is
+  removed, and a stored partner that fails validation is now logged and
+  left out of the list instead of taking the whole list down.
+
+- User sessions rejected for coming from a non-frontend origin were a
+  silent 403 with a misleading "environment" message. They're now logged
+  ("Rejected user session from a non-frontend origin", with origin and
+  path), and a request with no `Origin` at all is told that server-side
+  callers must send `Origin: <sites.frontend>`.
+
+- A pending or denied bot's commands, changelog, reviews and voter list
+  (`GET /bots/{id}/commands`, `/bots/{id}/changelogs`,
+  `/{target_type}/{target_id}/reviews`, `/votes/user-list`) were still
+  readable by ID. They now 404 unless the caller can see the listing
+  itself (owners, team members, staff), using optional auth.
+
+- The Stripe webhook granted perks in a goroutine on the request's
+  context, which is cancelled once Stripe gets its response, and always
+  answered success, so a failed grant was never retried. It now fulfils
+  synchronously and returns 500 on transient failures so Stripe retries.
+- A failure to post the purchase announcement in mod logs made perk
+  delivery report failure after premium had already been applied: Stripe
+  buyers were told delivery failed, and PayPal orders were refunded while
+  keeping premium. Announcements and alerts are now best-effort after the
+  purchase commits.
+- PayPal refunds passed the order ID where PayPal expects the capture ID,
+  so every refund in the capture flow failed and the buyer was charged
+  without receiving anything. Refunds now use the order's capture ID.
+
+- Every Stripe webhook was rejected with 403 "IP is not allowed". The
+  allowlist was checked against the connection address, which behind
+  Cloudflare and Traefik is a Cloudflare edge IP (and includes a port), so
+  no paid checkout was ever fulfilled through the webhook. The client IP
+  now comes from `CF-Connecting-IP`, falling back to the connection's host.
+- On every boot Popplio deleted *all* webhook endpoints on the Stripe
+  account and created a new one. That wiped any other product's webhooks
+  on a shared account and dropped Stripe's pending retries for the old
+  endpoint. New optional `meta.stripe_webhook_secret`: when set, Popplio
+  uses that endpoint's signing secret and never creates or deletes
+  endpoints. Without it, only endpoints pointing at Popplio's own webhook
+  URL are replaced.
 
 - Optional-auth routes (`GET /bots/{id}`, `/servers/{id}`, `/teams/{id}`,
   `/users/{id}`) rejected valid user sessions that failed the "limited to
@@ -37,6 +140,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The same validator's CSS `expression(` check matched ordinary text like
   "a regular expression (regex)". It now only matches inside a `style`
   attribute or a `<style>` block, the only places it can execute.
+
+### Security
+
+- Dependency updates for vulnerabilities `govulncheck` showed as reachable
+  from Popplio's code: `go-chi/chi` 5.3.0 (client IP spoofing through
+  `X-Forwarded-For` via the `RealIP` middleware, which affected IP-based
+  rate limiting), `golang.org/x/text` 0.41.0 (an infinite loop and a panic
+  on crafted input, reachable through editing a team's name), `jackc/pgx`
+  5.9.2 (SQL injection via placeholder confusion with dollar-quoted
+  strings), and `redis/go-redis` 9.6.3 (out-of-order responses after a
+  connection-setup timeout). `go.mod` and `go.work` now require Go 1.25.
+  The remaining report, `golang-jwt/jwt` v3 inside the web-push library,
+  has no upstream fix and only affects parsing untrusted tokens, which
+  Popplio never does.
 
 ## [1.9.1] - 2026-09-26
 

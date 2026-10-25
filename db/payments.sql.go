@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countBotByID = `-- name: CountBotByID :one
@@ -53,6 +55,17 @@ func (q *Queries) GetBotTypePremium(ctx context.Context, botID string) (GetBotTy
 	return i, err
 }
 
+const getFirstPaymentFulfillmentAt = `-- name: GetFirstPaymentFulfillmentAt :one
+SELECT MIN(fulfilled_at)::timestamptz FROM payment_fulfillments WHERE provider = $1
+`
+
+func (q *Queries) GetFirstPaymentFulfillmentAt(ctx context.Context, provider string) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getFirstPaymentFulfillmentAt, provider)
+	var column_1 pgtype.Timestamptz
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getServerTypePremium = `-- name: GetServerTypePremium :one
 SELECT type, premium FROM servers WHERE server_id = $1
 `
@@ -67,4 +80,50 @@ func (q *Queries) GetServerTypePremium(ctx context.Context, serverID string) (Ge
 	var i GetServerTypePremiumRow
 	err := row.Scan(&i.Type, &i.Premium)
 	return i, err
+}
+
+const insertPaymentFulfillment = `-- name: InsertPaymentFulfillment :execrows
+INSERT INTO payment_fulfillments (provider, external_id, user_id, product_id, for_type, for_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (provider, external_id) DO NOTHING
+`
+
+type InsertPaymentFulfillmentParams struct {
+	Provider   string `db:"provider" json:"provider"`
+	ExternalID string `db:"external_id" json:"external_id"`
+	UserID     string `db:"user_id" json:"user_id"`
+	ProductID  string `db:"product_id" json:"product_id"`
+	ForType    string `db:"for_type" json:"for_type"`
+	ForID      string `db:"for_id" json:"for_id"`
+}
+
+func (q *Queries) InsertPaymentFulfillment(ctx context.Context, arg InsertPaymentFulfillmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertPaymentFulfillment,
+		arg.Provider,
+		arg.ExternalID,
+		arg.UserID,
+		arg.ProductID,
+		arg.ForType,
+		arg.ForID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const paymentFulfillmentExists = `-- name: PaymentFulfillmentExists :one
+SELECT EXISTS(SELECT 1 FROM payment_fulfillments WHERE provider = $1 AND external_id = $2)
+`
+
+type PaymentFulfillmentExistsParams struct {
+	Provider   string `db:"provider" json:"provider"`
+	ExternalID string `db:"external_id" json:"external_id"`
+}
+
+func (q *Queries) PaymentFulfillmentExists(ctx context.Context, arg PaymentFulfillmentExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, paymentFulfillmentExists, arg.Provider, arg.ExternalID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

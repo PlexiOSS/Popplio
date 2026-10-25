@@ -97,6 +97,30 @@ func (q *Queries) GetChangelogPublishedByItag(ctx context.Context, itag string) 
 	return published, err
 }
 
+const getChangelogVersionsByProject = `-- name: GetChangelogVersionsByProject :many
+SELECT version FROM changelogs WHERE project = $1
+`
+
+func (q *Queries) GetChangelogVersionsByProject(ctx context.Context, project string) ([]string, error) {
+	rows, err := q.db.Query(ctx, getChangelogVersionsByProject, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertChangelogEntry = `-- name: InsertChangelogEntry :exec
 INSERT INTO changelogs (project, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, NOW()))

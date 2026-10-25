@@ -6,6 +6,8 @@ package search_bot_commands
 
 import (
 	"net/http"
+	"regexp"
+	"strings"
 
 	"popplio/api/resp"
 	"popplio/db"
@@ -13,6 +15,8 @@ import (
 	"popplio/routes/bots/assets"
 	"popplio/state"
 	"popplio/types"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -23,14 +27,28 @@ const perPage = 20
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Search Bot Commands",
-		Description: "Cross-bot command search -- finds every bot with a matching command name.",
+		Description: "Cross-bot command search across approved and certified bots. Matches command names and descriptions; at least one of query, bot or tag is required.",
 		Resp:        types.PagedResult[[]types.BotCommandSearchResult]{},
 		RespName:    "PagedResultBotCommandSearchResult",
 		Params: []docs.Parameter{
 			{
 				Name:        "query",
-				Description: "Command name (or partial name) to search for",
-				Required:    true,
+				Description: "Text to find in command names and descriptions (up to 100 characters, matched literally)",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "bot",
+				Description: "Only this bot's commands (bot ID)",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
+			{
+				Name:        "tag",
+				Description: "Only bots with this tag (case-insensitive)",
+				Required:    false,
 				In:          "query",
 				Schema:      docs.IdSchema,
 			},
@@ -45,12 +63,35 @@ func Docs() *docs.Doc {
 	}
 }
 
-func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	query := r.URL.Query().Get("query")
+var snowflakeRe = regexp.MustCompile(`^[0-9]{16,20}$`)
 
-	if query == "" {
-		return resp.BadRequest("query must be specified")
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	params := r.URL.Query()
+	query := strings.TrimSpace(params.Get("query"))
+	botID := strings.TrimSpace(params.Get("bot"))
+	tag := strings.TrimSpace(params.Get("tag"))
+
+	if query == "" && botID == "" && tag == "" {
+		return resp.BadRequest("query, bot or tag must be specified")
 	}
+
+	if len([]rune(query)) > 100 {
+		return resp.BadRequest("query must be 100 characters or fewer")
+	}
+
+	if botID != "" && !snowflakeRe.MatchString(botID) {
+		return resp.BadRequest("bot must be a bot ID")
+	}
+
+	if len(tag) > 64 {
+		return resp.BadRequest("tag is too long")
+	}
+
+	filterPattern := pgtype.Text{String: "%" + likeEscaper.Replace(query) + "%", Valid: query != ""}
+	filterBot := pgtype.Text{String: botID, Valid: botID != ""}
+	filterTag := pgtype.Text{String: tag, Valid: tag != ""}
 
 	pageNum, err := pagination.Parse(r)
 
@@ -61,14 +102,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	limit := perPage
 	offset := (int(pageNum) - 1) * perPage
 
-	pattern := "%" + query + "%"
-
 	q := db.New(state.Pool)
 
 	rows, err := q.SearchBotCommands(d.Context, db.SearchBotCommandsParams{
-		Name:   pattern,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Pattern: filterPattern,
+		BotID:   filterBot,
+		Tag:     filterTag,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
 	})
 
 	if err != nil {
@@ -91,7 +132,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error resolving bot command search results", "An error occurred while resolving bot command search results.", err)
 	}
 
-	countRaw, err := q.CountBotCommandsSearch(d.Context, pattern)
+	countRaw, err := q.CountBotCommandsSearch(d.Context, db.CountBotCommandsSearchParams{
+		Pattern: filterPattern,
+		BotID:   filterBot,
+		Tag:     filterTag,
+	})
 
 	if err != nil {
 		return resp.Err("Error while counting bot commands [db count]", err)

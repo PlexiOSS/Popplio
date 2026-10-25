@@ -20,7 +20,9 @@ import (
 	"popplio/routes/bots/endpoints/get_bot_meta"
 	"popplio/routes/bots/endpoints/get_bot_seo"
 	"popplio/routes/bots/endpoints/get_bots_index"
+	"popplio/routes/bots/endpoints/get_command_bots"
 	"popplio/routes/bots/endpoints/get_random_bots"
+	"popplio/routes/bots/endpoints/get_recent_changelog_bots"
 	"popplio/routes/bots/endpoints/get_similar_bots"
 	"popplio/routes/bots/endpoints/patch_bot_settings"
 	"popplio/routes/bots/endpoints/patch_bot_team"
@@ -80,11 +82,27 @@ func (b Router) Routes(r *chi.Mux) {
 	}.Route(r)
 
 	uapi.Route{
+		Pattern: "/bots/@changelogs/recent",
+		OpId:    "get_recent_changelog_bots",
+		Method:  uapi.GET,
+		Docs:    get_recent_changelog_bots.Docs,
+		Handler: get_recent_changelog_bots.Route,
+	}.Route(r)
+
+	uapi.Route{
 		Pattern: "/bots/@commands",
 		OpId:    "search_bot_commands",
 		Method:  uapi.GET,
 		Docs:    search_bot_commands.Docs,
 		Handler: search_bot_commands.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/@commands/bots",
+		OpId:    "get_command_bots",
+		Method:  uapi.GET,
+		Docs:    get_command_bots.Docs,
+		Handler: get_command_bots.Route,
 	}.Route(r)
 
 	uapi.Route{
@@ -234,6 +252,15 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_bot_commands.Docs,
 		Handler: get_bot_commands.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{
@@ -269,6 +296,15 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_bot_changelogs.Docs,
 		Handler: get_bot_changelogs.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{

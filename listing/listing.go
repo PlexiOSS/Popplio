@@ -110,3 +110,17 @@ func EntityIsPublic(ctx context.Context, targetType, targetID string) (bool, err
 
 	return IsPublic(entityType), nil
 }
+
+func Visible(ctx context.Context, auth uapi.AuthData, targetType, targetID string) (bool, error) {
+	if targetType != api.TargetTypeBot && targetType != api.TargetTypeServer {
+		return true, nil
+	}
+
+	public, err := EntityIsPublic(ctx, targetType, targetID)
+
+	if err != nil {
+		return false, err
+	}
+
+	return public || CanViewUnlisted(ctx, auth, targetType, targetID), nil
+}

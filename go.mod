@@ -1,11 +1,11 @@
 module popplio
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/PlexiOSS/Keel v1.0.3
 	github.com/getkin/kin-openapi v0.127.0 // indirect
-	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/mileusna/useragent v1.3.4
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
@@ -24,7 +24,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.22.0
 )
 
 require (
@@ -70,15 +70,15 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/text v0.27.0
+	golang.org/x/text v0.41.0
 )
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.3.0
 	github.com/go-playground/validator/v10 v10.22.0
-	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/plutov/paypal/v4 v4.11.0
-	github.com/redis/go-redis/v9 v9.6.1
+	github.com/redis/go-redis/v9 v9.6.3
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/sys v0.35.0 // indirect

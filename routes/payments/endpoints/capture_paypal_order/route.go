@@ -6,6 +6,8 @@
 package capture_paypal_order
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
 	"popplio/api/resp"
@@ -71,7 +73,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if len(captured.PurchaseUnits) == 0 {
 		// Refund the order
-		_, err = state.Paypal.RefundCapture(d.Context, orderId, paypal.RefundCaptureRequest{})
+		err = refundCapture(d.Context, captured)
 
 		if err != nil {
 			return resp.ErrBody("Failed to refund order [len(captured.PurchaseUnits) == 0]", "Failed to refund order.", err, zap.String("order_id", orderId))
@@ -82,7 +84,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if len(captured.PurchaseUnits[0].Items) == 0 {
 		// Refund the order
-		_, err = state.Paypal.RefundCapture(d.Context, orderId, paypal.RefundCaptureRequest{})
+		err = refundCapture(d.Context, captured)
 
 		if err != nil {
 			return resp.ErrBody("Failed to refund order [captured.PurchaseUnits[0].Items == 0]", "Failed to refund order.", err, zap.String("order_id", orderId))
@@ -99,7 +101,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		// Refund the order
-		_, err = state.Paypal.RefundCapture(d.Context, orderId, paypal.RefundCaptureRequest{})
+		err = refundCapture(d.Context, captured)
 
 		if err != nil {
 			return resp.ErrBody("Failed to refund order [jsonimpl.Unmarshal]", "Failed to refund order.", err, zap.String("order_id", orderId))
@@ -108,18 +110,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to unmarshal product json", err, zap.String("json", productJson))
 	}
 
-	err = assets.GivePerks(d.Context, product)
+	if _, fulfillErr := assets.Fulfill(d.Context, "paypal", orderId, product); fulfillErr != nil {
+		state.Logger.Error("Failed to give perks, refunding", zap.Error(fulfillErr), zap.String("order_id", orderId), zap.String("json", productJson))
 
-	if err != nil {
-		// Refund the order
-		_, err = state.Paypal.RefundCapture(d.Context, orderId, paypal.RefundCaptureRequest{})
-
-		if err != nil {
-			return resp.ErrBody("Failed to refund order [GivePerks: err != nil]", "Failed to refund order.", err, zap.String("order_id", orderId))
+		if err := refundCapture(d.Context, captured); err != nil {
+			return resp.ErrBody("Failed to refund order [Fulfill: err != nil]", "Failed to refund order.", err, zap.String("order_id", orderId))
 		}
 
-		state.Logger.Error("Failed to give perks", zap.Error(err), zap.String("json", productJson))
-		return resp.BadRequest("Failed to give perks.")
+		return resp.BadRequest("Failed to give perks. Your payment has been refunded.")
 	}
 
 	state.Redis.Del(d.Context, "paypal:"+refId)
@@ -127,4 +125,23 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	return uapi.HttpResponse{
 		Redirect: state.Config.Sites.Frontend + "/payments/success",
 	}
+}
+
+func refundCapture(ctx context.Context, captured *paypal.CaptureOrderResponse) error {
+	for _, unit := range captured.PurchaseUnits {
+		if unit.Payments == nil {
+			continue
+		}
+
+		for _, capture := range unit.Payments.Captures {
+			if capture.ID == "" {
+				continue
+			}
+
+			_, err := state.Paypal.RefundCapture(ctx, capture.ID, paypal.RefundCaptureRequest{})
+			return err
+		}
+	}
+
+	return errors.New("paypal order has no capture to refund")
 }

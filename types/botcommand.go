@@ -56,3 +56,10 @@ type BotCommandSearchResult struct {
 	Category    string                  `json:"category"`
 	Bot         *dovetypes.PlatformUser `json:"bot"`
 }
+
+type BotWithCommands struct {
+	BotID    string                  `json:"bot_id" description:"The bot's ID"`
+	Commands int64                   `json:"commands" description:"How many commands the bot has documented"`
+	Preview  []string                `json:"preview" description:"Up to five of the bot's command names, alphabetically"`
+	User     *dovetypes.PlatformUser `json:"user" description:"The bot's user information"`
+}

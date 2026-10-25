@@ -380,6 +380,16 @@ type PartnerType struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type PaymentFulfillment struct {
+	Provider    string             `db:"provider" json:"provider"`
+	ExternalID  string             `db:"external_id" json:"external_id"`
+	UserID      string             `db:"user_id" json:"user_id"`
+	ProductID   string             `db:"product_id" json:"product_id"`
+	ForType     string             `db:"for_type" json:"for_type"`
+	ForID       string             `db:"for_id" json:"for_id"`
+	FulfilledAt pgtype.Timestamptz `db:"fulfilled_at" json:"fulfilled_at"`
+}
+
 type Report struct {
 	ID             pgtype.UUID        `db:"id" json:"id"`
 	TargetType     string             `db:"target_type" json:"target_type"`

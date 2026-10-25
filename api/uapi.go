@@ -191,15 +191,29 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				return uapi.AuthData{}, uapi.DefaultResponse(http.StatusInternalServerError), false
 			}
 
-			if urlutil.DifferentHost(req.Header.Get("Origin"), state.Config.Sites.Frontend) &&
+			origin := req.Header.Get("Origin")
+
+			if urlutil.DifferentHost(origin, state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
+				state.Logger.Warn("Rejected user session from a non-frontend origin",
+					zap.String("origin", origin),
+					zap.String("frontend", state.Config.Sites.Frontend),
+					zap.String("path", req.URL.Path),
+					zap.Bool("authOptional", r.AuthOptional),
+				)
+
 				if r.AuthOptional {
 					return uapi.AuthData{}, uapi.HttpResponse{}, true
 				}
 
+				message := "This environment is limited to Bug Hunters."
+				if origin == "" {
+					message = "User sessions must come from " + state.Config.Sites.Frontend + ". Server-side callers must send `Origin: " + state.Config.Sites.Frontend + "`."
+				}
+
 				return uapi.AuthData{}, uapi.HttpResponse{
 					Status: http.StatusForbidden,
-					Json:   types.ApiError{Message: "This environment is limited to Bug Hunters."},
+					Json:   types.ApiError{Message: message},
 					Headers: map[string]string{
 						"X-Session-Invalid": "true",
 					},

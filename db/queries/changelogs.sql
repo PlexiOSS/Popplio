@@ -27,3 +27,6 @@ WHERE itag = $1;
 
 -- name: DeleteChangelogByItag :exec
 DELETE FROM changelogs WHERE itag = $1;
+
+-- name: GetChangelogVersionsByProject :many
+SELECT version FROM changelogs WHERE project = $1;

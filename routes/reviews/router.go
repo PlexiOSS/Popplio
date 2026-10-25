@@ -32,6 +32,15 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_reviews.Docs,
 		Handler: get_reviews.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{

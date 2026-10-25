@@ -1237,6 +1237,22 @@ CREATE TABLE public.entity_assets (
 
 
 --
+-- Name: payment_fulfillments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payment_fulfillments (
+    provider text NOT NULL,
+    external_id text NOT NULL,
+    user_id text NOT NULL,
+    product_id text NOT NULL,
+    for_type text NOT NULL,
+    for_id text NOT NULL,
+    fulfilled_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT payment_fulfillments_provider_check CHECK ((provider = ANY (ARRAY['stripe'::text, 'paypal'::text])))
+);
+
+
+--
 -- Name: vote_credit_tiers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1936,6 +1952,14 @@ ALTER TABLE ONLY public.vanity
 
 ALTER TABLE ONLY public.entity_assets
     ADD CONSTRAINT entity_assets_pkey PRIMARY KEY (target_type, target_id, kind);
+
+
+--
+-- Name: payment_fulfillments payment_fulfillments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_fulfillments
+    ADD CONSTRAINT payment_fulfillments_pkey PRIMARY KEY (provider, external_id);
 
 
 --

@@ -78,21 +78,22 @@ type Servers struct {
 }
 
 type Meta struct {
-	PostgresURL     string   `yaml:"postgres_url" default:"postgresql:///infinity" comment:"Postgres URL" validate:"required"`
-	RedisURL        string   `yaml:"redis_url" default:"redis://localhost:6379" comment:"Redis URL" validate:"required"`
-	Port            string   `yaml:"port" default:":8081" comment:"Port to run the server on" validate:"required"`
-	VulgarList      []string `yaml:"vulgar_list" default:"fuck,suck,shit,kill" validate:"required"`
-	UrgentMentions  string   `yaml:"urgent_mentions" default:"<@&1061643797315993701>" comment:"Urgent mentions" validate:"required"`
-	PaypalClientID  string   `yaml:"paypal_client_id" default:"" comment:"Paypal Client ID" validate:"required"`
-	PaypalSecret    string   `yaml:"paypal_secret" default:"" comment:"Paypal Secret" validate:"required"`
-	StripePublicKey string   `yaml:"stripe_public_key" default:"" comment:"Stripe Public Key" validate:"required"`
-	StripeSecretKey string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
-	PopplioProxy    string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
-	OpenAIAPIKey    string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time, and to draft changelog entries. Moderation is skipped and the changelog generator falls back to a plain heuristic when this is unset" required:"false"`
-	GithubToken     string   `yaml:"github_token" default:"" comment:"GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+" required:"false"`
-
-	BlogAnnounceMentions      string `yaml:"blog_announce_mentions" default:"" comment:"Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty" required:"false"`
-	ChangelogAnnounceMentions string `yaml:"changelog_announce_mentions" default:"" comment:"Role mention(s) included in the changelog-entry announcement, same shape as blog_announce_mentions. Skipped when empty" required:"false"`
+	PostgresURL               string   `yaml:"postgres_url" default:"postgresql:///infinity" comment:"Postgres URL" validate:"required"`
+	RedisURL                  string   `yaml:"redis_url" default:"redis://localhost:6379" comment:"Redis URL" validate:"required"`
+	Port                      string   `yaml:"port" default:":8081" comment:"Port to run the server on" validate:"required"`
+	VulgarList                []string `yaml:"vulgar_list" default:"fuck,suck,shit,kill" validate:"required"`
+	UrgentMentions            string   `yaml:"urgent_mentions" default:"<@&1061643797315993701>" comment:"Urgent mentions" validate:"required"`
+	PaypalClientID            string   `yaml:"paypal_client_id" default:"" comment:"Paypal Client ID" validate:"required"`
+	PaypalSecret              string   `yaml:"paypal_secret" default:"" comment:"Paypal Secret" validate:"required"`
+	StripePublicKey           string   `yaml:"stripe_public_key" default:"" comment:"Stripe Public Key" validate:"required"`
+	StripeSecretKey           string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
+	SkipAutoMigrate           bool     `yaml:"skip_auto_migrate" default:"false" comment:"Set to true to stop Popplio applying pending database migrations on startup (run go run ./cmd/migrate up yourself instead)"`
+	StripeWebhookSecret       string   `yaml:"stripe_webhook_secret" default:"" comment:"Signing secret of an existing Stripe webhook endpoint for /payments/stripe/webhook. When set, Popplio uses it and never creates or deletes Stripe webhook endpoints"`
+	PopplioProxy              string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
+	OpenAIAPIKey              string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time, and to draft changelog entries. Moderation is skipped and the changelog generator falls back to a plain heuristic when this is unset" required:"false"`
+	GithubToken               string   `yaml:"github_token" default:"" comment:"GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+" required:"false"`
+	BlogAnnounceMentions      string   `yaml:"blog_announce_mentions" default:"" comment:"Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty" required:"false"`
+	ChangelogAnnounceMentions string   `yaml:"changelog_announce_mentions" default:"" comment:"Role mention(s) included in the changelog-entry announcement, same shape as blog_announce_mentions. Skipped when empty" required:"false"`
 }
 
 type Arcadia struct {

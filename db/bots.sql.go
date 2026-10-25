@@ -154,15 +154,48 @@ func (q *Queries) CountBotChangelogs(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countBotChangelogsFeed = `-- name: CountBotChangelogsFeed :one
+SELECT COUNT(*)
+FROM bot_changelogs bc
+JOIN bots b ON b.bot_id = bc.bot_id
+LEFT JOIN internal_user_cache__discord u ON u.id = bc.bot_id
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND ($1::text IS NULL OR bc.bot_id = $1::text)
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower($2::text)))
+  AND ($3::text IS NULL OR bc.title ILIKE $3::text OR bc.content ILIKE $3::text OR u.username ILIKE $3::text OR u.display_name ILIKE $3::text)
+`
+
+type CountBotChangelogsFeedParams struct {
+	BotID   pgtype.Text `db:"bot_id" json:"bot_id"`
+	Tag     pgtype.Text `db:"tag" json:"tag"`
+	Pattern pgtype.Text `db:"pattern" json:"pattern"`
+}
+
+func (q *Queries) CountBotChangelogsFeed(ctx context.Context, arg CountBotChangelogsFeedParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBotChangelogsFeed, arg.BotID, arg.Tag, arg.Pattern)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countBotCommandsSearch = `-- name: CountBotCommandsSearch :one
 SELECT COUNT(*)
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified')
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND ($1::text IS NULL OR bc.name ILIKE $1::text OR bc.description ILIKE $1::text)
+  AND ($2::text IS NULL OR bc.bot_id = $2::text)
+  AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower($3::text)))
 `
 
-func (q *Queries) CountBotCommandsSearch(ctx context.Context, name string) (int64, error) {
-	row := q.db.QueryRow(ctx, countBotCommandsSearch, name)
+type CountBotCommandsSearchParams struct {
+	Pattern pgtype.Text `db:"pattern" json:"pattern"`
+	BotID   pgtype.Text `db:"bot_id" json:"bot_id"`
+	Tag     pgtype.Text `db:"tag" json:"tag"`
+}
+
+func (q *Queries) CountBotCommandsSearch(ctx context.Context, arg CountBotCommandsSearchParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBotCommandsSearch, arg.Pattern, arg.BotID, arg.Tag)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -461,15 +494,24 @@ func (q *Queries) GetBotChangelogs(ctx context.Context, botID string) ([]GetBotC
 }
 
 const getBotChangelogsFeed = `-- name: GetBotChangelogsFeed :many
-SELECT id, bot_id, title, content, version, created_at
-FROM bot_changelogs
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
+SELECT bc.id, bc.bot_id, bc.title, bc.content, bc.version, bc.created_at
+FROM bot_changelogs bc
+JOIN bots b ON b.bot_id = bc.bot_id
+LEFT JOIN internal_user_cache__discord u ON u.id = bc.bot_id
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND ($1::text IS NULL OR bc.bot_id = $1::text)
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower($2::text)))
+  AND ($3::text IS NULL OR bc.title ILIKE $3::text OR bc.content ILIKE $3::text OR u.username ILIKE $3::text OR u.display_name ILIKE $3::text)
+ORDER BY bc.created_at DESC
+LIMIT $5 OFFSET $4
 `
 
 type GetBotChangelogsFeedParams struct {
-	Limit  int32 `db:"limit" json:"limit"`
-	Offset int32 `db:"offset" json:"offset"`
+	BotID   pgtype.Text `db:"bot_id" json:"bot_id"`
+	Tag     pgtype.Text `db:"tag" json:"tag"`
+	Pattern pgtype.Text `db:"pattern" json:"pattern"`
+	Offset  int32       `db:"offset" json:"offset"`
+	Limit   int32       `db:"limit" json:"limit"`
 }
 
 type GetBotChangelogsFeedRow struct {
@@ -483,7 +525,13 @@ type GetBotChangelogsFeedRow struct {
 
 // Sitewide feed across every bot's changelog entries, newest first.
 func (q *Queries) GetBotChangelogsFeed(ctx context.Context, arg GetBotChangelogsFeedParams) ([]GetBotChangelogsFeedRow, error) {
-	rows, err := q.db.Query(ctx, getBotChangelogsFeed, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, getBotChangelogsFeed,
+		arg.BotID,
+		arg.Tag,
+		arg.Pattern,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -795,6 +843,42 @@ func (q *Queries) GetBotsDueForModerationScan(ctx context.Context, limit int32) 
 			&i.Long,
 			&i.Nsfw,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBotsWithCommands = `-- name: GetBotsWithCommands :many
+SELECT bc.bot_id, COUNT(*) AS commands, (array_agg(bc.name ORDER BY bc.name))[1:5]::text[] AS preview
+FROM bot_commands bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE b.type = 'approved' OR b.type = 'certified'
+GROUP BY bc.bot_id, b.approximate_votes
+ORDER BY b.approximate_votes DESC, COUNT(*) DESC
+LIMIT $1
+`
+
+type GetBotsWithCommandsRow struct {
+	BotID    string   `db:"bot_id" json:"bot_id"`
+	Commands int64    `db:"commands" json:"commands"`
+	Preview  []string `db:"preview" json:"preview"`
+}
+
+func (q *Queries) GetBotsWithCommands(ctx context.Context, limit int32) ([]GetBotsWithCommandsRow, error) {
+	rows, err := q.db.Query(ctx, getBotsWithCommands, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBotsWithCommandsRow
+	for rows.Next() {
+		var i GetBotsWithCommandsRow
+		if err := rows.Scan(&i.BotID, &i.Commands, &i.Preview); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1664,6 +1748,42 @@ func (q *Queries) GetRecentlyAddedIndexBots(ctx context.Context) ([]GetRecentlyA
 	return items, nil
 }
 
+const getRecentlyUpdatedChangelogBots = `-- name: GetRecentlyUpdatedChangelogBots :many
+SELECT bc.bot_id, MAX(bc.created_at)::timestamptz AS latest_at, COUNT(*) AS updates
+FROM bot_changelogs bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE b.type = 'approved' OR b.type = 'certified'
+GROUP BY bc.bot_id
+ORDER BY latest_at DESC
+LIMIT $1
+`
+
+type GetRecentlyUpdatedChangelogBotsRow struct {
+	BotID    string             `db:"bot_id" json:"bot_id"`
+	LatestAt pgtype.Timestamptz `db:"latest_at" json:"latest_at"`
+	Updates  int64              `db:"updates" json:"updates"`
+}
+
+func (q *Queries) GetRecentlyUpdatedChangelogBots(ctx context.Context, limit int32) ([]GetRecentlyUpdatedChangelogBotsRow, error) {
+	rows, err := q.db.Query(ctx, getRecentlyUpdatedChangelogBots, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRecentlyUpdatedChangelogBotsRow
+	for rows.Next() {
+		var i GetRecentlyUpdatedChangelogBotsRow
+		if err := rows.Scan(&i.BotID, &i.LatestAt, &i.Updates); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSimilarBots = `-- name: GetSimilarBots :many
 WITH source_tags AS (
     SELECT tags FROM bots WHERE bot_id = $1
@@ -2170,15 +2290,20 @@ const searchBotCommands = `-- name: SearchBotCommands :many
 SELECT bc.id, bc.bot_id, bc.name, bc.description, bc.usage, bc.category
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified')
-ORDER BY b.approximate_votes DESC, bc.name ASC
-LIMIT $2 OFFSET $3
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND ($1::text IS NULL OR bc.name ILIKE $1::text OR bc.description ILIKE $1::text)
+  AND ($2::text IS NULL OR bc.bot_id = $2::text)
+  AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower($3::text)))
+ORDER BY b.approximate_votes DESC, bc.bot_id, bc.name ASC
+LIMIT $5 OFFSET $4
 `
 
 type SearchBotCommandsParams struct {
-	Name   string `db:"name" json:"name"`
-	Limit  int32  `db:"limit" json:"limit"`
-	Offset int32  `db:"offset" json:"offset"`
+	Pattern pgtype.Text `db:"pattern" json:"pattern"`
+	BotID   pgtype.Text `db:"bot_id" json:"bot_id"`
+	Tag     pgtype.Text `db:"tag" json:"tag"`
+	Offset  int32       `db:"offset" json:"offset"`
+	Limit   int32       `db:"limit" json:"limit"`
 }
 
 type SearchBotCommandsRow struct {
@@ -2191,11 +2316,18 @@ type SearchBotCommandsRow struct {
 }
 
 // Cross-bot command search -- "who has a /giveaway command." ILIKE against
-// the command name only (not description/usage), most-voted bot first;
-// good enough at today's command-table size without a dedicated GIN index
-// (unlike bots/servers/teams/packs' full-text search_list).
+// the command name and description, most-voted bot first with each bot's
+// commands kept together; good enough at today's command-table size without
+// a dedicated GIN index (unlike bots/servers/teams/packs' full-text
+// search_list).
 func (q *Queries) SearchBotCommands(ctx context.Context, arg SearchBotCommandsParams) ([]SearchBotCommandsRow, error) {
-	rows, err := q.db.Query(ctx, searchBotCommands, arg.Name, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, searchBotCommands,
+		arg.Pattern,
+		arg.BotID,
+		arg.Tag,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -1,14 +1,14 @@
-// Package handle_stripe_webhook implements POST /payments/stripe/webhook —
-// "Handle Stripe Webhook".
-//
-// Handles stripe payment webhooks. Not intended for public use and
-// firewalled to only stripe IPs.
 package handle_stripe_webhook
 
 import (
+	"context"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"slices"
+	"strings"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/notifications"
@@ -40,9 +40,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Status(http.StatusFailedDependency, "Stripe webhooks are not configured yet! Please try again in a few moments?")
 	}
 
-	// Get request IP
-	if !slices.Contains(state.StripeWebhIPList, r.RemoteAddr) {
-		state.Logger.Error("IP is not allowed to access this endpoint", zap.String("ip", r.RemoteAddr))
+	ip := requestIP(r)
+
+	if !slices.Contains(state.StripeWebhIPList, ip) {
+		state.Logger.Error("IP is not allowed to access this endpoint", zap.String("ip", ip), zap.String("remoteAddr", r.RemoteAddr))
 		return resp.Forbidden("IP is not allowed to access this endpoint")
 	}
 
@@ -52,8 +53,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Invalid request body")
 	}
 
-	// Pass the request body and Stripe-Signature header to ConstructEvent, along with the webhook signing key
-	// You can find your endpoint's secret in your webhook settings
 	event, err := webhook.ConstructEvent(body, r.Header.Get("Stripe-Signature"), state.StripeWebhSecret)
 
 	if err != nil {
@@ -102,7 +101,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Fulfill the purchase...
 	var payload assets.PerkData
 
 	err = jsonimpl.Unmarshal([]byte(s.ClientReferenceID), &payload)
@@ -118,7 +116,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if failed {
 		state.Logger.Error("Payment failed for user " + payload.UserID)
 
-		// Send in bg as this can take a while and we don't want to block the request
 		go notifications.PushNotification(payload.UserID, types.Alert{
 			Title:    "Payment Failed",
 			Message:  "Your payment for \"" + payload.ProductName + "\" for " + payload.For + " has failed. Please contact our support team to learn more!",
@@ -134,30 +131,49 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				state.Logger.Error("Panic while giving perks", zap.Any("panic", rec), zap.Any("payload", payload))
-			}
-		}()
+	fulfillCtx, cancel := context.WithTimeout(state.Context, 25*time.Second)
+	defer cancel()
 
-		state.Logger.Info("Giving perks", zap.Any("payload", payload))
+	fulfilled, err := assets.Fulfill(fulfillCtx, "stripe", s.ID, payload)
 
-		err := assets.GivePerks(d.Context, payload)
+	if errors.Is(err, assets.ErrInvalidPurchase) {
+		state.Logger.Error("Stripe purchase could not be applied", zap.Error(err), zap.String("session", s.ID), zap.Any("payload", payload))
 
-		if err != nil {
-			// Warn user about it as refunding is costly
-			state.Logger.Error("Failed to give perks", zap.Error(err), zap.Any("payload", payload))
-			notifications.PushNotification(payload.UserID, types.Alert{
-				Title:    "Perk Delivery Failed",
-				Message:  "Your payment for \"" + payload.ProductName + "\" for " + payload.For + " has succeeded but couldn't be handled correctly. Please contact our support team IMMEDIATELY: " + err.Error(),
-				Type:     types.AlertTypeError,
-				Priority: types.AlertPriorityHigh,
-				URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/support", Valid: true},
-				Category: types.AlertCategoryPayments,
-			})
+		go notifications.PushNotification(payload.UserID, types.Alert{
+			Title:    "Perk Delivery Failed",
+			Message:  "Your payment for \"" + payload.ProductName + "\" for " + payload.For + " went through but couldn't be applied. Please contact our support team so we can sort it out: " + err.Error(),
+			Type:     types.AlertTypeError,
+			Priority: types.AlertPriorityHigh,
+			URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/support", Valid: true},
+			Category: types.AlertCategoryPayments,
+		})
+
+		return uapi.HttpResponse{
+			Status: http.StatusOK,
+			Data:   "Purchase could not be applied: " + err.Error(),
 		}
-	}()
+	}
+
+	if err != nil {
+		state.Logger.Error("Failed to fulfill Stripe purchase, Stripe will retry", zap.Error(err), zap.String("session", s.ID), zap.Any("payload", payload))
+		return resp.Status(http.StatusInternalServerError, "Failed to fulfill purchase, please retry")
+	}
+
+	if !fulfilled {
+		state.Logger.Info("Stripe purchase already fulfilled", zap.String("session", s.ID))
+	}
 
 	return uapi.DefaultResponse(http.StatusNoContent)
+}
+
+func requestIP(r *http.Request) string {
+	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
+		return ip
+	}
+
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+
+	return r.RemoteAddr
 }

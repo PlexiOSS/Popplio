@@ -8,8 +8,10 @@ package get_bot_changelogs
 import (
 	"net/http"
 
+	"popplio/api"
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/types"
 
@@ -38,6 +40,16 @@ func Docs() *docs.Doc {
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	botId := chi.URLParam(r, "id")
+
+	visible, err := listing.Visible(d.Context, d.Auth, api.TargetTypeBot, botId)
+
+	if err != nil {
+		return resp.Err("Failed to check listing status", err)
+	}
+
+	if !visible {
+		return uapi.DefaultResponse(http.StatusNotFound)
+	}
 
 	rows, err := db.New(state.Pool).GetBotChangelogs(d.Context, botId)
 

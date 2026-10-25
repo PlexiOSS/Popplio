@@ -9,6 +9,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/types"
 
@@ -60,20 +61,38 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	for i := range partners {
-		err := state.Validator.Struct(partners[i])
+	valid := partners[:0]
 
-		if err != nil {
-			return resp.ErrBody("Failed to validate partner", "Could not validate partner "+partners[i].ID+".", err, zap.String("partner_id", partners[i].ID))
+	for i := range partners {
+		if err := state.Validator.Struct(partners[i]); err != nil {
+			state.Logger.Error("Skipping invalid partner in public list", zap.Error(err), zap.String("partner_id", partners[i].ID))
+			continue
 		}
 
-		partners[i].User, err = dovewing.GetUser(d.Context, partners[i].UserID, state.DovewingPlatformDiscord)
+		user, err := dovewing.GetUser(d.Context, partners[i].UserID, state.DovewingPlatformDiscord)
 
 		if err != nil {
 			return resp.Err("Failed to fetch partner user", err, zap.String("partner_id", partners[i].ID), zap.String("user_id", partners[i].UserID))
 		}
 
+		partners[i].User = user
+
+		if botID := partners[i].BotID; botID != nil && *botID != "" {
+			if listed, err := listing.EntityIsPublic(d.Context, "bot", *botID); err != nil {
+				state.Logger.Warn("Failed to check partner bot listing", zap.Error(err), zap.String("partner_id", partners[i].ID), zap.String("bot_id", *botID))
+			} else if listed {
+				if bot, err := dovewing.GetUser(d.Context, *botID, state.DovewingPlatformDiscord); err == nil {
+					partners[i].Bot = bot
+				} else {
+					state.Logger.Warn("Failed to fetch partner bot user", zap.Error(err), zap.String("partner_id", partners[i].ID), zap.String("bot_id", *botID))
+				}
+			}
+		}
+
+		valid = append(valid, partners[i])
 	}
+
+	partners = valid
 
 	typeRows, err := q.GetPartnerTypes(d.Context)
 

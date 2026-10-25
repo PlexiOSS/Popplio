@@ -345,28 +345,69 @@ DELETE FROM bot_changelogs WHERE id = $1 AND bot_id = $2;
 
 -- name: SearchBotCommands :many
 -- Cross-bot command search -- "who has a /giveaway command." ILIKE against
--- the command name only (not description/usage), most-voted bot first;
--- good enough at today's command-table size without a dedicated GIN index
--- (unlike bots/servers/teams/packs' full-text search_list).
+-- the command name and description, most-voted bot first with each bot's
+-- commands kept together; good enough at today's command-table size without
+-- a dedicated GIN index (unlike bots/servers/teams/packs' full-text
+-- search_list).
 SELECT bc.id, bc.bot_id, bc.name, bc.description, bc.usage, bc.category
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified')
-ORDER BY b.approximate_votes DESC, bc.name ASC
-LIMIT $2 OFFSET $3;
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND (sqlc.narg('pattern')::text IS NULL OR bc.name ILIKE sqlc.narg('pattern')::text OR bc.description ILIKE sqlc.narg('pattern')::text)
+  AND (sqlc.narg('bot_id')::text IS NULL OR bc.bot_id = sqlc.narg('bot_id')::text)
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower(sqlc.narg('tag')::text)))
+ORDER BY b.approximate_votes DESC, bc.bot_id, bc.name ASC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountBotCommandsSearch :one
 SELECT COUNT(*)
 FROM bot_commands bc
 JOIN bots b ON b.bot_id = bc.bot_id
-WHERE bc.name ILIKE $1 AND (b.type = 'approved' OR b.type = 'certified');
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND (sqlc.narg('pattern')::text IS NULL OR bc.name ILIKE sqlc.narg('pattern')::text OR bc.description ILIKE sqlc.narg('pattern')::text)
+  AND (sqlc.narg('bot_id')::text IS NULL OR bc.bot_id = sqlc.narg('bot_id')::text)
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower(sqlc.narg('tag')::text)));
+
+-- name: GetBotsWithCommands :many
+SELECT bc.bot_id, COUNT(*) AS commands, (array_agg(bc.name ORDER BY bc.name))[1:5]::text[] AS preview
+FROM bot_commands bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE b.type = 'approved' OR b.type = 'certified'
+GROUP BY bc.bot_id, b.approximate_votes
+ORDER BY b.approximate_votes DESC, COUNT(*) DESC
+LIMIT sqlc.arg('limit');
 
 -- name: GetBotChangelogsFeed :many
 -- Sitewide feed across every bot's changelog entries, newest first.
-SELECT id, bot_id, title, content, version, created_at
-FROM bot_changelogs
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2;
+SELECT bc.id, bc.bot_id, bc.title, bc.content, bc.version, bc.created_at
+FROM bot_changelogs bc
+JOIN bots b ON b.bot_id = bc.bot_id
+LEFT JOIN internal_user_cache__discord u ON u.id = bc.bot_id
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND (sqlc.narg('bot_id')::text IS NULL OR bc.bot_id = sqlc.narg('bot_id')::text)
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower(sqlc.narg('tag')::text)))
+  AND (sqlc.narg('pattern')::text IS NULL OR bc.title ILIKE sqlc.narg('pattern')::text OR bc.content ILIKE sqlc.narg('pattern')::text OR u.username ILIKE sqlc.narg('pattern')::text OR u.display_name ILIKE sqlc.narg('pattern')::text)
+ORDER BY bc.created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountBotChangelogsFeed :one
+SELECT COUNT(*)
+FROM bot_changelogs bc
+JOIN bots b ON b.bot_id = bc.bot_id
+LEFT JOIN internal_user_cache__discord u ON u.id = bc.bot_id
+WHERE (b.type = 'approved' OR b.type = 'certified')
+  AND (sqlc.narg('bot_id')::text IS NULL OR bc.bot_id = sqlc.narg('bot_id')::text)
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) t WHERE lower(t) = lower(sqlc.narg('tag')::text)))
+  AND (sqlc.narg('pattern')::text IS NULL OR bc.title ILIKE sqlc.narg('pattern')::text OR bc.content ILIKE sqlc.narg('pattern')::text OR u.username ILIKE sqlc.narg('pattern')::text OR u.display_name ILIKE sqlc.narg('pattern')::text);
+
+-- name: GetRecentlyUpdatedChangelogBots :many
+SELECT bc.bot_id, MAX(bc.created_at)::timestamptz AS latest_at, COUNT(*) AS updates
+FROM bot_changelogs bc
+JOIN bots b ON b.bot_id = bc.bot_id
+WHERE b.type = 'approved' OR b.type = 'certified'
+GROUP BY bc.bot_id
+ORDER BY latest_at DESC
+LIMIT sqlc.arg('limit');
 
 -- name: CountBotChangelogs :one
 SELECT COUNT(*) FROM bot_changelogs;

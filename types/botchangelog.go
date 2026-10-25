@@ -44,3 +44,10 @@ type BotChangelogFeedEntry struct {
 	CreatedAt time.Time               `db:"created_at" json:"created_at"`
 	User      *dovetypes.PlatformUser `db:"-" json:"user" description:"The bot's user information" ci:"internal"` // Must be parsed internally
 }
+
+type RecentChangelogBot struct {
+	BotID    string                  `json:"bot_id" description:"The bot's ID"`
+	LatestAt time.Time               `json:"latest_at" description:"When the bot last posted a changelog entry"`
+	Updates  int64                   `json:"updates" description:"How many changelog entries the bot has posted"`
+	User     *dovetypes.PlatformUser `json:"user" description:"The bot's user information"`
+}

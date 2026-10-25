@@ -3,6 +3,7 @@ package assets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"popplio/db"
@@ -137,55 +138,102 @@ func entityLabel(forType string) (label string, err error) {
 	}
 }
 
+var ErrInvalidPurchase = errors.New("invalid purchase")
+
 func GivePerks(ctx context.Context, perkData PerkData) error {
+	_, err := fulfill(ctx, "", "", perkData)
+	return err
+}
+
+func Fulfill(ctx context.Context, provider, externalID string, perkData PerkData) (bool, error) {
+	if provider == "" || externalID == "" {
+		return false, errors.New("provider and external id are required to fulfill a payment")
+	}
+
+	return fulfill(ctx, provider, externalID, perkData)
+}
+
+func fulfill(ctx context.Context, provider, externalID string, perkData PerkData) (bool, error) {
 	perk, err := FindPerks(ctx, perkData)
 
 	if err != nil {
-		return err
+		return false, fmt.Errorf("%w: %v", ErrInvalidPurchase, err)
 	}
 
-	switch perkData.ProductID {
-	case "premium":
-		targetID := perkData.For
+	if perkData.ProductID != "premium" {
+		return false, fmt.Errorf("%w: unsupported product %q", ErrInvalidPurchase, perkData.ProductID)
+	}
 
-		q := db.New(state.Pool)
+	tx, err := state.Pool.Begin(ctx)
 
-		switch perkData.ForType {
-		case "bot":
-			err = q.ApplyBotPremiumDays(ctx, db.ApplyBotPremiumDaysParams{Hours: int32(perk.TimePeriod), BotID: targetID})
-		case "server":
-			err = q.ApplyServerPremiumDays(ctx, db.ApplyServerPremiumDaysParams{Hours: int32(perk.TimePeriod), ServerID: targetID})
-		default:
-			return errors.New("invalid for_type")
-		}
+	if err != nil {
+		return false, fmt.Errorf("starting transaction: %w", err)
+	}
 
-		if err != nil {
-			return errors.New("our database broke, please try again later")
-		}
+	defer tx.Rollback(ctx)
 
-		mention := targetID
-		if perkData.ForType == "bot" {
-			mention = "<@" + targetID + ">"
-		}
+	q := db.New(tx)
 
-		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
-			Content: "<@" + perkData.UserID + "> has bought " + mention + " (" + perkData.ForType + ") premium for " + strconv.Itoa(perk.TimePeriod) + " hours.",
+	if provider != "" {
+		inserted, err := q.InsertPaymentFulfillment(ctx, db.InsertPaymentFulfillmentParams{
+			Provider:   provider,
+			ExternalID: externalID,
+			UserID:     perkData.UserID,
+			ProductID:  perkData.ProductID,
+			ForType:    perkData.ForType,
+			ForID:      perkData.For,
 		})
 
 		if err != nil {
-			return errors.New("couldn't send message to mod logs")
+			return false, fmt.Errorf("recording fulfillment: %w", err)
 		}
 
-		if err := notifications.PushNotification(perkData.UserID, types.Alert{
-			Type:     types.AlertTypeSuccess,
-			Title:    "Premium Activated",
-			Message:  perkData.For + " (" + perkData.ForType + ") now has premium for the next " + strconv.Itoa(perk.TimePeriod) + " hours.",
-			URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/" + perkData.ForType + "s/" + perkData.For, Valid: true},
-			Category: types.AlertCategoryPayments,
-		}); err != nil {
-			state.Logger.Warn("Failed to send premium confirmation alert", zap.Error(err), zap.String("user_id", perkData.UserID), zap.String("for", targetID))
+		if inserted == 0 {
+			return false, nil
 		}
 	}
 
-	return nil
+	switch perkData.ForType {
+	case "bot":
+		err = q.ApplyBotPremiumDays(ctx, db.ApplyBotPremiumDaysParams{Hours: int32(perk.TimePeriod), BotID: perkData.For})
+	case "server":
+		err = q.ApplyServerPremiumDays(ctx, db.ApplyServerPremiumDaysParams{Hours: int32(perk.TimePeriod), ServerID: perkData.For})
+	default:
+		return false, fmt.Errorf("%w: invalid for_type", ErrInvalidPurchase)
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("applying premium: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("committing fulfillment: %w", err)
+	}
+
+	announcePremium(perkData, perk.TimePeriod)
+
+	return true, nil
+}
+
+func announcePremium(perkData PerkData, hours int) {
+	mention := perkData.For
+	if perkData.ForType == "bot" {
+		mention = "<@" + perkData.For + ">"
+	}
+
+	if _, err := state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
+		Content: "<@" + perkData.UserID + "> has bought " + mention + " (" + perkData.ForType + ") premium for " + strconv.Itoa(hours) + " hours.",
+	}); err != nil {
+		state.Logger.Warn("Failed to announce premium purchase in mod logs", zap.Error(err), zap.String("user_id", perkData.UserID), zap.String("for", perkData.For))
+	}
+
+	if err := notifications.PushNotification(perkData.UserID, types.Alert{
+		Type:     types.AlertTypeSuccess,
+		Title:    "Premium Activated",
+		Message:  perkData.For + " (" + perkData.ForType + ") now has premium for the next " + strconv.Itoa(hours) + " hours.",
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/" + perkData.ForType + "s/" + perkData.For, Valid: true},
+		Category: types.AlertCategoryPayments,
+	}); err != nil {
+		state.Logger.Warn("Failed to send premium confirmation alert", zap.Error(err), zap.String("user_id", perkData.UserID), zap.String("for", perkData.For))
+	}
 }

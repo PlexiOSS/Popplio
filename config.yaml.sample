@@ -68,6 +68,8 @@ meta:
   paypal_secret:  # Paypal Secret
   stripe_public_key:  # Stripe Public Key
   stripe_secret_key:  # Stripe Public Key
+  skip_auto_migrate: false  # Set to true to stop Popplio applying pending database migrations on startup (run go run ./cmd/migrate up yourself instead)
+  stripe_webhook_secret:  # Signing secret of an existing Stripe webhook endpoint for /payments/stripe/webhook. When set, Popplio uses it and never creates or deletes Stripe webhook endpoints
   popplio_proxy: https://gateway.nodebyte.host/proxy/discord # Popplio Proxy URL
   openai_api_key: sk-proj-your-key-here # OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time, and to draft changelog entries. Moderation is skipped and the changelog generator falls back to a plain heuristic when this is unset (optional)
   github_token:  # GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+ (optional)

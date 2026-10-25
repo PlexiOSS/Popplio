@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/listing"
 
 	"popplio/db"
 	"popplio/state"
@@ -49,6 +50,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if targetId == "" || targetType == "" {
 		return resp.BadRequest("Both target_id and target_type must be specified")
+	}
+
+	visible, err := listing.Visible(d.Context, d.Auth, targetType, targetId)
+
+	if err != nil {
+		return resp.Err("Failed to check listing status", err)
+	}
+
+	if !visible {
+		return uapi.DefaultResponse(http.StatusNotFound)
 	}
 
 	rows, err := db.New(state.Pool).GetReviews(d.Context, db.GetReviewsParams{

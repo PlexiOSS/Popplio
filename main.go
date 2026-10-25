@@ -17,6 +17,7 @@ import (
 	"popplio/arcadia"
 	"popplio/bgtasks"
 	"popplio/constants"
+	"popplio/db/dbmigrate"
 	"popplio/infernoplex"
 	"popplio/notifications/votereminders"
 	"popplio/routes/alerts"
@@ -117,6 +118,18 @@ func corsMiddleware(next http.Handler) http.Handler {
 func main() {
 	state.Setup()
 
+	if !state.Config.Meta.SkipAutoMigrate {
+		applied, err := dbmigrate.ApplyEmbedded(state.Context, state.Config.Meta.PostgresURL)
+
+		for _, path := range applied {
+			state.Logger.Info("Applied database migration", zap.String("migration", path))
+		}
+
+		if err != nil {
+			state.Logger.Fatal("Database migrations failed, refusing to start", zap.Error(err))
+		}
+	}
+
 	var err error
 
 	docs.DocsSetupData = &docs.SetupData{
@@ -126,7 +139,7 @@ func main() {
 		Info: docs.Info{
 			Title:          "Omniplex API",
 			TermsOfService: "https://omniplex.gg/legal/terms",
-			Version:        "1.9.0",
+			Version:        "1.10.0",
 			Description:    "RESTful API and Backend Services for Omniplex",
 			Contact: docs.Contact{
 				Name: "Omniplex Support",
