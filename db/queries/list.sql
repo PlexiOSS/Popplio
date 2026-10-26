@@ -50,3 +50,22 @@ ORDER BY created_at DESC;
 
 -- name: GetStaffTemplateTypes :many
 SELECT id, name, icon, short FROM staff_template_types ORDER BY created_at DESC;
+
+-- name: GetListTags :many
+WITH t AS (
+    SELECT lower(btrim(tag)) AS key, btrim(tag) AS label, 'bot' AS kind
+    FROM bots, unnest(tags) AS tag
+    WHERE bots.type = 'approved' OR bots.type = 'certified'
+    UNION ALL
+    SELECT lower(btrim(tag)), btrim(tag), 'server'
+    FROM servers, unnest(tags) AS tag
+    WHERE (servers.type = 'approved' OR servers.type = 'certified') AND servers.state = 'public'
+)
+SELECT
+    mode() WITHIN GROUP (ORDER BY label)::text AS label,
+    (COUNT(*) FILTER (WHERE kind = 'bot'))::bigint AS bots,
+    (COUNT(*) FILTER (WHERE kind = 'server'))::bigint AS servers
+FROM t
+WHERE key <> ''
+GROUP BY key
+ORDER BY COUNT(*) DESC, key;

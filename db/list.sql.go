@@ -115,6 +115,52 @@ func (q *Queries) GetListStats(ctx context.Context) (GetListStatsRow, error) {
 	return i, err
 }
 
+const getListTags = `-- name: GetListTags :many
+WITH t AS (
+    SELECT lower(btrim(tag)) AS key, btrim(tag) AS label, 'bot' AS kind
+    FROM bots, unnest(tags) AS tag
+    WHERE bots.type = 'approved' OR bots.type = 'certified'
+    UNION ALL
+    SELECT lower(btrim(tag)), btrim(tag), 'server'
+    FROM servers, unnest(tags) AS tag
+    WHERE (servers.type = 'approved' OR servers.type = 'certified') AND servers.state = 'public'
+)
+SELECT
+    mode() WITHIN GROUP (ORDER BY label)::text AS label,
+    (COUNT(*) FILTER (WHERE kind = 'bot'))::bigint AS bots,
+    (COUNT(*) FILTER (WHERE kind = 'server'))::bigint AS servers
+FROM t
+WHERE key <> ''
+GROUP BY key
+ORDER BY COUNT(*) DESC, key
+`
+
+type GetListTagsRow struct {
+	Label   string `db:"label" json:"label"`
+	Bots    int64  `db:"bots" json:"bots"`
+	Servers int64  `db:"servers" json:"servers"`
+}
+
+func (q *Queries) GetListTags(ctx context.Context) ([]GetListTagsRow, error) {
+	rows, err := q.db.Query(ctx, getListTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetListTagsRow
+	for rows.Next() {
+		var i GetListTagsRow
+		if err := rows.Scan(&i.Label, &i.Bots, &i.Servers); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getNewBotIDs = `-- name: GetNewBotIDs :many
 
 SELECT bot_id FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY created_at DESC LIMIT $1 OFFSET $2

@@ -26,7 +26,7 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	meta := types.LinkedRolesMeta{
 		Enabled:  linkedroles.Enabled(),
-		ClientID: state.Config.DiscordAuth.ClientID,
+		ClientID: linkedroles.ClientID(),
 		Badges:   []types.LinkedRoleBadge{},
 	}
 

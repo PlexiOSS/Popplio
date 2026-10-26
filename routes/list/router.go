@@ -5,6 +5,7 @@ package list
 
 import (
 	"popplio/routes/list/endpoints/get_list_stats"
+	"popplio/routes/list/endpoints/get_list_tags"
 	"popplio/routes/list/endpoints/get_partners"
 	"popplio/routes/list/endpoints/get_rss_feed"
 	"popplio/routes/list/endpoints/get_sitemap"
@@ -47,6 +48,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.POST,
 		Docs:    search_list.Docs,
 		Handler: search_list.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/list/tags",
+		OpId:    "get_list_tags",
+		Method:  uapi.GET,
+		Docs:    get_list_tags.Docs,
+		Handler: get_list_tags.Route,
 	}.Route(r)
 
 	uapi.Route{

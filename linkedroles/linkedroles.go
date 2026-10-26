@@ -94,8 +94,12 @@ func decrypt(sealed []byte) (string, error) {
 	return string(plain), nil
 }
 
+func ClientID() string {
+	return state.Config.Infernoplex.ClientID
+}
+
 func clientID() (snowflake.ID, error) {
-	return snowflake.Parse(state.Config.DiscordAuth.ClientID)
+	return snowflake.Parse(ClientID())
 }
 
 func RegisterMetadata(ctx context.Context) error {
@@ -140,7 +144,14 @@ func RegisterMetadata(ctx context.Context) error {
 		})
 	}
 
-	_, err = state.Discord.Rest().UpdateApplicationRoleConnectionMetadata(state.Discord.ApplicationID(), records)
+	appID, err := clientID()
+
+	if err != nil {
+		return err
+	}
+
+	apps := rest.NewApplications(rest.NewClient(state.Config.Infernoplex.Token))
+	_, err = apps.UpdateApplicationRoleConnectionMetadata(appID, records)
 
 	return err
 }
@@ -249,7 +260,7 @@ func Connect(ctx context.Context, code, redirectURI string) (*Result, error) {
 		return nil, err
 	}
 
-	tok, err := oauth.GetAccessToken(id, state.Config.DiscordAuth.ClientSecret, code, redirectURI)
+	tok, err := oauth.GetAccessToken(id, state.Config.Infernoplex.ClientSecret, code, redirectURI)
 
 	if err != nil {
 		return nil, fmt.Errorf("exchanging the Discord code: %w", err)
@@ -340,7 +351,7 @@ func syncOne(ctx context.Context, c db.ListUserRoleConnectionsRow) error {
 			return err
 		}
 
-		tok, err := oauth.RefreshAccessToken(id, state.Config.DiscordAuth.ClientSecret, refreshToken)
+		tok, err := oauth.RefreshAccessToken(id, state.Config.Infernoplex.ClientSecret, refreshToken)
 
 		if err != nil {
 			state.Logger.Info("Linked roles refresh token rejected, forgetting the connection", zap.String("userID", c.UserID), zap.Error(err))

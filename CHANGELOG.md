@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET /list/tags`: every tag used by an approved or certified bot or a
+  public, approved or certified server, grouped case-insensitively (shown
+  in its most common capitalisation) with how many bots and servers use
+  it, most used first. Cached in Redis for 30 minutes.
+
+### Changed
+
+- Linked roles use the Infernoplex application instead of Popplio's.
+  Discord only lets a server add a linked-role requirement from an app
+  that's in that server, and Popplio's app is private, so servers could
+  never have used it. The metadata is registered with Infernoplex's token,
+  and the OAuth exchange, refresh and `GET /linked-roles`'s `client_id`
+  use `infernoplex.client_id` and `client_secret`.
+
+## [1.12.0] - 2026-10-25
+
+### Added
+
 - Automatic badge rules. Staff can give a badge a rule in the panel
   (`auto_rule` on the badge `Create`/`Edit` actions, and a new
   `RuleKinds` action listing every rule type), and the hourly
