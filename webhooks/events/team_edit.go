@@ -49,7 +49,7 @@ func (n WebhookTeamEditData) CreateDiscordEmbed(creator *dovetypes.PlatformUser,
 			URL: targets.GetAvatarURL(),
 		},
 		Title:       "📝 Team Update!",
-		Description: ":heart: " + creator.DisplayName + " has updated the name/description of " + targets.GetTargetName(),
+		Description: "❤️ " + creator.DisplayName + " has updated the name/description of " + targets.GetTargetName(),
 		Color:       0x8A6BFD,
 		Fields: []discord.EmbedField{
 			{

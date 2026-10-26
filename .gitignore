@@ -3,6 +3,7 @@ popplio
 .vscode
 config.yaml
 !config.yaml.sample
+*.config.yaml
 coverage.out
 cmd/kitehelper/kitehelper
 __pycache__

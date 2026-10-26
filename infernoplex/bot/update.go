@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"popplio/brandemoji"
 	"time"
 
 	"popplio/db"
@@ -76,7 +77,7 @@ func startUpdateBasicInfo(c *Ctx) error {
 	return c.Send(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title:       "Update Server Information",
-			Description: "Oh, hello there :eyes:\nI see you want to update your server listing on Omniplex! Let's get started!",
+			Description: "Oh, hello there 👀\nI see you want to update your server listing on Omniplex! Let's get started!",
 		}},
 		Components: []discord.ContainerComponent{
 			discord.NewActionRow(
@@ -102,7 +103,7 @@ func startUpdateInvite(c *Ctx) error {
 			return fmt.Errorf("error while updating invite: %w", err)
 		}
 
-		return c.Ok("All done :white_check_mark:")
+		return c.Ok(brandemoji.Infernoplex.Get("check", "✅") + " All done")
 	})
 }
 
@@ -206,5 +207,5 @@ func handleUpdateBasicModal(ctx context.Context, e *events.ModalSubmitInteractio
 		return
 	}
 
-	c.Ok("All done :white_check_mark:")
+	c.Ok(brandemoji.Infernoplex.Get("check", "✅") + " All done")
 }

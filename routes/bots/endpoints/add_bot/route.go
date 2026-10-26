@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"popplio/brandemoji"
 	"regexp"
 	"slices"
 	"strings"
@@ -320,8 +321,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	botAddedEmbed := discord.Embed{
-		URL:   state.Config.Sites.Frontend + "/bots/" + payload.BotID,
-		Title: "New Bot Added",
+		URL:         state.Config.Sites.Frontend + "/bots/" + payload.BotID,
+		Title:       "New Bot Added",
+		Description: brandemoji.Popplio.Get("bot", "🤖") + " A new bot is waiting for review.",
 		Fields: []discord.EmbedField{
 			{
 				Name:   "Name",

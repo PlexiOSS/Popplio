@@ -50,12 +50,32 @@ func (q *Queries) CountBadgeByID(ctx context.Context, id string) (bool, error) {
 	return exists, err
 }
 
+const countOtherLinkedRoleBadges = `-- name: CountOtherLinkedRoleBadges :one
+SELECT COUNT(*) FROM badges WHERE linked_role = true AND id <> $1
+`
+
+func (q *Queries) CountOtherLinkedRoleBadges(ctx context.Context, id string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOtherLinkedRoleBadges, id)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteBadge = `-- name: DeleteBadge :exec
 DELETE FROM badges WHERE id = $1
 `
 
 func (q *Queries) DeleteBadge(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, deleteBadge, id)
+	return err
+}
+
+const deleteUserRoleConnection = `-- name: DeleteUserRoleConnection :exec
+DELETE FROM user_role_connections WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserRoleConnection(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, deleteUserRoleConnection, userID)
 	return err
 }
 
@@ -115,25 +135,25 @@ func (q *Queries) GetEntityBadges(ctx context.Context, arg GetEntityBadgesParams
 	return items, nil
 }
 
-const getPartnerBotIDs = `-- name: GetPartnerBotIDs :many
-SELECT DISTINCT b.bot_id FROM partners p
-INNER JOIN bots b ON b.bot_id = p.bot_id
-WHERE b.type = 'approved' OR b.type = 'certified'
+const getUserLinkedRoleBadgeIDs = `-- name: GetUserLinkedRoleBadgeIDs :many
+SELECT eb.badge_id FROM entity_badges eb
+INNER JOIN badges b ON b.id = eb.badge_id
+WHERE eb.target_type = 'user' AND eb.target_id = $1 AND b.linked_role = true
 `
 
-func (q *Queries) GetPartnerBotIDs(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, getPartnerBotIDs)
+func (q *Queries) GetUserLinkedRoleBadgeIDs(ctx context.Context, targetID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, getUserLinkedRoleBadgeIDs, targetID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var items []string
 	for rows.Next() {
-		var bot_id string
-		if err := rows.Scan(&bot_id); err != nil {
+		var badge_id string
+		if err := rows.Scan(&badge_id); err != nil {
 			return nil, err
 		}
-		items = append(items, bot_id)
+		items = append(items, badge_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -141,68 +161,45 @@ func (q *Queries) GetPartnerBotIDs(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
-const getVeteranBotIDs = `-- name: GetVeteranBotIDs :many
-SELECT bot_id FROM bots
-WHERE (type = 'approved' OR type = 'certified') AND created_at < NOW() - INTERVAL '2 years'
+const getUserRoleConnection = `-- name: GetUserRoleConnection :one
+SELECT user_id, access_token, refresh_token, expires_at, last_metadata FROM user_role_connections WHERE user_id = $1
 `
 
-func (q *Queries) GetVeteranBotIDs(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, getVeteranBotIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var bot_id string
-		if err := rows.Scan(&bot_id); err != nil {
-			return nil, err
-		}
-		items = append(items, bot_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+type GetUserRoleConnectionRow struct {
+	UserID       string             `db:"user_id" json:"user_id"`
+	AccessToken  []byte             `db:"access_token" json:"access_token"`
+	RefreshToken []byte             `db:"refresh_token" json:"refresh_token"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	LastMetadata map[string]any     `db:"last_metadata" json:"last_metadata"`
 }
 
-const getVeteranServerIDs = `-- name: GetVeteranServerIDs :many
-SELECT server_id FROM servers
-WHERE (type = 'approved' OR type = 'certified') AND created_at < NOW() - INTERVAL '2 years'
-`
-
-func (q *Queries) GetVeteranServerIDs(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, getVeteranServerIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var server_id string
-		if err := rows.Scan(&server_id); err != nil {
-			return nil, err
-		}
-		items = append(items, server_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetUserRoleConnection(ctx context.Context, userID string) (GetUserRoleConnectionRow, error) {
+	row := q.db.QueryRow(ctx, getUserRoleConnection, userID)
+	var i GetUserRoleConnectionRow
+	err := row.Scan(
+		&i.UserID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.ExpiresAt,
+		&i.LastMetadata,
+	)
+	return i, err
 }
 
 const insertBadge = `-- name: InsertBadge :exec
-INSERT INTO badges (id, name, description, icon, color, target_types, created_by, updated_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+INSERT INTO badges (id, name, description, icon, color, target_types, created_by, updated_by, auto_rule, linked_role) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9)
 `
 
 type InsertBadgeParams struct {
-	ID          string   `db:"id" json:"id"`
-	Name        string   `db:"name" json:"name"`
-	Description string   `db:"description" json:"description"`
-	Icon        string   `db:"icon" json:"icon"`
-	Color       string   `db:"color" json:"color"`
-	TargetTypes []string `db:"target_types" json:"target_types"`
-	CreatedBy   string   `db:"created_by" json:"created_by"`
+	ID          string         `db:"id" json:"id"`
+	Name        string         `db:"name" json:"name"`
+	Description string         `db:"description" json:"description"`
+	Icon        string         `db:"icon" json:"icon"`
+	Color       string         `db:"color" json:"color"`
+	TargetTypes []string       `db:"target_types" json:"target_types"`
+	CreatedBy   string         `db:"created_by" json:"created_by"`
+	AutoRule    map[string]any `db:"auto_rule" json:"auto_rule"`
+	LinkedRole  bool           `db:"linked_role" json:"linked_role"`
 }
 
 func (q *Queries) InsertBadge(ctx context.Context, arg InsertBadgeParams) error {
@@ -214,13 +211,45 @@ func (q *Queries) InsertBadge(ctx context.Context, arg InsertBadgeParams) error 
 		arg.Color,
 		arg.TargetTypes,
 		arg.CreatedBy,
+		arg.AutoRule,
+		arg.LinkedRole,
 	)
 	return err
 }
 
+const listAutoBadges = `-- name: ListAutoBadges :many
+SELECT id, target_types, auto_rule FROM badges WHERE auto_rule IS NOT NULL ORDER BY id
+`
+
+type ListAutoBadgesRow struct {
+	ID          string         `db:"id" json:"id"`
+	TargetTypes []string       `db:"target_types" json:"target_types"`
+	AutoRule    map[string]any `db:"auto_rule" json:"auto_rule"`
+}
+
+func (q *Queries) ListAutoBadges(ctx context.Context) ([]ListAutoBadgesRow, error) {
+	rows, err := q.db.Query(ctx, listAutoBadges)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAutoBadgesRow
+	for rows.Next() {
+		var i ListAutoBadgesRow
+		if err := rows.Scan(&i.ID, &i.TargetTypes, &i.AutoRule); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBadges = `-- name: ListBadges :many
 
-SELECT id, name, description, icon, color, target_types, created_at, created_by, last_updated, updated_by
+SELECT id, name, description, icon, color, target_types, created_at, created_by, last_updated, updated_by, auto_rule, linked_role
 FROM badges ORDER BY created_at DESC
 `
 
@@ -245,6 +274,8 @@ func (q *Queries) ListBadges(ctx context.Context) ([]Badge, error) {
 			&i.CreatedBy,
 			&i.LastUpdated,
 			&i.UpdatedBy,
+			&i.AutoRule,
+			&i.LinkedRole,
 		); err != nil {
 			return nil, err
 		}
@@ -254,6 +285,90 @@ func (q *Queries) ListBadges(ctx context.Context) ([]Badge, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listLinkedRoleBadges = `-- name: ListLinkedRoleBadges :many
+SELECT id, name, description FROM badges WHERE linked_role = true ORDER BY created_at, id
+`
+
+type ListLinkedRoleBadgesRow struct {
+	ID          string `db:"id" json:"id"`
+	Name        string `db:"name" json:"name"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) ListLinkedRoleBadges(ctx context.Context) ([]ListLinkedRoleBadgesRow, error) {
+	rows, err := q.db.Query(ctx, listLinkedRoleBadges)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLinkedRoleBadgesRow
+	for rows.Next() {
+		var i ListLinkedRoleBadgesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Description); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserRoleConnections = `-- name: ListUserRoleConnections :many
+SELECT user_id, access_token, refresh_token, expires_at, last_metadata FROM user_role_connections
+`
+
+type ListUserRoleConnectionsRow struct {
+	UserID       string             `db:"user_id" json:"user_id"`
+	AccessToken  []byte             `db:"access_token" json:"access_token"`
+	RefreshToken []byte             `db:"refresh_token" json:"refresh_token"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	LastMetadata map[string]any     `db:"last_metadata" json:"last_metadata"`
+}
+
+func (q *Queries) ListUserRoleConnections(ctx context.Context) ([]ListUserRoleConnectionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserRoleConnections)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserRoleConnectionsRow
+	for rows.Next() {
+		var i ListUserRoleConnectionsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.AccessToken,
+			&i.RefreshToken,
+			&i.ExpiresAt,
+			&i.LastMetadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeOrphanSystemBadges = `-- name: RevokeOrphanSystemBadges :execrows
+DELETE FROM entity_badges eb
+USING badges b
+WHERE eb.badge_id = b.id
+  AND eb.awarded_by = 'system'
+  AND (b.auto_rule IS NULL OR NOT (eb.target_type = ANY(b.target_types)))
+`
+
+func (q *Queries) RevokeOrphanSystemBadges(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOrphanSystemBadges)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeSystemBadge = `-- name: RevokeSystemBadge :execrows
@@ -279,17 +394,19 @@ func (q *Queries) RevokeSystemBadge(ctx context.Context, arg RevokeSystemBadgePa
 }
 
 const updateBadge = `-- name: UpdateBadge :exec
-UPDATE badges SET name = $1, description = $2, icon = $3, color = $4, target_types = $5, last_updated = NOW(), updated_by = $6 WHERE id = $7
+UPDATE badges SET name = $1, description = $2, icon = $3, color = $4, target_types = $5, last_updated = NOW(), updated_by = $6, auto_rule = $8, linked_role = $9 WHERE id = $7
 `
 
 type UpdateBadgeParams struct {
-	Name        string   `db:"name" json:"name"`
-	Description string   `db:"description" json:"description"`
-	Icon        string   `db:"icon" json:"icon"`
-	Color       string   `db:"color" json:"color"`
-	TargetTypes []string `db:"target_types" json:"target_types"`
-	UpdatedBy   string   `db:"updated_by" json:"updated_by"`
-	ID          string   `db:"id" json:"id"`
+	Name        string         `db:"name" json:"name"`
+	Description string         `db:"description" json:"description"`
+	Icon        string         `db:"icon" json:"icon"`
+	Color       string         `db:"color" json:"color"`
+	TargetTypes []string       `db:"target_types" json:"target_types"`
+	UpdatedBy   string         `db:"updated_by" json:"updated_by"`
+	ID          string         `db:"id" json:"id"`
+	AutoRule    map[string]any `db:"auto_rule" json:"auto_rule"`
+	LinkedRole  bool           `db:"linked_role" json:"linked_role"`
 }
 
 func (q *Queries) UpdateBadge(ctx context.Context, arg UpdateBadgeParams) error {
@@ -301,6 +418,68 @@ func (q *Queries) UpdateBadge(ctx context.Context, arg UpdateBadgeParams) error 
 		arg.TargetTypes,
 		arg.UpdatedBy,
 		arg.ID,
+		arg.AutoRule,
+		arg.LinkedRole,
+	)
+	return err
+}
+
+const updateUserRoleConnectionMetadata = `-- name: UpdateUserRoleConnectionMetadata :exec
+UPDATE user_role_connections SET last_metadata = $2, updated_at = NOW() WHERE user_id = $1
+`
+
+type UpdateUserRoleConnectionMetadataParams struct {
+	UserID       string         `db:"user_id" json:"user_id"`
+	LastMetadata map[string]any `db:"last_metadata" json:"last_metadata"`
+}
+
+func (q *Queries) UpdateUserRoleConnectionMetadata(ctx context.Context, arg UpdateUserRoleConnectionMetadataParams) error {
+	_, err := q.db.Exec(ctx, updateUserRoleConnectionMetadata, arg.UserID, arg.LastMetadata)
+	return err
+}
+
+const updateUserRoleConnectionTokens = `-- name: UpdateUserRoleConnectionTokens :exec
+UPDATE user_role_connections SET access_token = $2, refresh_token = $3, expires_at = $4, updated_at = NOW() WHERE user_id = $1
+`
+
+type UpdateUserRoleConnectionTokensParams struct {
+	UserID       string             `db:"user_id" json:"user_id"`
+	AccessToken  []byte             `db:"access_token" json:"access_token"`
+	RefreshToken []byte             `db:"refresh_token" json:"refresh_token"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+}
+
+func (q *Queries) UpdateUserRoleConnectionTokens(ctx context.Context, arg UpdateUserRoleConnectionTokensParams) error {
+	_, err := q.db.Exec(ctx, updateUserRoleConnectionTokens,
+		arg.UserID,
+		arg.AccessToken,
+		arg.RefreshToken,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const upsertUserRoleConnection = `-- name: UpsertUserRoleConnection :exec
+INSERT INTO user_role_connections (user_id, access_token, refresh_token, expires_at, last_metadata)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id) DO UPDATE SET access_token = $2, refresh_token = $3, expires_at = $4, last_metadata = $5, updated_at = NOW()
+`
+
+type UpsertUserRoleConnectionParams struct {
+	UserID       string             `db:"user_id" json:"user_id"`
+	AccessToken  []byte             `db:"access_token" json:"access_token"`
+	RefreshToken []byte             `db:"refresh_token" json:"refresh_token"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	LastMetadata map[string]any     `db:"last_metadata" json:"last_metadata"`
+}
+
+func (q *Queries) UpsertUserRoleConnection(ctx context.Context, arg UpsertUserRoleConnectionParams) error {
+	_, err := q.db.Exec(ctx, upsertUserRoleConnection,
+		arg.UserID,
+		arg.AccessToken,
+		arg.RefreshToken,
+		arg.ExpiresAt,
+		arg.LastMetadata,
 	)
 	return err
 }

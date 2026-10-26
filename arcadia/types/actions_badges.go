@@ -1,24 +1,31 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+
+	"popplio/badgerules"
+)
 
 // BadgeAction is the union of badge catalog operations — create/edit/delete
 // what badges exist. Assigning a badge to an entity is a separate RPC
 // action (AssignBadge/UnassignBadge in rpcmethod.go), not a catalog op.
 type BadgeAction struct {
-	List   *Unit
-	Create *BadgeUpsert
-	Edit   *BadgeUpsert
-	Delete *BadgeDelete
+	List      *Unit
+	RuleKinds *Unit
+	Create    *BadgeUpsert
+	Edit      *BadgeUpsert
+	Delete    *BadgeDelete
 }
 
 type BadgeUpsert struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Icon        string   `json:"icon"`
-	Color       string   `json:"color"`
-	TargetTypes []string `json:"target_types"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Icon        string           `json:"icon"`
+	Color       string           `json:"color"`
+	TargetTypes []string         `json:"target_types"`
+	AutoRule    *badgerules.Rule `json:"auto_rule"`
+	LinkedRole  bool             `json:"linked_role"`
 }
 
 type BadgeDelete struct {
@@ -37,6 +44,8 @@ func (a *BadgeAction) UnmarshalJSON(data []byte) error {
 	switch name {
 	case "List":
 		a.List = unitSet()
+	case "RuleKinds":
+		a.RuleKinds = unitSet()
 	case "Create":
 		a.Create = &BadgeUpsert{}
 		return decodeVariant("BadgeAction", name, payload, a.Create)
@@ -57,6 +66,8 @@ func (a BadgeAction) MarshalJSON() ([]byte, error) {
 	switch {
 	case a.List != nil:
 		return encodeUnit("List")
+	case a.RuleKinds != nil:
+		return encodeUnit("RuleKinds")
 	case a.Create != nil:
 		return encodeVariant("Create", a.Create)
 	case a.Edit != nil:
@@ -69,16 +80,18 @@ func (a BadgeAction) MarshalJSON() ([]byte, error) {
 }
 
 type Badge struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Icon        string    `json:"icon"`
-	Color       string    `json:"color"`
-	TargetTypes []string  `json:"target_types"`
-	CreatedAt   Timestamp `json:"created_at"`
-	CreatedBy   string    `json:"created_by"`
-	LastUpdated Timestamp `json:"last_updated"`
-	UpdatedBy   string    `json:"updated_by"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Icon        string           `json:"icon"`
+	Color       string           `json:"color"`
+	TargetTypes []string         `json:"target_types"`
+	AutoRule    *badgerules.Rule `json:"auto_rule,omitempty"`
+	LinkedRole  bool             `json:"linked_role"`
+	CreatedAt   Timestamp        `json:"created_at"`
+	CreatedBy   string           `json:"created_by"`
+	LastUpdated Timestamp        `json:"last_updated"`
+	UpdatedBy   string           `json:"updated_by"`
 }
 
 // EntityBadge is one badge assigned to one entity — the response shape for

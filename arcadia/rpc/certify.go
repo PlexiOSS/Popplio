@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"popplio/brandemoji"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
@@ -29,7 +30,7 @@ func certifyAdd(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 
 	err := modLogReason(
 		"Force Certified!",
-		fmt.Sprintf("<@%s> has force-certified <@%s>", h.UserID, m.TargetID),
+		brandemoji.Arcadia.Get("certified", "✅")+" "+fmt.Sprintf("<@%s> has force-certified <@%s>", h.UserID, m.TargetID),
 		"Neat", impls.ColourRedLower, m.Reason)
 
 	if err != nil {
@@ -52,7 +53,7 @@ func certifyAddServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (
 
 	err := modLogReason(
 		"Server Force Certified!",
-		fmt.Sprintf("<@%s> has force-certified server `%s`", h.UserID, m.TargetID),
+		brandemoji.Arcadia.Get("certified", "✅")+" "+fmt.Sprintf("<@%s> has force-certified server `%s`", h.UserID, m.TargetID),
 		"Neat", impls.ColourRedLower, m.Reason)
 
 	if err != nil {

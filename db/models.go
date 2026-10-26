@@ -119,6 +119,8 @@ type Badge struct {
 	CreatedBy   string             `db:"created_by" json:"created_by"`
 	LastUpdated pgtype.Timestamptz `db:"last_updated" json:"last_updated"`
 	UpdatedBy   string             `db:"updated_by" json:"updated_by"`
+	AutoRule    map[string]any     `db:"auto_rule" json:"auto_rule"`
+	LinkedRole  bool               `db:"linked_role" json:"linked_role"`
 }
 
 type BlacklistedWord struct {
@@ -771,6 +773,16 @@ type UserReminder struct {
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	LastAcked  pgtype.Timestamptz `db:"last_acked" json:"last_acked"`
 	TargetType string             `db:"target_type" json:"target_type"`
+}
+
+type UserRoleConnection struct {
+	UserID       string             `db:"user_id" json:"user_id"`
+	AccessToken  []byte             `db:"access_token" json:"access_token"`
+	RefreshToken []byte             `db:"refresh_token" json:"refresh_token"`
+	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	LastMetadata map[string]any     `db:"last_metadata" json:"last_metadata"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Vanity struct {

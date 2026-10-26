@@ -7,6 +7,7 @@ import (
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
 	"popplio/db"
+	"popplio/linkedroles"
 	"popplio/state"
 )
 
@@ -56,6 +57,10 @@ func assignBadgeSet(ctx context.Context, m *types.RPCAssignBadge, h Handle, assi
 		if err != nil {
 			return Success{}, err
 		}
+	}
+
+	if h.TargetType.String() == "user" {
+		linkedroles.SyncUserAsync(m.TargetID)
 	}
 
 	title := "Badge Removed"

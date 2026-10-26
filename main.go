@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"popplio/brandemoji"
+	"popplio/linkedroles"
 	"runtime"
 	"strings"
 	"syscall"
@@ -30,6 +32,7 @@ import (
 	"popplio/routes/diagnostics"
 	"popplio/routes/emojis"
 	"popplio/routes/health"
+	linkedrolesroutes "popplio/routes/linkedroles"
 	"popplio/routes/list"
 	notifrouter "popplio/routes/notifications"
 	"popplio/routes/packs"
@@ -117,6 +120,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func main() {
 	state.Setup()
+	brandemoji.LoadAsync(brandemoji.Popplio, state.Discord, "popplio")
+	linkedroles.RegisterMetadataAsync()
 
 	if !state.Config.Meta.SkipAutoMigrate {
 		applied, err := dbmigrate.ApplyEmbedded(state.Context, state.Config.Meta.PostgresURL)
@@ -179,6 +184,7 @@ func main() {
 		apps.Router{},
 		auth.Router{},
 		badges.Router{},
+		linkedrolesroutes.Router{},
 		blogs.Router{},
 		bots.Router{},
 		changelogs.Router{},

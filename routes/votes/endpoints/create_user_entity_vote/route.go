@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"popplio/brandemoji"
 	"strconv"
 
 	"popplio/api/resp"
@@ -265,7 +266,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 						URL: entityInfo.Avatar,
 					},
 					Title:       "🎉 Vote Count Updated!",
-					Description: ":heart:" + userObj.DisplayName + " has voted for " + targetType + ": " + entityInfo.Name,
+					Description: brandemoji.Popplio.Get("upvote", "❤️") + " " + userObj.DisplayName + " has voted for " + targetType + ": " + entityInfo.Name,
 					Color:       0x8A6BFD,
 					Fields: []discord.EmbedField{
 						{

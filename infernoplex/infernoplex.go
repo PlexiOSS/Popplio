@@ -4,6 +4,7 @@ package infernoplex
 
 import (
 	"context"
+	"popplio/brandemoji"
 	"sync"
 	"time"
 
@@ -32,6 +33,8 @@ func Start(parent context.Context) *Infernoplex {
 
 	if err := dclient.Setup(ctx, bot.Listener(ctx)); err != nil {
 		state.Logger.Error("Infernoplex's Discord bot failed to start; Sorbet will run without it", zap.Error(err))
+	} else {
+		brandemoji.LoadAsync(brandemoji.Infernoplex, dclient.Get(), "infernoplex")
 	}
 
 	go func() {

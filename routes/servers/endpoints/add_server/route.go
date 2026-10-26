@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"popplio/brandemoji"
 	"regexp"
 	"slices"
 	"strings"
@@ -277,8 +278,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		Content: state.Config.Meta.UrgentMentions,
 		Embeds: []discord.Embed{
 			{
-				URL:   state.Config.Sites.Frontend + "/servers/" + payload.ServerID,
-				Title: "New Server Added",
+				URL:         state.Config.Sites.Frontend + "/servers/" + payload.ServerID,
+				Title:       "New Server Added",
+				Description: brandemoji.Popplio.Get("new", "🆕") + " A new server has been listed.",
 				Fields: []discord.EmbedField{
 					{
 						Name:   "Name",

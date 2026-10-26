@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"popplio/brandemoji"
 	"time"
 
 	"popplio/db"
@@ -143,5 +144,5 @@ func handleDeleteComponent(ctx context.Context, e *events.ComponentInteractionCr
 		return
 	}
 
-	c.Ok("All done :white_check_mark:")
+	c.Ok(brandemoji.Infernoplex.Get("check", "✅") + " All done")
 }

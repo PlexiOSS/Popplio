@@ -4,85 +4,112 @@ package bgtasks
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 
+	"popplio/badgerules"
 	"popplio/db"
+	"popplio/linkedroles"
 	"popplio/state"
 
 	"go.uber.org/zap"
 )
 
-type systemBadgeRule struct {
-	badgeID    string
-	targetType string
-	reason     string
-	targets    func(ctx context.Context, q *db.Queries) ([]string, error)
-}
-
-var systemBadgeRules = []systemBadgeRule{
-	{
-		badgeID:    "partner",
-		targetType: "bot",
-		reason:     "An official Omniplex partner.",
-		targets:    func(ctx context.Context, q *db.Queries) ([]string, error) { return q.GetPartnerBotIDs(ctx) },
-	},
-	{
-		badgeID:    "veteran",
-		targetType: "bot",
-		reason:     "Listed on Omniplex for more than two years.",
-		targets:    func(ctx context.Context, q *db.Queries) ([]string, error) { return q.GetVeteranBotIDs(ctx) },
-	},
-	{
-		badgeID:    "veteran",
-		targetType: "server",
-		reason:     "Listed on Omniplex for more than two years.",
-		targets:    func(ctx context.Context, q *db.Queries) ([]string, error) { return q.GetVeteranServerIDs(ctx) },
-	},
-}
+var badgeTargetTypes = []string{"user", "bot", "server", "team"}
 
 func BadgeSync(ctx context.Context) error {
 	q := db.New(state.Pool)
 
-	for _, rule := range systemBadgeRules {
-		ids, err := rule.targets(ctx, q)
+	badges, err := q.ListAutoBadges(ctx)
 
-		if err != nil {
-			return fmt.Errorf("%s/%s: listing qualifying entities: %w", rule.badgeID, rule.targetType, err)
+	if err != nil {
+		return fmt.Errorf("listing automatic badges: %w", err)
+	}
+
+	for _, b := range badges {
+		var rule badgerules.Rule
+
+		raw, _ := json.Marshal(b.AutoRule)
+
+		if err := json.Unmarshal(raw, &rule); err != nil {
+			state.Logger.Warn("badge_sync: unreadable rule, skipping", zap.String("badge", b.ID), zap.Error(err))
+			continue
 		}
 
-		if ids == nil {
-			ids = []string{}
+		kind, ok := badgerules.KindOf(rule.Type)
+
+		if !ok {
+			state.Logger.Warn("badge_sync: unknown rule type, skipping", zap.String("badge", b.ID), zap.String("rule", rule.Type))
+			continue
 		}
 
-		awarded, err := q.AwardSystemBadge(ctx, db.AwardSystemBadgeParams{
-			TargetType: rule.targetType,
-			BadgeID:    rule.badgeID,
-			Reason:     rule.reason,
-			TargetIds:  ids,
-		})
+		allowed := make(map[string]bool, len(b.TargetTypes))
 
-		if err != nil {
-			return fmt.Errorf("%s/%s: awarding: %w", rule.badgeID, rule.targetType, err)
+		for _, t := range b.TargetTypes {
+			allowed[t] = true
 		}
 
-		revoked, err := q.RevokeSystemBadge(ctx, db.RevokeSystemBadgeParams{
-			TargetType: rule.targetType,
-			BadgeID:    rule.badgeID,
-			TargetIds:  ids,
-		})
+		for _, targetType := range badgeTargetTypes {
+			if !allowed[targetType] {
+				continue
+			}
 
-		if err != nil {
-			return fmt.Errorf("%s/%s: revoking: %w", rule.badgeID, rule.targetType, err)
-		}
+			ids := []string{}
 
-		if awarded > 0 || revoked > 0 {
-			state.Logger.Info("badge_sync: updated system badges",
-				zap.String("badge", rule.badgeID),
-				zap.String("targetType", rule.targetType),
-				zap.Int64("awarded", awarded),
-				zap.Int64("revoked", revoked))
+			if kind.Supports(targetType) {
+				ids, err = badgerules.Qualifying(ctx, rule, targetType)
+
+				if errors.Is(err, badgerules.ErrDiscordNotReady) {
+					state.Logger.Info("badge_sync: Discord member cache not ready, leaving Discord badges alone this run", zap.String("badge", b.ID))
+					continue
+				}
+
+				if err != nil {
+					return fmt.Errorf("%s/%s: listing qualifying entities: %w", b.ID, targetType, err)
+				}
+			}
+
+			awarded, err := q.AwardSystemBadge(ctx, db.AwardSystemBadgeParams{
+				TargetType: targetType,
+				BadgeID:    b.ID,
+				Reason:     kind.Description,
+				TargetIds:  ids,
+			})
+
+			if err != nil {
+				return fmt.Errorf("%s/%s: awarding: %w", b.ID, targetType, err)
+			}
+
+			revoked, err := q.RevokeSystemBadge(ctx, db.RevokeSystemBadgeParams{
+				TargetType: targetType,
+				BadgeID:    b.ID,
+				TargetIds:  ids,
+			})
+
+			if err != nil {
+				return fmt.Errorf("%s/%s: revoking: %w", b.ID, targetType, err)
+			}
+
+			if awarded > 0 || revoked > 0 {
+				state.Logger.Info("badge_sync: updated automatic badges",
+					zap.String("badge", b.ID),
+					zap.String("targetType", targetType),
+					zap.Int64("awarded", awarded),
+					zap.Int64("revoked", revoked))
+			}
 		}
 	}
 
-	return nil
+	orphans, err := q.RevokeOrphanSystemBadges(ctx)
+
+	if err != nil {
+		return fmt.Errorf("revoking badges whose rule was removed: %w", err)
+	}
+
+	if orphans > 0 {
+		state.Logger.Info("badge_sync: removed automatic badges whose rule or target type was removed", zap.Int64("revoked", orphans))
+	}
+
+	return linkedroles.SyncAll(ctx)
 }

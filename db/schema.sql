@@ -290,6 +290,8 @@ CREATE TABLE public.badges (
     created_by text NOT NULL,
     last_updated timestamp with time zone DEFAULT now() NOT NULL,
     updated_by text NOT NULL,
+    auto_rule jsonb,
+    linked_role boolean DEFAULT false NOT NULL,
     CONSTRAINT badges_color_check CHECK ((color = ANY (ARRAY['default'::text, 'success'::text, 'warning'::text, 'danger'::text, 'info'::text, 'premium'::text])))
 );
 
@@ -1237,6 +1239,21 @@ CREATE TABLE public.entity_assets (
 
 
 --
+-- Name: user_role_connections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_role_connections (
+    user_id text NOT NULL,
+    access_token bytea NOT NULL,
+    refresh_token bytea NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    last_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: payment_fulfillments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1952,6 +1969,14 @@ ALTER TABLE ONLY public.vanity
 
 ALTER TABLE ONLY public.entity_assets
     ADD CONSTRAINT entity_assets_pkey PRIMARY KEY (target_type, target_id, kind);
+
+
+--
+-- Name: user_role_connections user_role_connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_role_connections
+    ADD CONSTRAINT user_role_connections_pkey PRIMARY KEY (user_id);
 
 
 --

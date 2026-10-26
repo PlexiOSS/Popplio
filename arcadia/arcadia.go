@@ -2,6 +2,7 @@ package arcadia
 
 import (
 	"context"
+	"popplio/brandemoji"
 	"sync"
 	"time"
 
@@ -30,6 +31,8 @@ func Start(parent context.Context) *Arcadia {
 
 	if err := dclient.Setup(ctx, bot.Listener(ctx)); err != nil {
 		state.Logger.Error("Staff bot failed to start; the panel will run without Discord", zap.Error(err))
+	} else {
+		brandemoji.LoadAsync(brandemoji.Arcadia, dclient.Get(), "arcadia")
 	}
 
 	go func() {

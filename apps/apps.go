@@ -240,7 +240,7 @@ You can only have up to one ban appeal at any given point of time. Abusing the s
 			return state.Config.Channels.BanAppeals
 		},
 		PositionDescription: func(d uapi.RouteData, p types.Position) string {
-			return "User <@" + d.Auth.ID + "> wants to be unbanned now? :thinking:"
+			return "User <@" + d.Auth.ID + "> wants to be unbanned now? 🤔"
 		},
 		AllowedForBanned: true,
 		BannedOnly:       true,

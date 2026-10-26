@@ -48,7 +48,7 @@ func (n WebhookNewReviewData) CreateDiscordEmbed(creator *dovetypes.PlatformUser
 			URL: targets.GetAvatarURL(),
 		},
 		Title:       "📝 New Review!",
-		Description: ":heart: " + creator.DisplayName + " has left a review for " + targets.GetTargetName(),
+		Description: "❤️ " + creator.DisplayName + " has left a review for " + targets.GetTargetName(),
 		Color:       0x8A6BFD,
 		Fields: []discord.EmbedField{
 			{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"popplio/brandemoji"
 	"time"
 
 	"popplio/arcadia/impls"
@@ -74,7 +75,7 @@ func approve(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, 
 		Embeds: []discord.Embed{{
 			Title:       "Approved!",
 			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID),
-			Description: fmt.Sprintf("<@!%s> has approved <@!%s>", h.UserID, m.TargetID),
+			Description: brandemoji.Arcadia.Get("check", "✅") + " " + fmt.Sprintf("<@!%s> has approved <@!%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				{Name: "Feedback", Value: m.Reason, Inline: impls.InlineTrue()},
 				{Name: "Moderator", Value: "<@!" + h.UserID + ">", Inline: impls.InlineTrue()},
@@ -192,7 +193,7 @@ func approveServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Suc
 		Embeds: []discord.Embed{{
 			Title:       "Server Approved",
 			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID),
-			Description: fmt.Sprintf("<@!%s> has approved server `%s`", h.UserID, m.TargetID),
+			Description: brandemoji.Arcadia.Get("check", "✅") + " " + fmt.Sprintf("<@!%s> has approved server `%s`", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				{Name: "Feedback", Value: m.Reason, Inline: impls.InlineTrue()},
 				{Name: "Moderator", Value: "<@!" + h.UserID + ">", Inline: impls.InlineTrue()},
@@ -264,7 +265,7 @@ func deny(ctx context.Context, m *types.RPCTargetReason, h Handle) (Success, err
 		Embeds: []discord.Embed{{
 			Title:       "Denied!",
 			URL:         fmt.Sprintf("%s/bots/%s", state.Config.Sites.Frontend, m.TargetID),
-			Description: fmt.Sprintf("<@%s> has denied <@%s>", h.UserID, m.TargetID),
+			Description: brandemoji.Arcadia.Get("cross", "❌") + " " + fmt.Sprintf("<@%s> has denied <@%s>", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				reasonField(m.Reason),
 				{Name: "Moderator", Value: "<@!" + h.UserID + ">", Inline: impls.InlineTrue()},
@@ -329,7 +330,7 @@ func denyServer(ctx context.Context, m *types.RPCTargetReason, h Handle) (Succes
 		Embeds: []discord.Embed{{
 			Title:       "Server Denied",
 			URL:         fmt.Sprintf("%s/servers/%s", state.Config.Sites.Frontend, m.TargetID),
-			Description: fmt.Sprintf("<@%s> has denied server `%s`", h.UserID, m.TargetID),
+			Description: brandemoji.Arcadia.Get("cross", "❌") + " " + fmt.Sprintf("<@%s> has denied server `%s`", h.UserID, m.TargetID),
 			Fields: []discord.EmbedField{
 				reasonField(m.Reason),
 				{Name: "Moderator", Value: "<@!" + h.UserID + ">", Inline: impls.InlineTrue()},

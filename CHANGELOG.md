@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automatic badge rules. Staff can give a badge a rule in the panel
+  (`auto_rule` on the badge `Create`/`Edit` actions, and a new
+  `RuleKinds` action listing every rule type), and the hourly
+  `badge_sync` task awards it to everything that qualifies and removes it
+  again from anything that stops qualifying. Rule types:
+  - Listing: listed for N days, N counted votes, certified, premium,
+    partner.
+  - Voting: cast N votes, top N voter of any completed calendar month,
+    voted in N different months.
+  - Ownership: owns N listings (directly or through teams), owns a
+    certified listing, wrote N reviews.
+  - Discord: boosting the main server, or having a given role there (read
+    from the gateway member cache, and skipped for a run if the cache is
+    still empty).
+
+  Vote rules count votes the same way the voter leaderboard does. Only
+  awards the task made itself (`awarded_by: system`) are ever removed, and
+  removing a badge's rule or one of its target types removes those awards.
+  Saving a badge runs the sync straight away. Migration
+  `20261026120000_badge_rules_linked_roles` adds `badges.auto_rule` and
+  `badges.linked_role`, and turns the existing `partner` and `veteran`
+  badges into rules (partner, and listed for 730 days), which replaces the
+  hardcoded rules from 1.11.0.
+- Discord linked roles. Up to 5 user badges can be marked `linked_role`,
+  and Popplio registers them with Discord as role connection metadata at
+  startup and whenever a badge changes. `GET /linked-roles` returns whether
+  the feature is enabled, the application to authorize and the badges, and
+  `POST /linked-roles/connect` exchanges a Discord OAuth2 code (scopes
+  `identify role_connections.write`, redirect `/linked-roles/callback` on
+  an allowed frontend) and sets the user's Omniplex role connection. The
+  user's tokens are kept in the new `user_role_connections` table,
+  encrypted with AES-256-GCM using the new `meta.linked_roles_key`
+  (linked roles stay off while it's empty). `badge_sync` pushes changed
+  badges to Discord each run, refreshing tokens as needed and forgetting
+  connections whose refresh token Discord rejects, and staff awarding or
+  removing a user badge by hand updates that user immediately.
+
+- Brand emojis in bot messages. The `brandemoji` package loads each bot's
+  application emojis (Popplio, Arcadia and Infernoplex are separate Discord
+  apps) at startup and looks them up by name, falling back to the Unicode
+  emoji when one isn't uploaded. They're used where Discord renders custom
+  emojis: new bot and server logs, premium purchases, the vote log,
+  Arcadia's approve, deny, force-certify and premium mod logs, and
+  Infernoplex's "All done" replies. Embed titles and users' own webhooks
+  can't show another app's emojis, so those keep Unicode.
+- `go run ./cmd/uploademojis` uploads the brand kit's emojis
+  (`omniplex/public/brand/emojis`, the animated ones, each theme's logo
+  emoji and the `popplio`, `infernoplex` and `arcadia` bot emojis) as
+  application emojis to every bot with a token in the config, skipping
+  names that already exist. `-config` picks the config file (default
+  `config.yaml`), and `-dry-run` lists what it would upload.
+- `go run ./cmd/brandprofiles` sets each bot's Discord avatar and profile
+  banner from `omniplex/public/brand/bots`. Avatars are animated by
+  default, which Discord only accepts through the API (`-static` uses the
+  PNG). `-only popplio,arcadia` limits which bots change, and `-dry-run`
+  shows what would change.
+
+### Fixed
+
+- Webhook embeds, the unban-appeal message and Infernoplex's server update
+  prompt sent emoji shortcodes such as `:heart:`, `:x:`, `:eyes:` and
+  `:thinking:` as text. Discord only converts those as you type, so they
+  now use the Unicode emoji. "Review Editted!" is now "Review Edited!".
+
 ## [1.11.0] - 2026-10-25
 
 **Search, Voters and Safer Listings.** Relevance-ranked search, voter

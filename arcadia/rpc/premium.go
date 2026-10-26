@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"popplio/brandemoji"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
@@ -30,7 +31,7 @@ func premiumAdd(ctx context.Context, m *types.RPCPremiumAdd, h Handle) (Success,
 
 	err = modLogReason(
 		"Premium Added!",
-		fmt.Sprintf("<@%s> has added premium to <@%s> for %d hours", h.UserID, m.TargetID, m.TimePeriodHours),
+		brandemoji.Arcadia.Get("premium", "💎")+" "+fmt.Sprintf("<@%s> has added premium to <@%s> for %d hours", h.UserID, m.TargetID, m.TimePeriodHours),
 		"Well done, young traveller! Use it wisely...", impls.ColourGreen, m.Reason)
 
 	if err != nil {
@@ -56,7 +57,7 @@ func premiumAddServer(ctx context.Context, m *types.RPCPremiumAdd, h Handle) (Su
 
 	err = modLogReason(
 		"Server Premium Added!",
-		fmt.Sprintf("<@%s> has added premium to server `%s` for %d hours", h.UserID, m.TargetID, m.TimePeriodHours),
+		brandemoji.Arcadia.Get("premium", "💎")+" "+fmt.Sprintf("<@%s> has added premium to server `%s` for %d hours", h.UserID, m.TargetID, m.TimePeriodHours),
 		"Well done, young traveller! Use it wisely...", impls.ColourGreen, m.Reason)
 
 	if err != nil {

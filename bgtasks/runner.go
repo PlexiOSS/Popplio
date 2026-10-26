@@ -67,7 +67,7 @@ func All() []Task {
 		},
 		{
 			Name:        "badge_sync",
-			Description: "Awarding and revoking automatic badges (Partner on partnered bots, Veteran on listings older than two years)",
+			Description: "Awarding and revoking badges that have an automatic rule, then pushing changed linked roles to Discord",
 			Enabled:     true,
 			Interval:    time.Hour,
 			Run:         BadgeSync,

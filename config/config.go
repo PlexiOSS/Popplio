@@ -93,6 +93,7 @@ type Meta struct {
 	OpenAIAPIKey              string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time, and to draft changelog entries. Moderation is skipped and the changelog generator falls back to a plain heuristic when this is unset" required:"false"`
 	GithubToken               string   `yaml:"github_token" default:"" comment:"GitHub PAT for the changelog generator's PR/compare lookups. Optional but strongly recommended -- unauthenticated GitHub API calls are capped at 60/hr and one generation can easily use 10+" required:"false"`
 	BlogAnnounceMentions      string   `yaml:"blog_announce_mentions" default:"" comment:"Role mention(s) included in the blog-post announcement, e.g. '<@&123456789012345678>' -- put multiple mentions in one string to tag several roles. Skipped when empty" required:"false"`
+	LinkedRolesKey            string   `yaml:"linked_roles_key" default:"" comment:"Base64-encoded 32-byte key used to encrypt stored Discord linked-roles tokens (generate with: openssl rand -base64 32). Linked roles are disabled when this is empty" required:"false"`
 	ChangelogAnnounceMentions string   `yaml:"changelog_announce_mentions" default:"" comment:"Role mention(s) included in the changelog-entry announcement, same shape as blog_announce_mentions. Skipped when empty" required:"false"`
 }
 

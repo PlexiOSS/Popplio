@@ -46,7 +46,7 @@ func (n WebhookDeleteReviewData) CreateDiscordEmbed(creator *dovetypes.PlatformU
 		Thumbnail: &discord.EmbedResource{
 			URL: targets.GetAvatarURL(),
 		},
-		Title:       ":x: Bot Review Deleted!",
+		Title:       "❌ Review Deleted!",
 		Description: creator.DisplayName + " has deleted his review for " + targets.GetTargetName(),
 		Color:       0x8A6BFD,
 		Fields: []discord.EmbedField{
