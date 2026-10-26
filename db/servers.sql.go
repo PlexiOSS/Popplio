@@ -1920,7 +1920,7 @@ const serverQueuePending = `-- name: ServerQueuePending :many
 
 SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
        approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
-       tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories
+       tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories, created_at
 FROM servers WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at
 `
 
@@ -1945,6 +1945,7 @@ type ServerQueuePendingRow struct {
 	LastClaimed          pgtype.Timestamptz `db:"last_claimed" json:"last_claimed"`
 	ModerationFlagged    bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCategories []string           `db:"moderation_categories" json:"moderation_categories"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 // Panel server review queue and search (arcadia/panel ops_queue.go, ops_search.go).
@@ -1978,6 +1979,7 @@ func (q *Queries) ServerQueuePending(ctx context.Context) ([]ServerQueuePendingR
 			&i.LastClaimed,
 			&i.ModerationFlagged,
 			&i.ModerationCategories,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -22,14 +22,15 @@ type Question struct {
 }
 
 type Position struct {
-	ID        string         `json:"id" validate:"required"`
-	Tags      []string       `json:"tags" validate:"required"`
-	Info      string         `json:"info" validate:"required"`
-	Name      string         `json:"name" validate:"required"`
-	Questions []Question     `json:"questions" validate:"gt=0,required"`
-	Hidden    bool           `json:"hidden"`
-	Closed    bool           `json:"closed"`
-	Cooldown  timex.Duration `json:"cooldown"`
+	ID                  string                                                                       `json:"id" validate:"required"`
+	Tags                []string                                                                     `json:"tags" validate:"required"`
+	Info                string                                                                       `json:"info" validate:"required"`
+	Name                string                                                                       `json:"name" validate:"required"`
+	Questions           []Question                                                                   `json:"questions" validate:"gt=0,required"`
+	Hidden              bool                                                                         `json:"hidden"`
+	Closed              bool                                                                         `json:"closed"`
+	RequiresMainServer  bool                                                                         `json:"requires_main_server" description:"Whether applicants must be in the Omniplex Discord server"`
+	Cooldown            timex.Duration                                                               `json:"cooldown"`
 	Channel             func() snowflake.ID                                                          `json:"-"`
 	ExtraLogic          func(d uapi.RouteData, p Position, answers map[string]string) error          `json:"-"`
 	PositionDescription func(d uapi.RouteData, p Position) string                                    `json:"-"`

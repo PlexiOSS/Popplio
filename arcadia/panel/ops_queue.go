@@ -5,6 +5,7 @@ package panel
 import (
 	"context"
 	"net/http"
+	"popplio/mainserver"
 	"time"
 
 	"popplio/arcadia/impls"
@@ -27,6 +28,7 @@ type botQueueRow struct {
 	BotID                string
 	ClientID             string
 	LastClaimed          *time.Time
+	CreatedAt            *time.Time
 	ClaimedBy            *string
 	Type                 string
 	ApprovalNote         string
@@ -93,6 +95,7 @@ func (s *Server) botQueue(ctx context.Context, q *types.QLoginTokenOnly) (respon
 			Servers:              row.Servers,
 			ModerationFlagged:    row.ModerationFlagged,
 			ModerationCategories: row.ModerationCategories,
+			CreatedAt:            timePtr(row.CreatedAt),
 		}
 	}
 
@@ -140,6 +143,7 @@ func (s *Server) serverQueue(ctx context.Context, q *types.QLoginTokenOnly) (res
 			LastClaimed:          timePtr(row.LastClaimed),
 			ModerationFlagged:    row.ModerationFlagged,
 			ModerationCategories: row.ModerationCategories,
+			CreatedAt:            timePtr(row.CreatedAt),
 		}
 	}
 
@@ -181,7 +185,9 @@ func (s *Server) partialServers(ctx context.Context, queue []searchServerRow) (r
 			Premium:              server.Premium,
 			ClaimedBy:            server.ClaimedBy,
 			LastClaimed:          types.TimestampPtr(server.LastClaimed),
+			CreatedAt:            types.TimestampPtr(server.CreatedAt),
 			Mentionable:          managers[server.ServerID].Mentionables(),
+			OwnerInServer:        anyInMainServer(managers[server.ServerID].Mentionables()),
 			ModerationFlagged:    server.ModerationFlagged,
 			ModerationCategories: types.NonNilStrings(server.ModerationCategories),
 		}})
@@ -218,6 +224,7 @@ func (s *Server) partialBots(ctx context.Context, queue []botQueueRow) (response
 			User:                 user,
 			ClaimedBy:            bot.ClaimedBy,
 			LastClaimed:          types.TimestampPtr(bot.LastClaimed),
+			CreatedAt:            types.TimestampPtr(bot.CreatedAt),
 			ApprovalNote:         bot.ApprovalNote,
 			Short:                bot.Short,
 			Type:                 bot.Type,
@@ -228,6 +235,7 @@ func (s *Server) partialBots(ctx context.Context, queue []botQueueRow) (response
 			Clicks:               bot.Clicks,
 			Servers:              bot.Servers,
 			Mentionable:          managers[bot.BotID].Mentionables(),
+			OwnerInServer:        anyInMainServer(managers[bot.BotID].Mentionables()),
 			Invite:               bot.Invite,
 			ModerationFlagged:    bot.ModerationFlagged,
 			ModerationCategories: types.NonNilStrings(bot.ModerationCategories),
@@ -235,4 +243,14 @@ func (s *Server) partialBots(ctx context.Context, queue []botQueueRow) (response
 	}
 
 	return writeJSON(http.StatusOK, bots), nil
+}
+
+func anyInMainServer(ids []string) bool {
+	for _, id := range ids {
+		if mainserver.CachedMember(id) {
+			return true
+		}
+	}
+
+	return false
 }

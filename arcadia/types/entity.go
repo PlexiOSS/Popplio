@@ -31,8 +31,10 @@ type PartialBot struct {
 	Servers              int32        `json:"servers"`
 	ClaimedBy            *string      `json:"claimed_by"`
 	LastClaimed          *Timestamp   `json:"last_claimed"`
+	CreatedAt            *Timestamp   `json:"created_at,omitempty"`
 	ApprovalNote         string       `json:"approval_note"`
 	Mentionable          []string     `json:"mentionable"`
+	OwnerInServer        bool         `json:"owner_in_server,omitempty"`
 	Invite               string       `json:"invite"`
 	ClientID             string       `json:"client_id"`
 	ModerationFlagged    bool         `json:"moderation_flagged"`
@@ -57,8 +59,10 @@ type PartialServer struct {
 	Premium              bool       `json:"premium"`
 	ClaimedBy            *string    `json:"claimed_by"`
 	LastClaimed          *Timestamp `json:"last_claimed"`
+	CreatedAt            *Timestamp `json:"created_at,omitempty"`
 	ApprovalNote         string     `json:"approval_note"`
 	Mentionable          []string   `json:"mentionable"`
+	OwnerInServer        bool       `json:"owner_in_server,omitempty"`
 	ModerationFlagged    bool       `json:"moderation_flagged"`
 	ModerationCategories []string   `json:"moderation_categories"`
 }

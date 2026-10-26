@@ -7,6 +7,7 @@ import (
 	"popplio/api"
 	"popplio/routes/users/endpoints/check_booster_status"
 	"popplio/routes/users/endpoints/create_data_task"
+	"popplio/routes/users/endpoints/get_main_server_status"
 	"popplio/routes/users/endpoints/get_user"
 	"popplio/routes/users/endpoints/get_user_activity"
 	"popplio/routes/users/endpoints/get_user_perms"
@@ -33,6 +34,23 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    check_booster_status.Docs,
 		Handler: check_booster_status.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/main-server",
+		OpId:    "get_main_server_status",
+		Method:  uapi.GET,
+		Docs:    get_main_server_status.Docs,
+		Handler: get_main_server_status.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{

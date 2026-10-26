@@ -153,6 +153,7 @@ func Setup() {
 		bot.WithCacheConfigOpts(
 			cache.WithCaches(cache.FlagGuilds|cache.FlagMembers|cache.FlagPresences|cache.FlagRoles|cache.FlagChannels),
 		),
+		bot.WithMemberChunkingFilter(bot.MemberChunkingFilterIncludeGuildIDs(Config.Servers.Main)),
 		bot.WithEventListeners(&events.ListenerAdapter{
 			OnGuildReady: func(event *events.GuildReady) {
 				Logger.Info("Guild ready", zap.String("guildID", event.Guild.ID.String()))

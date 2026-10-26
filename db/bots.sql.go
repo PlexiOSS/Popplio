@@ -39,7 +39,7 @@ const botQueuePending = `-- name: BotQueuePending :many
 
 SELECT bot_id, client_id, last_claimed, claimed_by, type, approval_note, short,
        invite, approximate_votes, shards, library, invite_clicks, clicks, servers,
-       moderation_flagged, moderation_categories
+       moderation_flagged, moderation_categories, created_at
 FROM bots WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at
 `
 
@@ -60,6 +60,7 @@ type BotQueuePendingRow struct {
 	Servers              int32              `db:"servers" json:"servers"`
 	ModerationFlagged    bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCategories []string           `db:"moderation_categories" json:"moderation_categories"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 // Panel bot review queue and search (arcadia/panel ops_queue.go, ops_search.go).
@@ -89,6 +90,7 @@ func (q *Queries) BotQueuePending(ctx context.Context) ([]BotQueuePendingRow, er
 			&i.Servers,
 			&i.ModerationFlagged,
 			&i.ModerationCategories,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

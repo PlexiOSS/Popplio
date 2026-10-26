@@ -145,7 +145,8 @@ Some experience in PostgreSQL and at least one of the below languages is require
 		},
 	},
 	{
-		ID: "partners",
+		ID:                 "partners",
+		RequiresMainServer: true,
 		Info: `Partner your Discord Bot, Discord Server or Business today! It's easier than ever before!
 
 Some points to note:
@@ -267,8 +268,9 @@ You can only have up to one ban appeal at any given point of time. Abusing the s
 		},
 	},
 	{
-		ID:   "certification",
-		Name: "Certification",
+		ID:                 "certification",
+		RequiresMainServer: true,
+		Name:               "Certification",
 		Info: `So you want to apply for certification, eh?
 
 Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of servers, unique clicks, or votes your bot is strongest in you don't need to clear every bar, just one.
@@ -305,8 +307,9 @@ You can only have one certification application at a time. If you have already a
 		},
 	},
 	{
-		ID:   "server_certification",
-		Name: "Server Certification",
+		ID:                 "server_certification",
+		RequiresMainServer: true,
+		Name:               "Server Certification",
 		Info: `Certification isn't just for bots servers can qualify too.
 
 Firstly, read the <a class="text-themable-400" href="/help/programs/certification" target="_blank">rules</a> to see if you qualify. Certification looks at whichever of members, unique clicks, or votes your server is strongest in you don't need to clear every bar, just one.

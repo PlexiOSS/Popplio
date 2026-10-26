@@ -144,7 +144,7 @@ SELECT type, claimed_by FROM bots WHERE bot_id = $1;
 -- name: BotQueuePending :many
 SELECT bot_id, client_id, last_claimed, claimed_by, type, approval_note, short,
        invite, approximate_votes, shards, library, invite_clicks, clicks, servers,
-       moderation_flagged, moderation_categories
+       moderation_flagged, moderation_categories, created_at
 FROM bots WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at;
 
 -- name: SearchBotsQueue :many

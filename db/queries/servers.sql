@@ -286,7 +286,7 @@ SELECT type AS method, COUNT(*) FROM servers GROUP BY type;
 -- name: ServerQueuePending :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note,
        approximate_votes, invite_clicks, clicks, nsfw, discord_nsfw_level, nsfw_channel_count,
-       tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories
+       tags, premium, claimed_by, last_claimed, moderation_flagged, moderation_categories, created_at
 FROM servers WHERE type = 'pending' OR type = 'claimed' ORDER BY created_at;
 
 -- name: SearchServersQueue :many

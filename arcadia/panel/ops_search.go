@@ -15,6 +15,7 @@ import (
 )
 
 type searchServerRow struct {
+	CreatedAt            *time.Time
 	ServerID             string
 	Name                 string
 	Avatar               string

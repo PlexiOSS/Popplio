@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-25
+
 ### Added
 
+- `GET /users/{id}/main-server` (the user themselves only) says whether
+  they're in the Omniplex Discord server, checking the member cache and
+  then Discord.
+- Application positions have `requires_main_server`, set on
+  Certification, Server Certification and Partners. Applying for one
+  without being in the Omniplex Discord server is refused with a message
+  pointing to the invite. Listing a bot or server still doesn't require
+  it.
+- Arcadia's queue entries include `owner_in_server` (omitted when false)
+  when at least one owner or team manager is in the Omniplex Discord
+  server.
 - `GET /list/tags`: every tag used by an approved or certified bot or a
   public, approved or certified server, grouped case-insensitively (shown
   in its most common capitalisation) with how many bots and servers use
@@ -16,12 +29,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Arcadia's bot and server queue entries include `created_at`, so the
+  panel can show how long each one has been waiting.
 - Linked roles use the Infernoplex application instead of Popplio's.
   Discord only lets a server add a linked-role requirement from an app
   that's in that server, and Popplio's app is private, so servers could
   never have used it. The metadata is registered with Infernoplex's token,
   and the OAuth exchange, refresh and `GET /linked-roles`'s `client_id`
   use `infernoplex.client_id` and `client_secret`.
+
+### Fixed
+
+- Popplio only cached the members of the main Discord server that the
+  gateway happened to send, so membership checks (booster status, the
+  Discord badge rules, certified-owner roles) could miss people. It now
+  requests the full member list for the main server on startup.
 
 ## [1.12.0] - 2026-10-25
 

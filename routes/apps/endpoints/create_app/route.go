@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"popplio/mainserver"
 	"strconv"
 	"time"
 
@@ -89,6 +90,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if position.Closed {
 		return resp.BadRequest("This position is currently closed. Please check back later.")
+	}
+
+	if position.RequiresMainServer {
+		member, err := mainserver.IsMember(d.Auth.ID)
+
+		if err != nil {
+			return resp.Err("Failed to check server membership", err, zap.String("user_id", d.Auth.ID))
+		}
+
+		if !member {
+			return resp.BadRequest("Join the Omniplex Discord server before applying for this. You'll find the invite on the Apply page.")
+		}
 	}
 
 	q := db.New(state.Pool)
