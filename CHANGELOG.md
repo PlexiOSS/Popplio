@@ -56,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   limited to bots. A migration opens them to both and rewords their
   descriptions to say "listing" instead of "bot".
 
+### Fixed
+
+- The Kitescratch CI test (`db_fields_check.py`) failed because the CI
+  schema snapshot `data/seed-ci.json` had fallen behind `db/schema.sql`:
+  24 columns and 17 tables were missing, including
+  `servers.spotlighted_until`. The snapshot is regenerated from the
+  schema (tables only in the old snapshot are kept). The check accepts a
+  field's `description` tag as the reason it's `ci:"internal"`, so it no
+  longer needs a code comment. `ChangelogEntry.Author` is tagged
+  `ci:"internal"`, three internal fields got `description` tags, and the
+  bot and server structs list their unexposed columns in `ignore_fields`.
+
 ## [1.13.0] - 2026-10-25
 
 ### Added

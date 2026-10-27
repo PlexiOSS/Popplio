@@ -32,7 +32,7 @@ type IndexServer struct {
 	AssetVersions    map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
 }
 
-// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users
+// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users+stats_self_managed+last_stats_post+moderation_checked_at
 type Server struct {
 	ServerID               string             `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name                   string             `db:"name" json:"name" description:"The server's name"`

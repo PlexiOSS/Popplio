@@ -50,7 +50,7 @@ type BotStats struct {
 	Status string `json:"status" validate:"omitempty,oneof=online idle dnd offline" msg:"Status must be one of online, idle, dnd or offline"`
 }
 
-// @ci table=bots, ignore_fields=api_token+unique_clicks+cache_server_uninvitable
+// @ci table=bots, ignore_fields=api_token+unique_clicks+cache_server_uninvitable+flags+moderation_checked_at
 //
 // Bot represents a bot.
 type Bot struct {

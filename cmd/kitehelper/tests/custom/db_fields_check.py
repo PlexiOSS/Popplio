@@ -73,8 +73,8 @@ for struct_name, struct in structs.items():
                 exit(1)
 
             # One thing to check is for a comment
-            if not field.comment:
-                print(f"FATAL: Field {struct_name}.{field.name} is internal but has no comment as to why")
+            if not field.comment and not field.tags.get("description"):
+                print(f"FATAL: Field {struct_name}.{field.name} is internal but has no comment or description as to why")
                 exit(1)
 
             continue

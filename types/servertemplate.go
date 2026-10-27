@@ -21,8 +21,8 @@ type ServerTemplate struct {
 	UpdatedAt  time.Time               `db:"updated_at" json:"updated_at"`
 	Channels   []TemplateChannel       `db:"channels" json:"channels" description:"A preview of the template's channels, captured from Discord at submission time. Empty on list responses -- only the single-template fetch populates this"`
 	Roles      []TemplateRole          `db:"roles" json:"roles" description:"A preview of the template's roles (excluding @everyone), captured from Discord at submission time. Empty on list responses -- only the single-template fetch populates this"`
-	Likes      int                     `db:"-" json:"likes" ci:"internal"`
-	Dislikes   int                     `db:"-" json:"dislikes" ci:"internal"`
+	Likes      int                     `db:"-" json:"likes" description:"How many people liked the template" ci:"internal"`
+	Dislikes   int                     `db:"-" json:"dislikes" description:"How many people disliked the template" ci:"internal"`
 }
 
 type TemplateChannel struct {

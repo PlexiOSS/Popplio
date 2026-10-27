@@ -19,7 +19,7 @@ type ChangelogEntry struct {
 	ExtraDescription string                  `db:"extra_description" json:"extra_description" description:"Additional freeform notes about this release"`
 	Prerelease       bool                    `db:"prerelease" json:"prerelease" description:"Whether this is a prerelease"`
 	CreatedBy        string                  `db:"created_by" json:"-"` // Must be parsed internally
-	Author           *dovetypes.PlatformUser `db:"-" json:"author" description:"The staff member who authored this entry"`
+	Author           *dovetypes.PlatformUser `db:"-" json:"author" description:"The staff member who authored this entry" ci:"internal"`
 	CreatedAt        time.Time               `db:"created_at" json:"created_at" description:"When this entry was published"`
 }
 

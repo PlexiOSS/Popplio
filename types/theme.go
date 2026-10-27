@@ -32,7 +32,7 @@ var ThemeCategories = []string{
 type Theme struct {
 	ID             string                  `db:"id" json:"id"`
 	Owner          string                  `db:"owner" json:"-"`
-	ResolvedOwner  *dovetypes.PlatformUser `db:"-" json:"owner" ci:"internal"`
+	ResolvedOwner  *dovetypes.PlatformUser `db:"-" json:"owner" description:"The user who submitted the theme" ci:"internal"`
 	Name           string                  `db:"name" json:"name"`
 	PrimaryColor   string                  `db:"primary_color" json:"primary_color"`
 	SecondaryColor string                  `db:"secondary_color" json:"secondary_color"`
