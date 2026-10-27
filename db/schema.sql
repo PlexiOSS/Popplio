@@ -808,7 +808,9 @@ CREATE TABLE public.servers (
     moderation_categories text[] DEFAULT '{}'::text[] NOT NULL,
     moderation_flagged boolean DEFAULT false NOT NULL,
     moderation_checked_at timestamp with time zone,
-    spotlighted_until timestamp with time zone
+    spotlighted_until timestamp with time zone,
+    premium_tier smallint DEFAULT 0 NOT NULL,
+    boost_count integer DEFAULT 0 NOT NULL
 );
 
 
@@ -2565,3 +2567,19 @@ ALTER TABLE ONLY public.webhook_logs
 --
 
 
+
+CREATE TABLE public.payment_credit_holds (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    provider text NOT NULL,
+    external_id text NOT NULL,
+    user_id text NOT NULL,
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    credits integer NOT NULL,
+    discount_cents integer NOT NULL,
+    state text DEFAULT 'held'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    resolved_at timestamp with time zone,
+    CONSTRAINT payment_credit_holds_credits_check CHECK ((credits > 0)),
+    CONSTRAINT payment_credit_holds_state_check CHECK ((state = ANY (ARRAY['held'::text, 'spent'::text, 'refunded'::text])))
+);

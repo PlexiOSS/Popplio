@@ -22,6 +22,7 @@ type CreatePerkData struct {
 	ProductID   string `json:"id" validate:"required" msg:"Product ID is required."`
 	For         string `json:"for" validate:"required" msg:"For is required."`
 	ForType     string `json:"for_type" validate:"omitempty,oneof=bot server" msg:"for_type must be 'bot' or 'server' if sent."`
+	Credits     int    `json:"credits" validate:"omitempty,min=0" msg:"credits can't be negative."`
 }
 
 type RedirectUser struct {
@@ -191,6 +192,13 @@ func fulfill(ctx context.Context, provider, externalID string, perkData PerkData
 
 		if inserted == 0 {
 			return false, nil
+		}
+
+		if _, err := q.MarkPaymentCreditHoldSpent(ctx, db.MarkPaymentCreditHoldSpentParams{
+			Provider:   provider,
+			ExternalID: externalID,
+		}); err != nil {
+			return false, fmt.Errorf("settling credit hold: %w", err)
 		}
 	}
 

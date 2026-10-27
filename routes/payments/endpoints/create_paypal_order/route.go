@@ -6,6 +6,7 @@
 package create_paypal_order
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -80,8 +81,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	err = state.Validator.Struct(payload)
 
 	if err != nil {
-		errors := err.(validator.ValidationErrors)
-		return uapi.ValidatorErrorResponse(compiledMessages, errors)
+		validationErrors := err.(validator.ValidationErrors)
+		return uapi.ValidatorErrorResponse(compiledMessages, validationErrors)
 	}
 
 	perk, err := assets.FindPerks(d.Context, payload)
@@ -91,7 +92,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Error: " + err.Error())
 	}
 
-	priceStr := fmt.Sprintf("%.2f", perk.Price)
+	priceCents := assets.PriceCents(perk.Price)
+	creditsUsed, discountCents := assets.CreditDiscount(priceCents, create.Credits)
+
+	if creditsUsed > 0 {
+		if err := assets.CheckCreditSpend(d.Context, d.Auth, payload.ForType, payload.For, creditsUsed); err != nil {
+			return assets.CreditSpendResponse(err, payload.ForType)
+		}
+	}
+
+	priceStr := fmt.Sprintf("%.2f", float64(priceCents-discountCents)/100)
 
 	customId, err := jsonimpl.Marshal(payload)
 
@@ -135,6 +145,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Error while creating paypal order", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
+	}
+
+	if creditsUsed > 0 {
+		if err := assets.HoldCredits(d.Context, "paypal", order.ID, d.Auth.ID, payload.ForType, payload.For, creditsUsed, discountCents); err != nil {
+			if errors.Is(err, assets.ErrNotEnoughCredits) {
+				return resp.BadRequest("This " + payload.ForType + " doesn't have enough credits anymore")
+			}
+
+			return resp.Err("Error while applying credits", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
+		}
 	}
 
 	var approvalLink string

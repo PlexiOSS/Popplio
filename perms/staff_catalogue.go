@@ -52,6 +52,7 @@ const (
 
 	StaffManageBadges    Perm = "manage_badges"
 	StaffAssignBadges    Perm = "assign_badges"
+	StaffDeleteReviews   Perm = "delete_reviews"
 	StaffManageTemplates Perm = "manage_templates"
 
 	StaffViewCDN   Perm = "view_cdn"
@@ -354,6 +355,12 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Name:        "Assign Badges",
 		Description: "Assign and unassign catalog badges to and from an entity.",
 		Category:    "Badges",
+	},
+	{
+		ID:          StaffDeleteReviews,
+		Name:        "Delete Reviews",
+		Description: "Delete any review or reply on a bot, server or team.",
+		Category:    "Content Management",
 	},
 
 	{

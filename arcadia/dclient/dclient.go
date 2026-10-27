@@ -39,6 +39,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(intents()),
 			gateway.WithCompress(true),
+			state.BotPresence("the review queue"),
 		),
 		bot.WithCacheConfigOpts(
 			cache.WithCaches(cache.FlagGuilds | cache.FlagMembers | cache.FlagPresences | cache.FlagRoles),
@@ -57,10 +58,6 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 	}
 
 	client = c
-
-	if err := c.SetPresence(ctx, gateway.WithCustomActivity("Watching the review queue")); err != nil {
-		state.Logger.Error("Failed to set staff bot presence", zap.Error(err))
-	}
 
 	state.Logger.Info("Staff bot connected", zap.String("applicationID", c.ApplicationID().String()))
 

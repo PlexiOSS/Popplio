@@ -59,6 +59,8 @@ func handleMethod(ctx context.Context, method types.RPCMethod, h Handle) (Succes
 		return banUserSet(ctx, method.UnbanUser, h, false)
 	case method.AssignBadge != nil:
 		return assignBadgeSet(ctx, method.AssignBadge, h, true)
+	case method.DeleteReview != nil:
+		return deleteReview(ctx, method.DeleteReview, h)
 	case method.UnassignBadge != nil:
 		return assignBadgeSet(ctx, method.UnassignBadge, h, false)
 	default:

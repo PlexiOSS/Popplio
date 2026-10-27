@@ -32,6 +32,7 @@ type RPCMethod struct {
 	BanUser                  *RPCTargetReason
 	UnbanUser                *RPCTargetReason
 	AssignBadge              *RPCAssignBadge
+	DeleteReview             *RPCDeleteReview
 	UnassignBadge            *RPCAssignBadge
 }
 
@@ -91,6 +92,12 @@ type RPCAssignBadge struct {
 	BadgeID  string `json:"badge_id"`
 }
 
+type RPCDeleteReview struct {
+	TargetID string `json:"target_id"`
+	Reason   string `json:"reason"`
+	ReviewID string `json:"review_id"`
+}
+
 var RPCMethodVariants = []string{
 	"Claim",
 	"Unclaim",
@@ -118,6 +125,7 @@ var RPCMethodVariants = []string{
 	"UnbanUser",
 	"AssignBadge",
 	"UnassignBadge",
+	"DeleteReview",
 }
 
 func (m RPCMethod) variant() (string, any) {
@@ -172,6 +180,8 @@ func (m RPCMethod) variant() (string, any) {
 		return "UnbanUser", m.UnbanUser
 	case m.AssignBadge != nil:
 		return "AssignBadge", m.AssignBadge
+	case m.DeleteReview != nil:
+		return "DeleteReview", m.DeleteReview
 	case m.UnassignBadge != nil:
 		return "UnassignBadge", m.UnassignBadge
 	default:
@@ -242,6 +252,8 @@ func EmptyRPCMethod(name string) (RPCMethod, error) {
 		m.UnbanUser = &RPCTargetReason{}
 	case "AssignBadge":
 		m.AssignBadge = &RPCAssignBadge{}
+	case "DeleteReview":
+		m.DeleteReview = &RPCDeleteReview{}
 	case "UnassignBadge":
 		m.UnassignBadge = &RPCAssignBadge{}
 	default:
@@ -295,6 +307,8 @@ func (m RPCMethod) SupportedTargetTypes() []TargetType {
 		return []TargetType{TargetTypeUser}
 	case "AssignBadge", "UnassignBadge":
 		return []TargetType{TargetTypeUser, TargetTypeBot, TargetTypeServer, TargetTypeTeam}
+	case "DeleteReview":
+		return []TargetType{TargetTypeBot, TargetTypeServer, TargetTypeTeam}
 	case "":
 		return []TargetType{}
 	default:
@@ -356,6 +370,8 @@ func (m RPCMethod) Description() string {
 		return "Awards a badge to a user, bot, server, or team"
 	case "UnassignBadge":
 		return "Removes a badge from a user, bot, server, or team"
+	case "DeleteReview":
+		return "Deletes a review and its replies from a bot, server, or team"
 	default:
 		return ""
 	}
@@ -415,6 +431,8 @@ func (m RPCMethod) Label() string {
 		return "Assign Badge"
 	case "UnassignBadge":
 		return "Remove Badge"
+	case "DeleteReview":
+		return "Delete Review"
 	default:
 		return ""
 	}
@@ -554,6 +572,18 @@ func (m RPCMethod) Fields() []RPCField {
 				FieldType:   FieldTypeText,
 				Icon:        "material-symbols:award-star",
 				Placeholder: "The badge's ID, from the badge catalog",
+			},
+			rpcFieldReason(),
+		}
+	case "DeleteReview":
+		return []RPCField{
+			rpcFieldTargetID(),
+			{
+				ID:          "review_id",
+				Label:       "Review",
+				FieldType:   FieldTypeText,
+				Icon:        "material-symbols:rate-review",
+				Placeholder: "The review's ID or a link to it",
 			},
 			rpcFieldReason(),
 		}

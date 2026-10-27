@@ -28,7 +28,7 @@ var compiledMessages = uapi.CompileValidationErrors(CreatePack{})
 
 type CreatePack struct {
 	Name     string                   `json:"name" validate:"required,min=3,max=20" msg:"Name must be between 3 and 20 characters"`
-	URL      string                   `json:"url" validate:"required,min=3,max=20,nospaces,notblank,alpha" msg:"URL must be between 3 and 20 characters without spaces and must be alphabetic"`
+	URL      string                   `json:"url" validate:"required,min=3,max=20,slug" msg:"URL must be 3 to 20 letters, numbers or dashes, and can't start or end with a dash"`
 	Short    string                   `json:"short" validate:"required,min=10,max=100,noxss" msg:"Description must be between 10 and 100 characters"`
 	Tags     []string                 `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	PackType string                   `json:"pack_type" validate:"required,oneof=bot server emoji sticker sound" msg:"pack_type must be one of bot, server, emoji, sticker, or sound"`

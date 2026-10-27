@@ -173,6 +173,8 @@ func syncServerMeta(ctx context.Context) error {
 			if err := q.UpdateServerAvatarAndNsfwStats(ctx, db.UpdateServerAvatarAndNsfwStatsParams{
 				ServerID:         serverID,
 				Avatar:           avatar,
+				PremiumTier:      int16(guild.PremiumTier),
+				BoostCount:       int32(guild.PremiumSubscriptionCount),
 				DiscordNsfwLevel: int16(guild.NSFWLevel),
 				NsfwChannelCount: nsfwChannelCount,
 			}); err != nil {
@@ -185,6 +187,8 @@ func syncServerMeta(ctx context.Context) error {
 		if err := q.UpdateServerAvatarMembersAndNsfw(ctx, db.UpdateServerAvatarMembersAndNsfwParams{
 			ServerID:         serverID,
 			Avatar:           avatar,
+			PremiumTier:      int16(guild.PremiumTier),
+			BoostCount:       int32(guild.PremiumSubscriptionCount),
 			TotalMembers:     int32(guild.ApproximateMemberCount),
 			OnlineMembers:    int32(guild.ApproximatePresenceCount),
 			DiscordNsfwLevel: int16(guild.NSFWLevel),

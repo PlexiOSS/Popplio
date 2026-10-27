@@ -25,7 +25,9 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	return uapi.HttpResponse{
 		Json: types.PlanList{
-			Plans: assets.Plans,
+			Plans:          assets.Plans,
+			CreditsPerCent: assets.CreditsPerCent,
+			MaxCreditShare: assets.MaxCreditShare,
 		},
 	}
 }

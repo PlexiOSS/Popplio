@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"popplio/api/resp"
+	"popplio/db"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 	"popplio/types"
@@ -60,6 +61,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	orderId := orderIdRedis.Val()
+
+	if holdState, err := db.New(state.Pool).GetPaymentCreditHoldState(d.Context, db.GetPaymentCreditHoldStateParams{
+		Provider:   "paypal",
+		ExternalID: orderId,
+	}); err == nil && holdState == "refunded" {
+		return resp.BadRequest("This checkout expired and its credits were returned. Please start a new one.")
+	}
 
 	captured, err := state.Paypal.CaptureOrder(d.Context, orderId, paypal.CaptureOrderRequest{})
 

@@ -46,6 +46,7 @@ var rpcPermissions = map[string]perms.Perm{
 	"UnbanUser": perms.StaffBanUsers,
 
 	"AssignBadge":   perms.StaffAssignBadges,
+	"DeleteReview":  perms.StaffDeleteReviews,
 	"UnassignBadge": perms.StaffAssignBadges,
 }
 

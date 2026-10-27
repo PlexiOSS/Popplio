@@ -93,12 +93,12 @@ SELECT server_id, stats_self_managed FROM servers;
 -- REST error), it passes a NULL rather than a fabricated 0, so this update
 -- leaves the previously-synced count untouched instead of clobbering good
 -- data with zero.
-UPDATE servers SET avatar = sqlc.arg('avatar')::text, discord_nsfw_level = sqlc.arg('discord_nsfw_level')::smallint, nsfw_channel_count = COALESCE(sqlc.narg('nsfw_channel_count')::integer, nsfw_channel_count) WHERE server_id = sqlc.arg('server_id')::text;
+UPDATE servers SET avatar = sqlc.arg('avatar')::text, premium_tier = sqlc.arg('premium_tier')::smallint, boost_count = sqlc.arg('boost_count')::integer, discord_nsfw_level = sqlc.arg('discord_nsfw_level')::smallint, nsfw_channel_count = COALESCE(sqlc.narg('nsfw_channel_count')::integer, nsfw_channel_count) WHERE server_id = sqlc.arg('server_id')::text;
 
 -- name: UpdateServerAvatarMembersAndNsfw :exec
 -- See UpdateServerAvatarAndNsfwStats above -- same COALESCE treatment for
 -- nsfw_channel_count.
-UPDATE servers SET avatar = sqlc.arg('avatar')::text, total_members = sqlc.arg('total_members')::integer, online_members = sqlc.arg('online_members')::integer, discord_nsfw_level = sqlc.arg('discord_nsfw_level')::smallint, nsfw_channel_count = COALESCE(sqlc.narg('nsfw_channel_count')::integer, nsfw_channel_count) WHERE server_id = sqlc.arg('server_id')::text;
+UPDATE servers SET avatar = sqlc.arg('avatar')::text, premium_tier = sqlc.arg('premium_tier')::smallint, boost_count = sqlc.arg('boost_count')::integer, total_members = sqlc.arg('total_members')::integer, online_members = sqlc.arg('online_members')::integer, discord_nsfw_level = sqlc.arg('discord_nsfw_level')::smallint, nsfw_channel_count = COALESCE(sqlc.narg('nsfw_channel_count')::integer, nsfw_channel_count) WHERE server_id = sqlc.arg('server_id')::text;
 
 -- name: GetServerInviteEligibility :one
 SELECT login_required_for_invite, blacklisted_users, invite, type, state FROM servers WHERE server_id = $1;
@@ -324,7 +324,7 @@ SELECT server_id, name, avatar, total_members, online_members, short, type, stat
 FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9;
 
 -- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count
 FROM servers
 WHERE server_id = $1;
 

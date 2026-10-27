@@ -108,6 +108,7 @@ func TestRPCMethodsRoundTrip(t *testing.T) {
 		"BanUser":                  `{"BanUser":{"target_id":"1","reason":"r"}}`,
 		"UnbanUser":                `{"UnbanUser":{"target_id":"1","reason":"r"}}`,
 		"AssignBadge":              `{"AssignBadge":{"target_id":"1","reason":"r","badge_id":"b"}}`,
+		"DeleteReview":             `{"DeleteReview":{"target_id":"1","reason":"r","review_id":"x"}}`,
 		"UnassignBadge":            `{"UnassignBadge":{"target_id":"1","reason":"r","badge_id":"b"}}`,
 	}
 

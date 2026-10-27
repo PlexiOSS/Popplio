@@ -1001,7 +1001,7 @@ func (q *Queries) GetRecentlyAddedIndexServers(ctx context.Context) ([]GetRecent
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count
 FROM servers
 WHERE server_id = $1
 `
@@ -1046,6 +1046,8 @@ type GetServerByIDRow struct {
 	NsfwChannelCount       int32              `db:"nsfw_channel_count" json:"nsfw_channel_count"`
 	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories"`
+	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
+	BoostCount             int32              `db:"boost_count" json:"boost_count"`
 }
 
 func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServerByIDRow, error) {
@@ -1091,6 +1093,8 @@ func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServer
 		&i.NsfwChannelCount,
 		&i.ModerationFlagged,
 		&i.ModerationCategories,
+		&i.PremiumTier,
+		&i.BoostCount,
 	)
 	return i, err
 }
@@ -2038,11 +2042,13 @@ func (q *Queries) UnverifyServer(ctx context.Context, serverID string) error {
 }
 
 const updateServerAvatarAndNsfwStats = `-- name: UpdateServerAvatarAndNsfwStats :exec
-UPDATE servers SET avatar = $1::text, discord_nsfw_level = $2::smallint, nsfw_channel_count = COALESCE($3::integer, nsfw_channel_count) WHERE server_id = $4::text
+UPDATE servers SET avatar = $1::text, premium_tier = $2::smallint, boost_count = $3::integer, discord_nsfw_level = $4::smallint, nsfw_channel_count = COALESCE($5::integer, nsfw_channel_count) WHERE server_id = $6::text
 `
 
 type UpdateServerAvatarAndNsfwStatsParams struct {
 	Avatar           string      `db:"avatar" json:"avatar"`
+	PremiumTier      int16       `db:"premium_tier" json:"premium_tier"`
+	BoostCount       int32       `db:"boost_count" json:"boost_count"`
 	DiscordNsfwLevel int16       `db:"discord_nsfw_level" json:"discord_nsfw_level"`
 	NsfwChannelCount pgtype.Int4 `db:"nsfw_channel_count" json:"nsfw_channel_count"`
 	ServerID         string      `db:"server_id" json:"server_id"`
@@ -2056,6 +2062,8 @@ type UpdateServerAvatarAndNsfwStatsParams struct {
 func (q *Queries) UpdateServerAvatarAndNsfwStats(ctx context.Context, arg UpdateServerAvatarAndNsfwStatsParams) error {
 	_, err := q.db.Exec(ctx, updateServerAvatarAndNsfwStats,
 		arg.Avatar,
+		arg.PremiumTier,
+		arg.BoostCount,
 		arg.DiscordNsfwLevel,
 		arg.NsfwChannelCount,
 		arg.ServerID,
@@ -2064,11 +2072,13 @@ func (q *Queries) UpdateServerAvatarAndNsfwStats(ctx context.Context, arg Update
 }
 
 const updateServerAvatarMembersAndNsfw = `-- name: UpdateServerAvatarMembersAndNsfw :exec
-UPDATE servers SET avatar = $1::text, total_members = $2::integer, online_members = $3::integer, discord_nsfw_level = $4::smallint, nsfw_channel_count = COALESCE($5::integer, nsfw_channel_count) WHERE server_id = $6::text
+UPDATE servers SET avatar = $1::text, premium_tier = $2::smallint, boost_count = $3::integer, total_members = $4::integer, online_members = $5::integer, discord_nsfw_level = $6::smallint, nsfw_channel_count = COALESCE($7::integer, nsfw_channel_count) WHERE server_id = $8::text
 `
 
 type UpdateServerAvatarMembersAndNsfwParams struct {
 	Avatar           string      `db:"avatar" json:"avatar"`
+	PremiumTier      int16       `db:"premium_tier" json:"premium_tier"`
+	BoostCount       int32       `db:"boost_count" json:"boost_count"`
 	TotalMembers     int32       `db:"total_members" json:"total_members"`
 	OnlineMembers    int32       `db:"online_members" json:"online_members"`
 	DiscordNsfwLevel int16       `db:"discord_nsfw_level" json:"discord_nsfw_level"`
@@ -2081,6 +2091,8 @@ type UpdateServerAvatarMembersAndNsfwParams struct {
 func (q *Queries) UpdateServerAvatarMembersAndNsfw(ctx context.Context, arg UpdateServerAvatarMembersAndNsfwParams) error {
 	_, err := q.db.Exec(ctx, updateServerAvatarMembersAndNsfw,
 		arg.Avatar,
+		arg.PremiumTier,
+		arg.BoostCount,
 		arg.TotalMembers,
 		arg.OnlineMembers,
 		arg.DiscordNsfwLevel,

@@ -41,6 +41,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(gateway.IntentGuilds),
 			gateway.WithCompress(true),
+			state.BotPresence(state.SiteHost()+"/servers"),
 		),
 		bot.WithCacheConfigOpts(
 
@@ -60,10 +61,6 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 	}
 
 	client = c
-
-	if err := c.SetPresence(ctx, gateway.WithCustomActivity("Watching the Server list")); err != nil {
-		state.Logger.Error("Failed to set Infernoplex presence", zap.Error(err))
-	}
 
 	state.Logger.Info("Infernoplex connected", zap.String("applicationID", c.ApplicationID().String()))
 

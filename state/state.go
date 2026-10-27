@@ -65,6 +65,17 @@ var (
 
 var hex6Pattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
+var slugPattern = regexp.MustCompile(`^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$`)
+
+func slug(fl validator.FieldLevel) bool {
+	switch fl.Field().Kind() {
+	case reflect.String:
+		return slugPattern.MatchString(fl.Field().String())
+	default:
+		return false
+	}
+}
+
 func hex6(fl validator.FieldLevel) bool {
 	switch fl.Field().Kind() {
 	case reflect.String:
@@ -92,6 +103,7 @@ func nonVulgar(fl validator.FieldLevel) bool {
 
 func Setup() {
 	Validator.RegisterValidation("hex6", hex6)
+	Validator.RegisterValidation("slug", slug)
 	Validator.RegisterValidation("nonvulgar", nonVulgar)
 	Validator.RegisterValidation("noxss", noXSS)
 	Validator.RegisterValidation("notblank", validators.NotBlank)
@@ -148,6 +160,7 @@ func Setup() {
 			sharding.WithGatewayConfigOpts(
 				gateway.WithIntents(gateway.IntentGuilds, gateway.IntentGuildPresences, gateway.IntentGuildMembers),
 				gateway.WithCompress(true),
+				BotPresence(SiteHost()),
 			),
 		),
 		bot.WithCacheConfigOpts(
@@ -160,10 +173,6 @@ func Setup() {
 			},
 			OnGuildsReady: func(event *events.GuildsReady) {
 				Logger.Info("All guilds ready", zap.Int("shardID", event.ShardID()))
-
-				if presenceErr := Discord.SetPresenceForShard(Context, event.ShardID(), gateway.WithWatchingActivity(Config.Sites.Frontend)); presenceErr != nil {
-					Logger.Error("error while setting presence", zap.Error(presenceErr), zap.Int("shardID", event.ShardID()))
-				}
 			},
 		}),
 	)

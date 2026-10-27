@@ -39,6 +39,8 @@ type Server struct {
 	Avatar                 string             `db:"avatar" json:"avatar" description:"The server's icon URL, empty if the server has no icon set or the tracking bot hasn't synced it yet"`
 	TotalMembers           int                `db:"total_members" json:"total_members" description:"The server's total member count"`
 	OnlineMembers          int                `db:"online_members" json:"online_members" description:"The server's online member count"`
+	PremiumTier            int                `db:"premium_tier" json:"premium_tier" description:"The server's Discord boost level (0 to 3), synced periodically by the tracking bot"`
+	BoostCount             int                `db:"boost_count" json:"boost_count" description:"How many boosts the server has, synced periodically by the tracking bot"`
 	Short                  string             `db:"short" json:"short" description:"The server's short description"`
 	Long                   string             `db:"-" json:"long" description:"The server's long description in raw format (HTML/markdown etc. based on the servers settings). May not be included in responses (e.g. long is not set in include)" skip:"long" ci:"internal"` // Must be parsed internally
 	Type                   string             `db:"type" json:"type" description:"The server's type (e.g. pending/approved/certified/denied etc.)"`

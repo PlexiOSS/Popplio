@@ -382,6 +382,20 @@ type PartnerType struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type PaymentCreditHold struct {
+	ID            pgtype.UUID        `db:"id" json:"id"`
+	Provider      string             `db:"provider" json:"provider"`
+	ExternalID    string             `db:"external_id" json:"external_id"`
+	UserID        string             `db:"user_id" json:"user_id"`
+	TargetType    string             `db:"target_type" json:"target_type"`
+	TargetID      string             `db:"target_id" json:"target_id"`
+	Credits       int32              `db:"credits" json:"credits"`
+	DiscountCents int32              `db:"discount_cents" json:"discount_cents"`
+	State         string             `db:"state" json:"state"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ResolvedAt    pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
+}
+
 type PaymentFulfillment struct {
 	Provider    string             `db:"provider" json:"provider"`
 	ExternalID  string             `db:"external_id" json:"external_id"`
@@ -475,6 +489,8 @@ type Server struct {
 	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCheckedAt    pgtype.Timestamptz `db:"moderation_checked_at" json:"moderation_checked_at"`
 	SpotlightedUntil       pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
+	BoostCount             int32              `db:"boost_count" json:"boost_count"`
 }
 
 type ServerTemplate struct {

@@ -72,6 +72,13 @@ func All() []Task {
 			Interval:    time.Hour,
 			Run:         BadgeSync,
 		},
+		{
+			Name:        "credit_hold_sweep",
+			Description: "Returning vote credits applied to premium checkouts that were never paid",
+			Enabled:     true,
+			Interval:    30 * time.Minute,
+			Run:         CreditHoldSweep,
+		},
 	}
 }
 

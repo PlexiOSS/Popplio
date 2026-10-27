@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A `DeleteReview` Arcadia RPC method for bots, servers and teams, gated
+  by a new `delete_reviews` staff permission. It takes the review's ID or
+  a pasted link to it, checks the review belongs to that listing, deletes
+  it, clears its replies with the existing review cleanup and posts to
+  the mod log with the reason.
+- Premium checkouts (Stripe and PayPal) accept a listing's vote credits
+  as a discount: 2 credits take 1 cent off, covering at most half the
+  plan's price. Spending credits needs the `buy_shop_items` permission on
+  the listing, the same as the shop. The credits are deducted when the
+  checkout is created and recorded in a new `payment_credit_holds` table
+  against the Stripe session or PayPal order. They're kept when the
+  payment is fulfilled. If it never completes, a new `credit_hold_sweep`
+  task returns them as a fresh credit batch and notifies the buyer: Stripe
+  holds once Stripe reports the session expired (checkouts now expire
+  after 31 minutes), PayPal holds after 9 hours (the capture link lasts
+  8). Capturing a PayPal order whose credits were already returned is
+  refused, so a payment can't be both discounted and refunded.
+- `GET /payments/premium/plans` includes `credits_per_cent` and
+  `max_credit_share`.
+- Servers store their Discord boost level and boost count
+  (`premium_tier`, `boost_count`), synced by Infernoplex's server meta
+  sync and returned by `GET /servers/{id}`. A migration adds both
+  columns, defaulting to 0 until the next sync.
+
+### Changed
+
+- Pack URLs can contain numbers and dashes (`omniplex-essentials`), not
+  only letters, through a new `slug` validator: 3 to 20 characters, not
+  starting or ending with a dash. Omniplex's upload route and pack pages
+  already accepted dashed URLs, so a pack's items could be uploaded under
+  a URL that creating the pack then refused.
+
+- Premium bought only with credits costs more, since credits now
+  discount paid premium: Premium (Bronze) costs 600 credits instead of
+  99, and Bonus Premium (+7 days) 150 instead of 25.
+- Popplio, Infernoplex and Arcadia all set their status the same way: a
+  "Watching" activity (the site, the server list and the review queue)
+  sent when they connect to Discord. Infernoplex and Arcadia set a custom
+  status after connecting instead, which Discord could drop and which
+  wasn't sent again after a reconnect, so their status came and went.
+
+- Servers can buy the same shop items as bots: Featured Homepage Slot,
+  Bonus Premium, Priority Boost, Supporter Badge and Vote Blitz. Every
+  one already worked for servers, but the items and three benefits were
+  limited to bots. A migration opens them to both and rewords their
+  descriptions to say "listing" instead of "bot".
+
 ## [1.13.0] - 2026-10-25
 
 ### Added

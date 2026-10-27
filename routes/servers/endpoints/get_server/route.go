@@ -179,6 +179,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		Avatar:                 row.Avatar,
 		TotalMembers:           int(row.TotalMembers),
 		OnlineMembers:          int(row.OnlineMembers),
+		PremiumTier:            int(row.PremiumTier),
+		BoostCount:             int(row.BoostCount),
 		Short:                  row.Short,
 		Type:                   row.Type,
 		Note:                   pgtype.Text{String: row.ApprovalNote, Valid: true},

@@ -6,6 +6,7 @@
 package create_stripe_checkout
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -76,8 +77,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	err = state.Validator.Struct(payload)
 
 	if err != nil {
-		errors := err.(validator.ValidationErrors)
-		return uapi.ValidatorErrorResponse(compiledMessages, errors)
+		validationErrors := err.(validator.ValidationErrors)
+		return uapi.ValidatorErrorResponse(compiledMessages, validationErrors)
 	}
 
 	perk, err := assets.FindPerks(d.Context, payload)
@@ -85,6 +86,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if err != nil {
 		state.Logger.Error("Error while finding perk", zap.Error(err), zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
 		return resp.BadRequest("Error: " + err.Error())
+	}
+
+	priceCents := assets.PriceCents(perk.Price)
+	creditsUsed, discountCents := assets.CreditDiscount(priceCents, create.Credits)
+
+	if creditsUsed > 0 {
+		if err := assets.CheckCreditSpend(d.Context, d.Auth, payload.ForType, payload.For, creditsUsed); err != nil {
+			return assets.CreditSpendResponse(err, payload.ForType)
+		}
+	}
+
+	description := "Gives " + perk.Benefit + " for " + payload.For + " with duration of " + strconv.Itoa(perk.TimePeriod) + " hours"
+
+	if creditsUsed > 0 {
+		description += " (" + strconv.Itoa(creditsUsed) + " credits applied)"
 	}
 
 	customId, err := jsonimpl.Marshal(payload)
@@ -99,16 +115,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				// Provide the exact Price ID (for example, pr_1234) of the product you want to sell
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency:   stripe.String(string(stripe.CurrencyUSD)),
-					UnitAmount: stripe.Int64(int64(perk.Price * 100)),
+					UnitAmount: stripe.Int64(int64(priceCents - discountCents)),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
 						Name:        stripe.String(perk.Name),
-						Description: stripe.String("Gives " + perk.Benefit + " for " + payload.For + " with duration of " + strconv.Itoa(perk.TimePeriod) + " hours"),
+						Description: stripe.String(description),
 					},
 				},
 				Quantity: stripe.Int64(1),
 			},
 		},
 		ClientReferenceID: stripe.String(string(customId)),
+		ExpiresAt:         stripe.Int64(time.Now().Add(31 * time.Minute).Unix()),
 		Mode:              stripe.String(string(stripe.CheckoutSessionModePayment)),
 		//AutomaticTax:      &stripe.CheckoutSessionAutomaticTaxParams{Enabled: stripe.Bool(true)},
 		SuccessURL: stripe.String(state.Config.Sites.Frontend + "/payments/success"),
@@ -119,6 +136,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Error while creating session", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
+	}
+
+	if creditsUsed > 0 {
+		if err := assets.HoldCredits(d.Context, "stripe", order.ID, d.Auth.ID, payload.ForType, payload.For, creditsUsed, discountCents); err != nil {
+			if _, expireErr := session.Expire(order.ID, nil); expireErr != nil {
+				state.Logger.Error("Failed to expire Stripe session after a failed credit hold", zap.Error(expireErr), zap.String("session", order.ID))
+			}
+
+			if errors.Is(err, assets.ErrNotEnoughCredits) {
+				return resp.BadRequest("This " + payload.ForType + " doesn't have enough credits anymore")
+			}
+
+			return resp.Err("Error while applying credits", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
+		}
 	}
 
 	return uapi.HttpResponse{
