@@ -259,6 +259,7 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 			VoteNum:    int(row.VoteNum),
 			Credit:     row.CreditRedeem,
 			Immutable:  row.Immutable,
+			Auto:       row.Auto,
 		}
 	}
 
@@ -326,7 +327,7 @@ func EntityGetRedeemableVoteCount(ctx context.Context, c DbConn, targetId, targe
 	return int(row.Upvotes - row.Downvotes), nil
 }
 
-func EntityGiveVotes(ctx context.Context, c DbConn, upvote bool, author, targetType, targetId string, vi *types.VoteInfo) error {
+func EntityGiveVotes(ctx context.Context, c DbConn, upvote, auto bool, author, targetType, targetId string, vi *types.VoteInfo) error {
 	q := db.New(c)
 
 	for i := 0; i < vi.PerUser; i++ {
@@ -336,6 +337,7 @@ func EntityGiveVotes(ctx context.Context, c DbConn, upvote bool, author, targetT
 			TargetType: targetType,
 			Upvote:     upvote,
 			VoteNum:    int32(i),
+			Auto:       auto,
 		})
 
 		if err != nil {

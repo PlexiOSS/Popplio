@@ -425,7 +425,8 @@ CREATE TABLE public.bots (
     moderation_checked_at timestamp with time zone,
     spotlighted_until timestamp with time zone,
     CONSTRAINT bots_self_status_check CHECK (((self_status IS NULL) OR (self_status = ANY (ARRAY['online'::text, 'idle'::text, 'dnd'::text, 'offline'::text])))),
-    CONSTRAINT owner_team_oneof CHECK (((owner IS NULL) <> (team_owner IS NULL)))
+    CONSTRAINT owner_team_oneof CHECK (((owner IS NULL) <> (team_owner IS NULL))),
+    auto_votes_opt_out boolean DEFAULT false NOT NULL
 );
 
 
@@ -497,7 +498,8 @@ CREATE TABLE public.entity_votes (
     vote_num integer DEFAULT 0 NOT NULL,
     voided_at timestamp with time zone,
     immutable boolean DEFAULT false NOT NULL,
-    credit_redeem uuid
+    credit_redeem uuid,
+    auto boolean DEFAULT false NOT NULL
 );
 
 
@@ -810,7 +812,8 @@ CREATE TABLE public.servers (
     moderation_checked_at timestamp with time zone,
     spotlighted_until timestamp with time zone,
     premium_tier smallint DEFAULT 0 NOT NULL,
-    boost_count integer DEFAULT 0 NOT NULL
+    boost_count integer DEFAULT 0 NOT NULL,
+    auto_votes_opt_out boolean DEFAULT false NOT NULL
 );
 
 
@@ -2582,4 +2585,28 @@ CREATE TABLE public.payment_credit_holds (
     resolved_at timestamp with time zone,
     CONSTRAINT payment_credit_holds_credits_check CHECK ((credits > 0)),
     CONSTRAINT payment_credit_holds_state_check CHECK ((state = ANY (ARRAY['held'::text, 'spent'::text, 'refunded'::text])))
+);
+
+CREATE TABLE public.auto_vote_subscriptions (
+    user_id text NOT NULL,
+    stripe_customer_id text NOT NULL,
+    stripe_subscription_id text NOT NULL,
+    status text NOT NULL,
+    current_period_end timestamp with time zone,
+    cancel_at_period_end boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.auto_vote_targets (
+    user_id text NOT NULL,
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    days smallint[] DEFAULT '{}'::smallint[] NOT NULL,
+    start_minute smallint DEFAULT 0 NOT NULL,
+    end_minute smallint DEFAULT 1440 NOT NULL,
+    timezone text DEFAULT 'UTC'::text NOT NULL,
+    last_voted_at timestamp with time zone,
+    last_skip_reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );

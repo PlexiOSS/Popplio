@@ -79,6 +79,13 @@ func All() []Task {
 			Interval:    30 * time.Minute,
 			Run:         CreditHoldSweep,
 		},
+		{
+			Name:        "auto_vote",
+			Description: "Casting automatic votes for auto-vote subscribers whose cooldown and schedule allow it",
+			Enabled:     true,
+			Interval:    5 * time.Minute,
+			Run:         AutoVote,
+		},
 	}
 }
 

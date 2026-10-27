@@ -6,13 +6,17 @@ package users
 import (
 	"popplio/api"
 	"popplio/routes/users/endpoints/check_booster_status"
+	"popplio/routes/users/endpoints/create_auto_vote_checkout"
+	"popplio/routes/users/endpoints/create_auto_vote_portal"
 	"popplio/routes/users/endpoints/create_data_task"
+	"popplio/routes/users/endpoints/get_auto_vote"
 	"popplio/routes/users/endpoints/get_main_server_status"
 	"popplio/routes/users/endpoints/get_user"
 	"popplio/routes/users/endpoints/get_user_activity"
 	"popplio/routes/users/endpoints/get_user_perms"
 	"popplio/routes/users/endpoints/get_user_seo"
 	"popplio/routes/users/endpoints/patch_user_profile"
+	"popplio/routes/users/endpoints/put_auto_vote_targets"
 
 	"github.com/go-chi/chi/v5"
 
@@ -42,6 +46,74 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_main_server_status.Docs,
 		Handler: get_main_server_status.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/auto-vote",
+		OpId:    "get_auto_vote",
+		Method:  uapi.GET,
+		Docs:    get_auto_vote.Docs,
+		Handler: get_auto_vote.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/auto-vote/targets",
+		OpId:    "put_auto_vote_targets",
+		Method:  uapi.PUT,
+		Docs:    put_auto_vote_targets.Docs,
+		Handler: put_auto_vote_targets.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/auto-vote/checkout",
+		OpId:    "create_auto_vote_checkout",
+		Method:  uapi.POST,
+		Docs:    create_auto_vote_checkout.Docs,
+		Handler: create_auto_vote_checkout.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/auto-vote/portal",
+		OpId:    "create_auto_vote_portal",
+		Method:  uapi.POST,
+		Docs:    create_auto_vote_portal.Docs,
+		Handler: create_auto_vote_portal.Route,
 		Auth: []uapi.AuthType{
 			{
 				URLVar: "id",

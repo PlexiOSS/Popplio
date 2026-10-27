@@ -97,6 +97,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Failed to update bot: ", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 	}
 
+	if payload.AutoVotesOptOut != nil {
+		if err := db.New(state.Pool).SetBotAutoVotesOptOut(d.Context, db.SetBotAutoVotesOptOutParams{BotID: id, AutoVotesOptOut: *payload.AutoVotesOptOut}); err != nil {
+			return resp.Err("Failed to update auto-vote setting", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
+		}
+	}
+
 	botUser, err := dovewing.GetUser(d.Context, id, state.DovewingPlatformDiscord)
 
 	if err != nil {

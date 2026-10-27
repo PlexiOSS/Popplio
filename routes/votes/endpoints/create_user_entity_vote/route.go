@@ -7,29 +7,22 @@ package create_user_entity_vote
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
-	"popplio/brandemoji"
-	"strconv"
 
 	"popplio/api/resp"
 	"popplio/captcha"
 
-	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/db"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
-	"popplio/votes"
-	"popplio/webhooks/core/drivers"
-	"popplio/webhooks/events"
+	"popplio/votes/cast"
 
-	"github.com/disgoorg/disgo/discord"
 	"go.uber.org/zap"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
-	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/PlexiOSS/Keel/uapi"
 
 	"github.com/go-chi/chi/v5"
@@ -138,189 +131,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	// Create a new entity vote
-	tx, err := state.Pool.Begin(d.Context)
+	res, err := cast.Cast(d.Context, d.Auth.ID, targetType, targetId, upvote, false)
 
 	if err != nil {
-		return resp.ErrBody("Failed to create transaction [put_user_entity_votes]", "Failed to create transaction.", err)
-	}
+		var castErr *cast.Error
 
-	defer tx.Rollback(d.Context)
-
-	q := db.New(tx)
-
-	// Serializes concurrent vote-cast requests from this same user for this
-	// same target before EntityVoteCheck reads their vote history -- see
-	// LockVoteCastTarget's own comment for the race this closes.
-	if err := q.LockVoteCastTarget(d.Context, db.LockVoteCastTargetParams{
-		UserID:     d.Auth.ID,
-		TargetType: targetType,
-		TargetID:   targetId,
-	}); err != nil {
-		return resp.Err("Failed to acquire vote lock", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-	}
-
-	entityInfo, err := votes.GetEntityInfo(d.Context, tx, targetId, targetType)
-
-	if err != nil {
-		state.Logger.Error("Failed to fetch entity info", zap.Error(err), zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-		return resp.BadRequest("Failed to fetch entity info.")
-	}
-
-	// Now check the vote
-	vi, err := votes.EntityVoteCheck(d.Context, tx, d.Auth.ID, targetId, targetType)
-
-	if err != nil {
-		return resp.Err("Failed to check vote", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-	}
-
-	if !vi.VoteInfo.SupportsDownvotes && !upvote {
-		return resp.BadRequest("This entity does not support downvotes")
-	}
-
-	if !vi.VoteInfo.SupportsUpvotes && upvote {
-		return resp.BadRequest("This entity does not support upvotes")
-	}
-
-	if vi.HasVoted {
-		// lacking MultipleVotes means that there can only be one vote per user for the entity
-		if !vi.VoteInfo.MultipleVotes {
-			if vi.ValidVotes[0].Upvote == upvote {
-				return resp.BadRequest("You have already voted for this entity before!")
-			} else {
-				// Remove all old votes by said user
-				err = db.New(tx).DeleteUserEntityVotes(d.Context, db.DeleteUserEntityVotesParams{
-					Author:     d.Auth.ID,
-					TargetID:   targetId,
-					TargetType: targetType,
-				})
-
-				if err != nil {
-					return resp.ErrDetail("Failed to delete old vote", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-				}
-			}
-		} else {
-			var timeStr string
-			if vi.Wait != nil {
-				timeStr = fmt.Sprintf("%02d hours, %02d minutes. %02d seconds", vi.Wait.Hours, vi.Wait.Minutes, vi.Wait.Seconds)
-			} else {
-				timeStr = "a while"
-			}
-
-			if len(vi.ValidVotes) > 1 {
-				return resp.BadRequest("Please wait " + timeStr + " before voting again. Your last vote was also a double vote!")
-			}
-
-			return resp.BadRequest("Please wait " + timeStr + " before voting again")
-		}
-	}
-
-	// Keep adding votes until, but not including vi.VoteInfo.PerUser
-	err = votes.EntityGiveVotes(d.Context, tx, upvote, d.Auth.ID, targetType, targetId, vi.VoteInfo)
-
-	if err != nil {
-		return resp.ErrDetail("Failed to give votes", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-	}
-
-	// Perform post-vote tasks
-	err = votes.EntityPostVote(d.Context, tx, targetType, targetId)
-
-	if err != nil {
-		return resp.ErrDetail("Failed to perform post-vote tasks", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-	}
-
-	// Fetch new vote count
-	nvc, err := votes.EntityGetVoteCount(d.Context, tx, targetId, targetType)
-
-	if err != nil {
-		return resp.ErrDetail("Failed to fetch new vote count", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-	}
-
-	// Commit transaction
-	err = tx.Commit(d.Context)
-
-	if err != nil {
-		return resp.Err("Failed to commit transaction", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-	}
-
-	// Fetch user info to log it to server
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				state.Logger.Error("Panic while sending vote log message", zap.Any("panic", rec), zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-			}
-		}()
-
-		userObj, err := dovewing.GetUser(d.Context, d.Auth.ID, state.DovewingPlatformDiscord)
-
-		if err != nil {
-			state.Logger.Error("Failed to fetch user info", zap.Error(err), zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-			return
+		if errors.As(err, &castErr) {
+			return resp.BadRequest(castErr.Message)
 		}
 
-		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.VoteLogs, discord.MessageCreate{
-			Embeds: []discord.Embed{
-				{
-					URL: entityInfo.URL,
-					Thumbnail: &discord.EmbedResource{
-						URL: entityInfo.Avatar,
-					},
-					Title:       "🎉 Vote Count Updated!",
-					Description: brandemoji.Popplio.Get("upvote", "❤️") + " " + userObj.DisplayName + " has voted for " + targetType + ": " + entityInfo.Name,
-					Color:       0x8A6BFD,
-					Fields: []discord.EmbedField{
-						{
-							Name:   "Vote Count:",
-							Value:  strconv.Itoa(nvc),
-							Inline: ptr.TruePtr,
-						},
-						{
-							Name:   "Votes Added:",
-							Value:  strconv.Itoa(vi.VoteInfo.PerUser),
-							Inline: ptr.TruePtr,
-						},
-						{
-							Name:   "User ID:",
-							Value:  userObj.ID,
-							Inline: ptr.TruePtr,
-						},
-						{
-							Name:   "View " + targetType + "'s page",
-							Value:  "[View " + entityInfo.Name + "](" + entityInfo.URL + ")",
-							Inline: ptr.TruePtr,
-						},
-					},
-				},
-			},
-		})
+		return resp.Err("Failed to cast vote", err, zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
+	}
 
-		if err != nil {
-			state.Logger.Error("Failed to send vote log message", zap.Error(err), zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-		}
-	}()
-
-	// Send webhook in a goroutine
-	go func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				state.Logger.Error("Panic while sending vote webhook", zap.Any("panic", rec), zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-			}
-		}()
-
-		err := drivers.Send(drivers.With{
-			UserID:     d.Auth.ID,
-			TargetID:   targetId,
-			TargetType: targetType,
-			Data: events.WebhookNewVoteData{
-				Votes:   nvc,
-				PerUser: vi.VoteInfo.PerUser,
-			},
-		})
-
-		if err != nil {
-			state.Logger.Error("Failed to send webhook", zap.Error(err), zap.String("userId", d.Auth.ID), zap.String("targetId", targetId), zap.String("targetType", targetType))
-		}
-	}()
+	cast.Announce(d.Auth.ID, targetType, targetId, res, false)
 
 	return uapi.DefaultResponse(http.StatusNoContent)
 }

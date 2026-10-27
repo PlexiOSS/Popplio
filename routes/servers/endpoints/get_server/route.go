@@ -198,6 +198,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		StartPeriod:            row.StartPremiumPeriod,
 		PremiumPeriodLength:    row.PremiumPeriodLength,
 		CaptchaOptOut:          row.CaptchaOptOut,
+		AutoVotesOptOut:        row.AutoVotesOptOut,
 		CreatedAt:              row.CreatedAt,
 		ClaimedBy:              row.ClaimedBy,
 		LastClaimed:            row.LastClaimed,

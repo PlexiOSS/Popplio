@@ -63,6 +63,7 @@ type Server struct {
 	StartPeriod            pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
 	PremiumPeriodLength    time.Duration      `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the server in nanoseconds"`
 	CaptchaOptOut          bool               `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the server should have captchas shown if the user has captcha_sponsor_enabled"`
+	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
 	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at" description:"The server's creation date"`
 	ClaimedBy              pgtype.Text        `db:"claimed_by" json:"claimed_by" description:"The user who claimed the server"`
 	LastClaimed            pgtype.Timestamptz `db:"last_claimed" json:"last_claimed" description:"The server's last claimed date"`
@@ -141,6 +142,7 @@ type ServerSettingsUpdate struct {
 	Tags                   []string `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	NSFW                   bool     `db:"nsfw" json:"nsfw"`
 	CaptchaOptOut          bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
+	AutoVotesOptOut        *bool    `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
 	LoginRequiredForInvite bool     `db:"login_required_for_invite" json:"login_required_for_invite" description:"Whether the server requires a login to be invited to it"`
 	ShowEmojis             bool     `db:"show_emojis" json:"show_emojis" description:"Whether to show this server's emojis and stickers on its listing page. Requires the tracking bot to be in the server to actually have anything to show"`
 }

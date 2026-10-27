@@ -103,6 +103,30 @@ type ArchiveCacheServersCacheServerOauthMd struct {
 	OwnerID string `db:"owner_id" json:"owner_id"`
 }
 
+type AutoVoteSubscription struct {
+	UserID               string             `db:"user_id" json:"user_id"`
+	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
+	StripeSubscriptionID string             `db:"stripe_subscription_id" json:"stripe_subscription_id"`
+	Status               string             `db:"status" json:"status"`
+	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type AutoVoteTarget struct {
+	UserID         string             `db:"user_id" json:"user_id"`
+	TargetType     string             `db:"target_type" json:"target_type"`
+	TargetID       string             `db:"target_id" json:"target_id"`
+	Days           []int16            `db:"days" json:"days"`
+	StartMinute    int16              `db:"start_minute" json:"start_minute"`
+	EndMinute      int16              `db:"end_minute" json:"end_minute"`
+	Timezone       string             `db:"timezone" json:"timezone"`
+	LastVotedAt    pgtype.Timestamptz `db:"last_voted_at" json:"last_voted_at"`
+	LastSkipReason pgtype.Text        `db:"last_skip_reason" json:"last_skip_reason"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type AutomatedVoteReset struct {
 	ID        pgtype.UUID        `db:"id" json:"id"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
@@ -193,6 +217,7 @@ type Bot struct {
 	ModerationFlagged    bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCheckedAt  pgtype.Timestamptz `db:"moderation_checked_at" json:"moderation_checked_at"`
 	SpotlightedUntil     pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	AutoVotesOptOut      bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
 }
 
 type BotChangelog struct {
@@ -278,6 +303,7 @@ type EntityVote struct {
 	VoidedAt     pgtype.Timestamptz `db:"voided_at" json:"voided_at"`
 	Immutable    bool               `db:"immutable" json:"immutable"`
 	CreditRedeem pgtype.UUID        `db:"credit_redeem" json:"credit_redeem"`
+	Auto         bool               `db:"auto" json:"auto"`
 }
 
 type EntityVoteRedeemLog struct {
@@ -491,6 +517,7 @@ type Server struct {
 	SpotlightedUntil       pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
 	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
 	BoostCount             int32              `db:"boost_count" json:"boost_count"`
+	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
 }
 
 type ServerTemplate struct {

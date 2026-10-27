@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/autovote"
 	"popplio/notifications"
 	"popplio/routes/payments/assets"
 	"popplio/state"
@@ -58,6 +59,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if err != nil {
 		state.Logger.Error("Failed to construct event", zap.Error(err))
 		return resp.BadRequest("Invalid request body")
+	}
+
+	if handled, hresp := autovote.HandleStripeEvent(r.Context(), event); handled {
+		return hresp
 	}
 
 	var s stripe.CheckoutSession

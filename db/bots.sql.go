@@ -415,7 +415,7 @@ func (q *Queries) GetAllBotIDs(ctx context.Context) ([]string, error) {
 }
 
 const getBotByID = `-- name: GetBotByID :one
-SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories
+SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out
 FROM bots
 WHERE bot_id = $1
 `
@@ -466,6 +466,7 @@ type GetBotByIDRow struct {
 	VoteBlitzUntil       pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
 	ModerationFlagged    bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCategories []string           `db:"moderation_categories" json:"moderation_categories"`
+	AutoVotesOptOut      bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
 }
 
 func (q *Queries) GetBotByID(ctx context.Context, botID string) (GetBotByIDRow, error) {
@@ -517,6 +518,7 @@ func (q *Queries) GetBotByID(ctx context.Context, botID string) (GetBotByIDRow, 
 		&i.VoteBlitzUntil,
 		&i.ModerationFlagged,
 		&i.ModerationCategories,
+		&i.AutoVotesOptOut,
 	)
 	return i, err
 }

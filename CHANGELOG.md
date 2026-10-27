@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Auto-vote, a $2.99/month Stripe subscription that casts votes for a
+  user automatically:
+  - `GET /users/{id}/auto-vote` returns the subscription and targets,
+    `PUT /users/{id}/auto-vote/targets` replaces the targets (up to 3
+    approved bots or servers, each with optional weekdays, a time window
+    and a timezone), `POST /users/{id}/auto-vote/checkout` starts Stripe
+    Checkout and `POST /users/{id}/auto-vote/portal` opens the Stripe
+    billing portal. All are self-only.
+  - The Stripe webhook handles `checkout.session.completed` for
+    auto-vote sessions and `customer.subscription.created`, `.updated`
+    and `.deleted` to keep the subscription status in sync.
+  - An `auto_vote` background task runs every 5 minutes and votes for
+    every due target of an active subscriber. Targets are skipped, with
+    the reason recorded, when the owner opted out, the listing needs a
+    captcha, the listing is gone, or the user is vote banned.
+  - Bots and servers have `auto_votes_opt_out`, settable through the
+    settings update endpoints.
+  - `NEW_VOTE` webhooks and entity votes carry an `auto` flag.
+
+### Changed
+
+- Automatic votes count toward vote counts and rankings, but not the
+  voter leaderboard, voter rank, voting badges or vote credit
+  redemption.
+- Vote casting moved into `votes/cast` so the vote endpoint and the
+  auto-vote task share one path.
+- Migration `20261027150000_auto_voting` adds `entity_votes.auto`,
+  `bots.auto_votes_opt_out`, `servers.auto_votes_opt_out`, and the
+  `auto_vote_subscriptions` and `auto_vote_targets` tables.
+
 ## [1.14.0] - 2026-10-27
 
 ### Added

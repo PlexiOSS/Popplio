@@ -98,6 +98,7 @@ type Bot struct {
 	TeamOwnerID          pgtype.UUID             `db:"team_owner" json:"-"`
 	TeamOwner            *Team                   `db:"-" json:"team_owner" description:"If the bot is in a team, who owns the bot. If not in a team, this will be null and owner will instead be set" ci:"internal"` // Must be parsed internally
 	CaptchaOptOut        bool                    `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the bot should have captchas shown if the user has captcha_sponsor_enabled"`
+	AutoVotesOptOut      bool                    `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the bot refuses automatic votes from auto-vote subscribers"`
 	SelfStatus           pgtype.Text             `db:"self_status" json:"-" description:"Presence self-reported by the bot via Post Bot Stats. Folded into user.status when present, not exposed directly."`
 	SupporterBadge       bool                    `db:"supporter_badge" json:"supporter_badge" description:"Whether the bot's owner has purchased the cosmetic supporter badge from the shop"`
 	BoostedUntil         pgtype.Timestamptz      `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the bot gets priority placement in listings until this time"`
@@ -132,15 +133,16 @@ type CreateBot struct {
 }
 
 type BotSettingsUpdate struct {
-	Short         string   `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
-	Long          string   `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
-	Prefix        string   `db:"prefix" json:"prefix" validate:"required,min=1,max=10" msg:"Prefix must be between 1 and 10 characters"`                    // impld
-	Invite        string   `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS URL"`                     // impld
-	Library       string   `db:"library" json:"library" validate:"required,min=1,max=50" msg:"Library must be between 1 and 50 characters"`                 // impld
-	ExtraLinks    []Link   `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
-	Tags          []string `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	NSFW          bool     `db:"nsfw" json:"nsfw"`
-	CaptchaOptOut bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
+	Short           string   `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
+	Long            string   `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
+	Prefix          string   `db:"prefix" json:"prefix" validate:"required,min=1,max=10" msg:"Prefix must be between 1 and 10 characters"`                    // impld
+	Invite          string   `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS URL"`                     // impld
+	Library         string   `db:"library" json:"library" validate:"required,min=1,max=50" msg:"Library must be between 1 and 50 characters"`                 // impld
+	ExtraLinks      []Link   `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
+	Tags            []string `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	NSFW            bool     `db:"nsfw" json:"nsfw"`
+	CaptchaOptOut   bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
+	AutoVotesOptOut *bool    `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
 }
 
 type Invite struct {

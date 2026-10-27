@@ -222,7 +222,7 @@ WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1);
 SELECT short FROM bots WHERE bot_id = $1;
 
 -- name: GetBotByID :one
-SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories
+SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out
 FROM bots
 WHERE bot_id = $1;
 

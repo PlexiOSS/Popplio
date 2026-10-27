@@ -24,6 +24,7 @@ type EntityVote struct {
 	VoteNum    int              `db:"vote_num" json:"vote_num" description:"The number of the vote (second vote of double vote will have vote_num as 2 etc.)"`
 	Credit     pgtype.UUID      `db:"credit_redeem" json:"credit_redeem" description:"If the vote has been redeemed for credits, what the ID of the credit redemption is"`
 	Immutable  bool             `db:"immutable" json:"immutable" description:"Whether or not the vote is immutable"`
+	Auto       bool             `db:"auto" json:"auto" description:"Whether the vote was cast automatically by an auto-vote subscription"`
 }
 
 // Vote Info

@@ -92,6 +92,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while updating server", err, zap.String("serverID", id))
 	}
 
+	if payload.AutoVotesOptOut != nil {
+		if err := q.SetServerAutoVotesOptOut(d.Context, db.SetServerAutoVotesOptOutParams{ServerID: id, AutoVotesOptOut: *payload.AutoVotesOptOut}); err != nil {
+			return resp.Err("Failed to update auto-vote setting", err, zap.String("serverID", id))
+		}
+	}
+
 	name, avatar := id, ""
 
 	if nameAvatar, err := q.GetServerNameAndAvatar(d.Context, id); err != nil {

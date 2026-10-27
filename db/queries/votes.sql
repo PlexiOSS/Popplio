@@ -122,7 +122,7 @@ LIMIT sqlc.arg('lim');
 SELECT author FROM entity_votes WHERE target_id = $1 AND target_type = $2 GROUP BY author LIMIT $3 OFFSET $4;
 
 -- name: GetEntityVotes :many
-SELECT itag, target_id, target_type, author, upvote, void, void_reason, voided_at, created_at, vote_num, credit_redeem, immutable
+SELECT itag, target_id, target_type, author, upvote, void, void_reason, voided_at, created_at, vote_num, credit_redeem, immutable, auto
 FROM entity_votes
 WHERE author = $1 AND target_id = $2 AND target_type = $3 AND void = false
 ORDER BY created_at DESC;
@@ -140,10 +140,10 @@ WHERE target_id = $1 AND target_type = $2 AND void = false;
 -- counts toward the entity's public vote total (CountEntityVotes).
 SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes
 FROM entity_votes
-WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL;
+WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL AND auto = false;
 
 -- name: InsertEntityVote :exec
-INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num) VALUES ($1, $2, $3, $4, $5);
+INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num, auto) VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetVoteCreditTiers :many
 SELECT id, target_type, position, votes, cents, created_at FROM vote_credit_tiers WHERE target_type = $1 ORDER BY position ASC;
@@ -186,7 +186,7 @@ SELECT pg_advisory_xact_lock(hashtext(sqlc.arg('target_type')::text || ':' || sq
 -- claimed -- without it, a vote stays eligible forever and a repeat
 -- redemption call would claim (and pay out credits for) the same vote more
 -- than once.
-SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL ORDER BY created_at ASC LIMIT $3;
+SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL AND auto = false ORDER BY created_at ASC LIMIT $3;
 
 -- name: RedeemVotesByItags :exec
 -- Deliberately does NOT set void = true. A vote being spent on credits is
@@ -201,14 +201,14 @@ SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void
 -- risk RedeemAllVotesForTarget's own comment explains -- belt-and-suspenders
 -- alongside the caller's per-target advisory lock (LockVoteRedeemTarget),
 -- in case a future caller ever reaches this query without going through it.
-UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY(sqlc.arg('itags')::uuid[]) AND credit_redeem IS NULL;
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY(sqlc.arg('itags')::uuid[]) AND credit_redeem IS NULL AND auto = false;
 
 -- name: RedeemAllVotesForTarget :exec
 -- See RedeemVotesByItags -- same fix, same reasoning. credit_redeem IS NULL
 -- in the WHERE clause is required now that redeeming no longer voids a vote:
 -- without it, a vote already spent by an earlier redemption (void = false,
 -- credit_redeem set) would still match "void = false" and get claimed again.
-UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE target_id = $2 AND target_type = $3 AND void = false AND credit_redeem IS NULL;
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE target_id = $2 AND target_type = $3 AND void = false AND credit_redeem IS NULL AND auto = false;
 
 -- name: GetVoteRedeemLogs :many
 SELECT target_id, target_type, created_at, redeemed_at, id, redeemed_credits, credits
@@ -226,6 +226,7 @@ WITH counted AS (
         MIN(ev.created_at) AS first_vote
     FROM entity_votes ev
     WHERE ev.upvote = true
+    AND ev.auto = false
     AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
     AND (sqlc.narg('since')::timestamptz IS NULL OR ev.created_at >= sqlc.narg('since')::timestamptz)
     AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
@@ -244,6 +245,7 @@ WITH counted AS (
         MIN(ev.created_at) AS first_vote
     FROM entity_votes ev
     WHERE ev.upvote = true
+    AND ev.auto = false
     AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
     AND (sqlc.narg('since')::timestamptz IS NULL OR ev.created_at >= sqlc.narg('since')::timestamptz)
     AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))

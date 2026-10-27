@@ -31,6 +31,7 @@ type Kind struct {
 }
 
 const counted = `ev.upvote = true
+	AND ev.auto = false
 	AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
 	AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))`
 

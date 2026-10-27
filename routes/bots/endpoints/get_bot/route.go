@@ -221,6 +221,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		LastClaimed:          row.LastClaimed,
 		TeamOwnerID:          row.TeamOwner,
 		CaptchaOptOut:        row.CaptchaOptOut,
+		AutoVotesOptOut:      row.AutoVotesOptOut,
 		SelfStatus:           row.SelfStatus,
 		SupporterBadge:       row.SupporterBadge,
 		BoostedUntil:         row.BoostedUntil,

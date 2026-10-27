@@ -37,7 +37,7 @@ func (q *Queries) CountEntityVotes(ctx context.Context, arg CountEntityVotesPara
 const countRedeemableEntityVotes = `-- name: CountRedeemableEntityVotes :one
 SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes
 FROM entity_votes
-WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL
+WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL AND auto = false
 `
 
 type CountRedeemableEntityVotesParams struct {
@@ -186,7 +186,7 @@ func (q *Queries) GetEntityVoters(ctx context.Context, arg GetEntityVotersParams
 }
 
 const getEntityVotes = `-- name: GetEntityVotes :many
-SELECT itag, target_id, target_type, author, upvote, void, void_reason, voided_at, created_at, vote_num, credit_redeem, immutable
+SELECT itag, target_id, target_type, author, upvote, void, void_reason, voided_at, created_at, vote_num, credit_redeem, immutable, auto
 FROM entity_votes
 WHERE author = $1 AND target_id = $2 AND target_type = $3 AND void = false
 ORDER BY created_at DESC
@@ -211,6 +211,7 @@ type GetEntityVotesRow struct {
 	VoteNum      int32              `db:"vote_num" json:"vote_num"`
 	CreditRedeem pgtype.UUID        `db:"credit_redeem" json:"credit_redeem"`
 	Immutable    bool               `db:"immutable" json:"immutable"`
+	Auto         bool               `db:"auto" json:"auto"`
 }
 
 func (q *Queries) GetEntityVotes(ctx context.Context, arg GetEntityVotesParams) ([]GetEntityVotesRow, error) {
@@ -235,6 +236,7 @@ func (q *Queries) GetEntityVotes(ctx context.Context, arg GetEntityVotesParams) 
 			&i.VoteNum,
 			&i.CreditRedeem,
 			&i.Immutable,
+			&i.Auto,
 		); err != nil {
 			return nil, err
 		}
@@ -280,7 +282,7 @@ func (q *Queries) GetRecentAutomatedVoteResetForUpdate(ctx context.Context) (pgt
 }
 
 const getRedeemableVoteItags = `-- name: GetRedeemableVoteItags :many
-SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL ORDER BY created_at ASC LIMIT $3
+SELECT itag FROM entity_votes WHERE target_id = $1 AND target_type = $2 AND void = false AND credit_redeem IS NULL AND auto = false ORDER BY created_at ASC LIMIT $3
 `
 
 type GetRedeemableVoteItagsParams struct {
@@ -408,6 +410,7 @@ WITH counted AS (
         MIN(ev.created_at) AS first_vote
     FROM entity_votes ev
     WHERE ev.upvote = true
+    AND ev.auto = false
     AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
     AND ($2::timestamptz IS NULL OR ev.created_at >= $2::timestamptz)
     AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
@@ -856,6 +859,7 @@ WITH counted AS (
         MIN(ev.created_at) AS first_vote
     FROM entity_votes ev
     WHERE ev.upvote = true
+    AND ev.auto = false
     AND ev.void_reason IS DISTINCT FROM 'Votes (single entity) reset'
     AND ($2::timestamptz IS NULL OR ev.created_at >= $2::timestamptz)
     AND NOT EXISTS (SELECT 1 FROM users u WHERE u.user_id = ev.author AND (u.vote_banned OR u.banned))
@@ -899,7 +903,7 @@ func (q *Queries) InsertAutomatedVoteReset(ctx context.Context) error {
 }
 
 const insertEntityVote = `-- name: InsertEntityVote :exec
-INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO entity_votes (author, target_id, target_type, upvote, vote_num, auto) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type InsertEntityVoteParams struct {
@@ -908,6 +912,7 @@ type InsertEntityVoteParams struct {
 	TargetType string `db:"target_type" json:"target_type"`
 	Upvote     bool   `db:"upvote" json:"upvote"`
 	VoteNum    int32  `db:"vote_num" json:"vote_num"`
+	Auto       bool   `db:"auto" json:"auto"`
 }
 
 func (q *Queries) InsertEntityVote(ctx context.Context, arg InsertEntityVoteParams) error {
@@ -917,6 +922,7 @@ func (q *Queries) InsertEntityVote(ctx context.Context, arg InsertEntityVotePara
 		arg.TargetType,
 		arg.Upvote,
 		arg.VoteNum,
+		arg.Auto,
 	)
 	return err
 }
@@ -1031,7 +1037,7 @@ func (q *Queries) RecomputeTeamApproximateVotes(ctx context.Context, targetType 
 }
 
 const redeemAllVotesForTarget = `-- name: RedeemAllVotesForTarget :exec
-UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE target_id = $2 AND target_type = $3 AND void = false AND credit_redeem IS NULL
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE target_id = $2 AND target_type = $3 AND void = false AND credit_redeem IS NULL AND auto = false
 `
 
 type RedeemAllVotesForTargetParams struct {
@@ -1050,7 +1056,7 @@ func (q *Queries) RedeemAllVotesForTarget(ctx context.Context, arg RedeemAllVote
 }
 
 const redeemVotesByItags = `-- name: RedeemVotesByItags :exec
-UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY($2::uuid[]) AND credit_redeem IS NULL
+UPDATE entity_votes SET credit_redeem = $1, void_reason = 'Vote credits redeemed', voided_at = NOW() WHERE itag = ANY($2::uuid[]) AND credit_redeem IS NULL AND auto = false
 `
 
 type RedeemVotesByItagsParams struct {
