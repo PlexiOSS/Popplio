@@ -15,6 +15,7 @@ package main
 import (
 	"fmt"
 	"kitehelper/rebuildfkeys"
+	"kitehelper/seedci"
 	"kitehelper/tests"
 	"kitehelper/validatetable"
 	"os"
@@ -56,6 +57,10 @@ var cmds = map[string]command{
 	"rebuild-fkeys": {
 		Func: rebuildfkeys.RebuildFKeys,
 		Help: "Rebuild foreign keys",
+	},
+	"seed-ci": {
+		Func: seedci.SeedCI,
+		Help: "Regenerate data/seed-ci.json from db/schema.sql [--check to fail if it's out of date instead of writing]",
 	},
 }
 

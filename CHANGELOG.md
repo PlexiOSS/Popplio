@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-27
+
 ### Added
 
+- `kitehelper seed-ci` regenerates `data/seed-ci.json` from
+  `db/schema.sql`. Existing entries are kept as they are, new columns and
+  tables are added and dropped columns removed, and it prints each change.
+  `kitehelper seed-ci --check` fails without writing when the snapshot is
+  out of date. The Kitescratch workflow runs it before the tests, so a
+  migration without a snapshot update fails with a clear message. Run
+  `kitehelper seed-ci` after adding a migration.
 - A `DeleteReview` Arcadia RPC method for bots, servers and teams, gated
   by a new `delete_reviews` staff permission. It takes the review's ID or
   a pasted link to it, checks the review belongs to that listing, deletes
@@ -40,7 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   starting or ending with a dash. Omniplex's upload route and pack pages
   already accepted dashed URLs, so a pack's items could be uploaded under
   a URL that creating the pack then refused.
-
 - Premium bought only with credits costs more, since credits now
   discount paid premium: Premium (Bronze) costs 600 credits instead of
   99, and Bonus Premium (+7 days) 150 instead of 25.
@@ -49,7 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sent when they connect to Discord. Infernoplex and Arcadia set a custom
   status after connecting instead, which Discord could drop and which
   wasn't sent again after a reconnect, so their status came and went.
-
 - Servers can buy the same shop items as bots: Featured Homepage Slot,
   Bonus Premium, Priority Boost, Supporter Badge and Vote Blitz. Every
   one already worked for servers, but the items and three benefits were

@@ -37,6 +37,7 @@ jobs:
         run: |
           cd cmd/kitehelper
           go build -v 
+          ./kitehelper seed-ci --check
           ./kitehelper test
       
       - uses: stefanzweifel/git-auto-commit-action@v4
