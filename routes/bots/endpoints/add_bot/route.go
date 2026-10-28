@@ -166,7 +166,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		state.Logger.Error("Error while getting word blacklist systems", zap.Error(err), zap.String("userID", d.Auth.ID))
-		return resp.BadRequest("Error while getting word blacklist systems: " + err.Error())
+		return resp.Err("Error while getting word blacklist systems", err)
 	}
 
 	if slices.Contains(systems, "vanity.code") {
@@ -222,7 +222,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		})
 
 		if err != nil {
-			return resp.BadRequest("Error while creating vanity: " + err.Error())
+			return resp.Err("Error while creating vanity", err)
 		}
 
 		err = txq.InsertTeamForAddBot(d.Context, db.InsertTeamForAddBotParams{
@@ -232,7 +232,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		})
 
 		if err != nil {
-			return resp.BadRequest("Error while creating vanity: " + err.Error())
+			return resp.Err("Error while creating vanity", err)
 		}
 
 		// Add the team member to the team as well
@@ -243,7 +243,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		})
 
 		if err != nil {
-			return resp.BadRequest("Error while adding team member: " + err.Error())
+			return resp.Err("Error while adding team member", err)
 		}
 
 		payload.TeamOwner = teamId.String()

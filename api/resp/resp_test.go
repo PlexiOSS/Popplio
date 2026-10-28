@@ -3,6 +3,7 @@
 package resp
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"popplio/state"
 	"popplio/types"
 
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -244,4 +246,51 @@ func TestSuccessHelpers(t *testing.T) {
 			t.Errorf("Json = %#v, want nil", res.Json)
 		}
 	})
+}
+
+func TestStatusWithholdsDriverErrors(t *testing.T) {
+	logs := setup(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := pgx.Connect(ctx, "postgres://popplio_user@127.0.0.1:1/popplio_db?sslmode=disable")
+
+	if err == nil {
+		t.Skip("expected the connection to fail")
+	}
+
+	res := BadRequest("Error while creating vanity: " + err.Error())
+
+	if res.Status != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d for %q", res.Status, http.StatusInternalServerError, err.Error())
+	}
+
+	if got := apiErrorMessage(t, res); got != genericErrorMessage {
+		t.Errorf("body message = %q, want the generic message", got)
+	}
+
+	if n := len(logs.All()); n != 1 {
+		t.Errorf("logged %d entries, want 1 with the withheld message", n)
+	}
+}
+
+func TestStatusKeepsOrdinaryMessages(t *testing.T) {
+	setup(t)
+
+	for _, message := range []string{
+		"Invalid team ID: invalid UUID length: 3",
+		"You can only pin a bot or server you own or manage",
+		"Captcha verification failed: token expired",
+	} {
+		res := BadRequest(message)
+
+		if res.Status != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d for %q", res.Status, http.StatusBadRequest, message)
+		}
+
+		if got := apiErrorMessage(t, res); got != message {
+			t.Errorf("body message = %q, want %q", got, message)
+		}
+	}
 }

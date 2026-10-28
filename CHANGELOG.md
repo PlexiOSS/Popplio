@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-10-27
+
 ### Added
 
 - A `Publish Docker Image` workflow builds the `Dockerfile` and pushes it
@@ -17,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Security (GHSA-rjqh-3qgq-9fch): some endpoints still put raw database
+  errors in their response, so when the database was unreachable the
+  driver's message (including the database user, database name, host and
+  socket path) could reach the client. The word-blacklist lookups when
+  adding a bot, server or pack or changing a vanity, the vanity, team and
+  team-member inserts when adding a bot or server, the server checks
+  when adding or editing a pack, and the staff permission lookups now
+  log the error and return a generic message. As a safety net, any error
+  response whose message still looks like a database or network driver
+  error is replaced with a generic 500 and the original is logged.
 - `APPLY_MIGRATIONS=true` and `migrate up` / `migrate status` read the
   SQL files from `db/migrations` on disk, so they failed anywhere the
   source tree isn't present, including the Docker image. They now use

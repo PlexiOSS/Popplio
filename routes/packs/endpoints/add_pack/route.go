@@ -114,7 +114,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		state.Logger.Error("Error while getting word blacklist systems", zap.Error(err), zap.String("userID", d.Auth.ID))
-		return resp.BadRequest("Error while getting word blacklist systems: " + err.Error())
+		return resp.Err("Error while getting word blacklist systems", err)
 	}
 
 	if slices.Contains(systems, "pack.url") {
@@ -139,7 +139,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		count, err := q.CountServerByID(d.Context, server)
 
 		if err != nil {
-			return resp.ErrBody("Error checking if server exists:", "Error checking if server exists: "+err.Error(), err)
+			return resp.ErrBody("Error checking if server exists", "Couldn't check that server. Please try again later.", err)
 		}
 
 		if count == 0 {

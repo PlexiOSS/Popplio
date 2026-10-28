@@ -71,7 +71,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	staffPerms, err := perms.StaffPerms(d.Context, d.Auth.ID)
 
 	if err != nil {
-		return resp.Status(http.StatusFailedDependency, err.Error())
+		return resp.Err("Error while loading staff permissions", err)
 	}
 
 	// Check if the user has the permission to view apps

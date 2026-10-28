@@ -4,6 +4,7 @@ package resp
 
 import (
 	"net/http"
+	"strings"
 
 	"popplio/state"
 	"popplio/types"
@@ -29,7 +30,44 @@ func ErrBody(reason, message string, err error, fields ...zap.Field) uapi.HttpRe
 	return Status(http.StatusInternalServerError, message)
 }
 
+var internalErrorMarkers = []string{
+	"sqlstate",
+	"failed to connect to",
+	"dial unix",
+	"dial tcp",
+	".s.pgsql",
+	"pgconn",
+	"pgx:",
+	"connection refused",
+	"connection reset",
+	"broken pipe",
+	"i/o timeout",
+	"no such host",
+	"conn closed",
+	"redis:",
+}
+
+func leaksInternals(message string) bool {
+	lower := strings.ToLower(message)
+
+	for _, marker := range internalErrorMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+const genericErrorMessage = "Something went wrong on our end. Please try again later."
+
 func Status(status int, message string) uapi.HttpResponse {
+	if status >= 400 && leaksInternals(message) {
+		state.Logger.Error("Withheld an internal error from an API response", zap.Int("status", status), zap.String("message", message))
+		status = http.StatusInternalServerError
+		message = genericErrorMessage
+	}
+
 	return uapi.HttpResponse{
 		Status: status,
 		Json:   types.ApiError{Message: message},

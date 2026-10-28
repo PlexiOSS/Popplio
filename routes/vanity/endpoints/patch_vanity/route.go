@@ -100,7 +100,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		state.Logger.Error("Error while getting word blacklist systems", zap.Error(err), zap.String("userID", d.Auth.ID))
-		return resp.BadRequest("Error while getting word blacklist systems: " + err.Error())
+		return resp.Err("Error while getting word blacklist systems", err)
 	}
 
 	if slices.Contains(systems, "vanity.code") {

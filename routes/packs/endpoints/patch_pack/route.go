@@ -135,7 +135,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		serverCount, err := q.CountServerByID(d.Context, server)
 
 		if err != nil {
-			return resp.ErrBody("Error checking if server exists:", "Error checking if server exists: "+err.Error(), err)
+			return resp.ErrBody("Error checking if server exists", "Couldn't check that server. Please try again later.", err)
 		}
 
 		if serverCount == 0 {
