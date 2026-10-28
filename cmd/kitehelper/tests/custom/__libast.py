@@ -112,6 +112,11 @@ def parse_file_structs(lines: list[str]) -> dict[str, Struct] | None:
 
         if curr_struct is not None:
             line_split = list(filter(lambda x: x, line.replace("\t", "").split(" ")))
+
+            if len(line_split) < 2:
+                debug("Skipping embedded field", line_split)
+                continue
+
             sf = StructField(
                 name=line_split[0].strip().strip("\t"),
                 type=line_split[1].strip().strip("\t"),

@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.15.0] - 2026-10-27
-
 ### Added
 
 - A `Publish Docker Image` workflow builds the `Dockerfile` and pushes it
@@ -16,13 +14,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version, the major.minor and `latest`) or when run by hand (tagged with
   the commit). The image includes Arcadia and Infernoplex, since they run
   inside Popplio.
+
+### Fixed
+
+- `APPLY_MIGRATIONS=true` and `migrate up` / `migrate status` read the
+  SQL files from `db/migrations` on disk, so they failed anywhere the
+  source tree isn't present, including the Docker image. They now use
+  the copy compiled into the binary, the same one startup already uses.
+  Startup applies pending migrations by default unless
+  `skip_auto_migrate` is set, so `APPLY_MIGRATIONS` isn't needed for a
+  normal deploy. `migrate create` still writes new files to
+  `db/migrations`.
+- The Kitescratch and Go Build & Vet workflows set Go up from
+  `cmd/kitehelper/go.mod` (Go 1.21), so every run downloaded the
+  Go 1.25 toolchain the workspace needs on the fly, and the extra Go
+  cache action then failed restoring it over read-only files ("Cannot
+  open: File exists"). Both now set Go up from `go.work` with
+  `actions/setup-go`'s own cache, and the test workflow's actions are
+  updated.
+- The Kitescratch field check crashed on structs that embed another
+  struct (such as `PublicBadge`, which embeds `BadgeCatalog`), because its
+  Go struct parser expected every field line to have a name and a type.
+  It now skips embedded fields, which have no database columns to check.
+
+## [1.15.0] - 2026-10-27
+
+### Added
+
 - A `Dockerfile` that builds Popplio as a static binary on
   `golang:1.25.5-trixie` and runs it on `distroless/static` as a non-root
   user, exposing 8081 (API), 3010 (Arcadia) and 3012 (Infernoplex). Mount
-  your config at `/app/config.yaml`, the only file Popplio reads from
-  disk. Migrations are compiled into the binary and apply on start
-  unless `skip_auto_migrate` is set. The image also includes
-  `/app/migrate`. `.dockerignore` keeps `config.yaml` and `*.config.yaml` out of
+  your config at `/app/config.yaml`. The image also includes
+  `/app/migrate`, and `APPLY_MIGRATIONS=true` still applies migrations on
+  start. `.dockerignore` keeps `config.yaml` and `*.config.yaml` out of
   the build context.
 - Auto-vote, a $2.99/month Stripe subscription that casts votes for a
   user automatically:
@@ -88,18 +112,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `APPLY_MIGRATIONS=true` and `migrate up` / `migrate status` read the
-  SQL files from `db/migrations` on disk, so they failed anywhere the
-  source tree isn't present, including the Docker image. They now use
-  the copy compiled into the binary, the same one startup already uses.
-  `migrate create` still writes new files to `db/migrations`.
-- The Kitescratch and Go Build & Vet workflows set Go up from
-  `cmd/kitehelper/go.mod` (Go 1.21), so every run downloaded the
-  Go 1.25 toolchain the workspace needs on the fly, and the extra Go
-  cache action then failed restoring it over read-only files ("Cannot
-  open: File exists"). Both now set Go up from `go.work` with
-  `actions/setup-go`'s own cache, and the test workflow's actions are
-  updated.
 - The Top Voted, Certified and Premium sections of the bot and server
   index broke ties in an arbitrary order, so after the monthly reset left
   everything on 0 votes they kept showing last month's leaders. Ties now
