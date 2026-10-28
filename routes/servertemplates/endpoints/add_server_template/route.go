@@ -20,7 +20,7 @@ import (
 var compiledMessages = uapi.CompileValidationErrors(CreateServerTemplate{})
 
 type CreateServerTemplate struct {
-	Code  string   `json:"code" validate:"required,min=2,max=32,notblank" msg:"Template code is required"`
+	Code  string   `json:"code" validate:"required,min=2,max=32,alphanum" msg:"Template code is required and can only contain letters and numbers"`
 	Short string   `json:"short" validate:"required,min=10,max=150,noxss" msg:"Description must be between 10 and 150 characters"`
 	Tags  []string `json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
 	NSFW  bool     `json:"nsfw"`

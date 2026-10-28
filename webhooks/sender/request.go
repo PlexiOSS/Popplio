@@ -12,14 +12,13 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
-	"errors"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
-	"slices"
 	"time"
 
+	"popplio/netguard"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -29,9 +28,7 @@ import (
 
 const dnsTimeout = 5 * time.Second
 
-var webhookClient = &http.Client{
-	Timeout: 30 * time.Second,
-}
+var webhookClient = netguard.NewClient(30 * time.Second)
 
 type Secret struct {
 	Raw string
@@ -67,9 +64,11 @@ func (st *webhookSendState) resolveTarget(webhookURL string) error {
 
 	state.Logger.Info("Resolved webhook IP", st.logFields(zap.Strings("resolvedIp", st.ResolvedIps))...)
 
-	if slices.Contains(st.ResolvedIps, "127.0.0.1") {
-		st.cancelSend("LOCALHOST_URL")
-		return errors.New("localhost url")
+	for _, ip := range st.ResolvedIps {
+		if parsed := net.ParseIP(ip); parsed == nil || !netguard.IsPublic(parsed) {
+			st.cancelSend("PRIVATE_ADDRESS")
+			return netguard.ErrBlockedAddress
+		}
 	}
 
 	return nil

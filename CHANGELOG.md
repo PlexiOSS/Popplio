@@ -7,12 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-10-27
+
+### Fixed
+
+- Security: webhooks could be pointed at internal addresses. Only
+  `127.0.0.1` was blocked, so other loopback addresses, `0.0.0.0`, private
+  networks (including `100.64.0.0/10`) and the cloud metadata address
+  `169.254.169.254` were reachable, and a public hostname could redirect
+  or re-resolve to an internal one. Because Delivery Logs show the first
+  1 KB and headers of each response, a webhook owner could read replies
+  from internal services. Webhooks now go through a new `netguard`
+  client that checks every address at connect time and refuses anything
+  that isn't a public internet address, and they no longer follow
+  redirects.
+- Security: server template codes weren't restricted, so a code like
+  `../../guilds/<id>` made Popplio request other Discord API paths through
+  its authenticated proxy. Codes must now be letters and digits only.
+
 ## [1.15.1] - 2026-10-27
 
 ### Added
 
 - A `Publish Docker Image` workflow builds the `Dockerfile` and pushes it
-  to `ghcr.io/infinitybotlist/popplio` on every `v*` tag (tagged with the
+  to `ghcr.io/plexioss/popplio` on every `v*` tag (tagged with the
   version, the major.minor and `latest`) or when run by hand (tagged with
   the commit). The image includes Arcadia and Infernoplex, since they run
   inside Popplio.
