@@ -24,3 +24,15 @@ type EntityBadge struct {
 type EntityBadgeList struct {
 	Badges []EntityBadge `json:"badges"`
 }
+
+type PublicBadge struct {
+	BadgeCatalog
+	Automatic  bool   `json:"automatic" description:"Whether the badge is awarded and removed automatically by a rule"`
+	HowToEarn  string `json:"how_to_earn" description:"A plain-English description of how to earn the badge"`
+	LinkedRole bool   `json:"linked_role" description:"Whether the badge is also available as a Discord linked role"`
+	Holders    int    `json:"holders" description:"How many users, bots, servers and teams currently hold the badge"`
+}
+
+type PublicBadgeList struct {
+	Badges []PublicBadge `json:"badges"`
+}

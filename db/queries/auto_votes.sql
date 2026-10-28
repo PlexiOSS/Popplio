@@ -29,7 +29,7 @@ INSERT INTO auto_vote_targets (user_id, target_type, target_id, days, start_minu
 VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: ListDueAutoVoteTargets :many
-SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at
+SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at, t.last_skip_reason
 FROM auto_vote_targets t
 INNER JOIN auto_vote_subscriptions s ON s.user_id = t.user_id
 WHERE s.status IN ('active', 'trialing') AND (s.current_period_end IS NULL OR s.current_period_end > NOW());

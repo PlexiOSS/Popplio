@@ -295,7 +295,7 @@ func (q *Queries) DenyServer(ctx context.Context, serverID string) error {
 
 const getCertifiedIndexServers = `-- name: GetCertifiedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_votes DESC LIMIT 9
+FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_votes DESC, total_members DESC, server_id LIMIT 9
 `
 
 type GetCertifiedIndexServersRow struct {
@@ -798,7 +798,7 @@ func (q *Queries) GetMostViewedIndexServers(ctx context.Context) ([]GetMostViewe
 
 const getPremiumIndexServers = `-- name: GetPremiumIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9
+FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC, total_members DESC, server_id LIMIT 9
 `
 
 type GetPremiumIndexServersRow struct {
@@ -1001,7 +1001,7 @@ func (q *Queries) GetRecentlyAddedIndexServers(ctx context.Context) ([]GetRecent
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color
 FROM servers
 WHERE server_id = $1
 `
@@ -1049,6 +1049,9 @@ type GetServerByIDRow struct {
 	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
 	BoostCount             int32              `db:"boost_count" json:"boost_count"`
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
+	CardTheme              bool               `db:"card_theme" json:"card_theme"`
+	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
 }
 
 func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServerByIDRow, error) {
@@ -1097,6 +1100,9 @@ func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServer
 		&i.PremiumTier,
 		&i.BoostCount,
 		&i.AutoVotesOptOut,
+		&i.HighlightedUntil,
+		&i.CardTheme,
+		&i.CardColor,
 	)
 	return i, err
 }
@@ -1187,12 +1193,13 @@ func (q *Queries) GetServerEmojiPreviews(ctx context.Context, arg GetServerEmoji
 }
 
 const getServerIDsAndStatsSelfManaged = `-- name: GetServerIDsAndStatsSelfManaged :many
-SELECT server_id, stats_self_managed FROM servers
+SELECT server_id, stats_self_managed, invite FROM servers
 `
 
 type GetServerIDsAndStatsSelfManagedRow struct {
 	ServerID         string `db:"server_id" json:"server_id"`
 	StatsSelfManaged bool   `db:"stats_self_managed" json:"stats_self_managed"`
+	Invite           string `db:"invite" json:"invite"`
 }
 
 func (q *Queries) GetServerIDsAndStatsSelfManaged(ctx context.Context) ([]GetServerIDsAndStatsSelfManagedRow, error) {
@@ -1204,7 +1211,7 @@ func (q *Queries) GetServerIDsAndStatsSelfManaged(ctx context.Context) ([]GetSer
 	var items []GetServerIDsAndStatsSelfManagedRow
 	for rows.Next() {
 		var i GetServerIDsAndStatsSelfManagedRow
-		if err := rows.Scan(&i.ServerID, &i.StatsSelfManaged); err != nil {
+		if err := rows.Scan(&i.ServerID, &i.StatsSelfManaged, &i.Invite); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1588,7 +1595,7 @@ func (q *Queries) GetSpotlightIndexServers(ctx context.Context) ([]GetSpotlightI
 
 const getTopVotedIndexServers = `-- name: GetTopVotedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9
+FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC, total_members DESC, server_id LIMIT 9
 `
 
 type GetTopVotedIndexServersRow struct {
@@ -2025,6 +2032,20 @@ func (q *Queries) SetServerVoteBanned(ctx context.Context, arg SetServerVoteBann
 	return err
 }
 
+const syncServerTotalMembers = `-- name: SyncServerTotalMembers :exec
+UPDATE servers SET total_members = $2 WHERE server_id = $1 AND stats_self_managed = false
+`
+
+type SyncServerTotalMembersParams struct {
+	ServerID     string `db:"server_id" json:"server_id"`
+	TotalMembers int32  `db:"total_members" json:"total_members"`
+}
+
+func (q *Queries) SyncServerTotalMembers(ctx context.Context, arg SyncServerTotalMembersParams) error {
+	_, err := q.db.Exec(ctx, syncServerTotalMembers, arg.ServerID, arg.TotalMembers)
+	return err
+}
+
 const uncertifyServer = `-- name: UncertifyServer :exec
 UPDATE servers SET type = 'approved' WHERE server_id = $1
 `
@@ -2162,6 +2183,21 @@ UPDATE servers SET invite_clicks = invite_clicks + 1 WHERE server_id = $1
 
 func (q *Queries) UpdateServerInviteClicks(ctx context.Context, serverID string) error {
 	_, err := q.db.Exec(ctx, updateServerInviteClicks, serverID)
+	return err
+}
+
+const updateServerMemberCounts = `-- name: UpdateServerMemberCounts :exec
+UPDATE servers SET total_members = $1::integer, online_members = $2::integer WHERE server_id = $3::text AND stats_self_managed = false
+`
+
+type UpdateServerMemberCountsParams struct {
+	TotalMembers  int32  `db:"total_members" json:"total_members"`
+	OnlineMembers int32  `db:"online_members" json:"online_members"`
+	ServerID      string `db:"server_id" json:"server_id"`
+}
+
+func (q *Queries) UpdateServerMemberCounts(ctx context.Context, arg UpdateServerMemberCountsParams) error {
+	_, err := q.db.Exec(ctx, updateServerMemberCounts, arg.TotalMembers, arg.OnlineMembers, arg.ServerID)
 	return err
 }
 

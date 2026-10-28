@@ -3,6 +3,7 @@ package patch_server_settings
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 
 	"popplio/api/resp"
@@ -95,6 +96,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if payload.AutoVotesOptOut != nil {
 		if err := q.SetServerAutoVotesOptOut(d.Context, db.SetServerAutoVotesOptOutParams{ServerID: id, AutoVotesOptOut: *payload.AutoVotesOptOut}); err != nil {
 			return resp.Err("Failed to update auto-vote setting", err, zap.String("serverID", id))
+		}
+	}
+
+	if payload.CardColor != nil {
+		if err := q.SetServerCardColor(d.Context, db.SetServerCardColorParams{ServerID: id, CardColor: pgtype.Text{String: *payload.CardColor, Valid: *payload.CardColor != ""}}); err != nil {
+			return resp.Err("Failed to update card colour", err, zap.String("userID", d.Auth.ID), zap.String("serverID", id))
 		}
 	}
 

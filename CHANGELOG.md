@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-27
+
 ### Added
 
+- A `Dockerfile` that builds Popplio as a static binary on
+  `golang:1.25.5-trixie` and runs it on `distroless/static` as a non-root
+  user, exposing 8081 (API), 3010 (Arcadia) and 3012 (Infernoplex). Mount
+  your config at `/app/config.yaml`. The image also includes
+  `/app/migrate`, and `APPLY_MIGRATIONS=true` still applies migrations on
+  start. `.dockerignore` keeps `config.yaml` and `*.config.yaml` out of
+  the build context.
 - Auto-vote, a $2.99/month Stripe subscription that casts votes for a
   user automatically:
   - `GET /users/{id}/auto-vote` returns the subscription and targets,
@@ -27,6 +36,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bots and servers have `auto_votes_opt_out`, settable through the
     settings update endpoints.
   - `NEW_VOTE` webhooks and entity votes carry an `auto` flag.
+  - `GET /bots/{id}` and `GET /servers/{id}` return `auto_votes`, how
+    many of this month's upvotes came from Auto-vote.
+  - A subscriber gets a votes notification when one of their listings is
+    skipped, once per new skip reason, linking to the Auto-vote tab.
+
+- Shop items and benefits for bots and servers, added by the
+  `20261027160000_card_cosmetics` migration:
+  - `highlight` (Highlighted Card, 7 days, 80 credits) sets
+    `highlighted_until`.
+  - `spotlight_slot` (Spotlight, 24 hours, 200 credits) extends
+    `spotlighted_until`, the same field staff spotlights use.
+  - `card_theme` (Card Theme, permanent, 120 credits) unlocks
+    `card_color`, which owners set through the settings update endpoints
+    as `#rrggbb`, or an empty string to clear it.
+  - `launch-bundle-48h` (260 credits) applies Featured, Priority Boost
+    and Vote Blitz for 48 hours.
+  - Bot and server cards include `highlighted` and `card_color`, and the
+    detail responses include `highlighted_until` and `card_theme`.
+
+- `PATCH /users/{id}` accepts `pinned_listing` (`target_type` and
+  `target_id`) to pin a bot or server the user owns or manages, or an
+  empty `target_id` to unpin. `GET /users/{id}` returns
+  `pinned_target_type` and `pinned_target_id`. Added by the
+  `20261027170000_profile_pinned_listing` migration.
+
+- `GET /badges` lists the badge catalog publicly, with `how_to_earn`
+  (a plain-English sentence generated from the badge's automatic rule, or
+  "Awarded by Omniplex staff."), `automatic`, `linked_role` and
+  `holders`.
+
+- The bot, server and team SEO endpoints return `vanity` when the
+  entity has one.
 
 ### Changed
 
@@ -38,6 +79,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration `20261027150000_auto_voting` adds `entity_votes.auto`,
   `bots.auto_votes_opt_out`, `servers.auto_votes_opt_out`, and the
   `auto_vote_subscriptions` and `auto_vote_targets` tables.
+
+### Fixed
+
+- The Top Voted, Certified and Premium sections of the bot and server
+  index broke ties in an arbitrary order, so after the monthly reset left
+  everything on 0 votes they kept showing last month's leaders. Ties now
+  go to the bot with more servers or the server with more members, then
+  by ID, so the order is stable.
+- Clearing your bio didn't save: an empty `about` was skipped instead of
+  stored. It's now cleared.
+- Infernoplex kept stale member counts for servers it isn't in, since
+  its 30-minute sync gave up when Discord refused the guild lookup. It
+  now falls back to the server's own invite (`with_counts`), which
+  returns approximate member and online counts without being in the
+  server or holding any privileged intent. The invite is only used if it
+  points at the same server.
+- Infernoplex records a server's exact member count from the
+  `GUILD_CREATE` it receives on startup and when it joins a server. This
+  comes with the non-privileged Guilds intent it already uses, so counts
+  are right straight away instead of waiting for the next sync.
+- The server sync checks four servers at a time instead of one by one,
+  so a large list finishes well inside its 30-minute window. Servers
+  that post their own stats are still left alone.
+- Most bots showed as offline and lost uptime because the presence sync
+  couldn't keep up with the list. It asked japi.rest about 100 bots per
+  5-minute run, and the answers expired after 15 minutes, so at most
+  about 300 bots had a status at any time. It now asks about 200 per run
+  and keeps answers for 45 minutes.
+- The uptime check counted a bot as offline whenever it had no presence
+  data at all, and ignored the self-reported status and recent stats
+  posts that bot pages already use. It now uses the same sources as the
+  status dot: a self-reported status from a stats post in the last 24
+  hours, the main server's gateway, japi.rest, then a recent stats post
+  with a server count. When none of them knows, the check is skipped
+  instead of counting against the bot.
 
 ## [1.14.0] - 2026-10-27
 

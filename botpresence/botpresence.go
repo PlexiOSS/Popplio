@@ -15,7 +15,7 @@ import (
 const (
 	keyPrefix  = "botpresence:"
 	unknown    = "unknown"
-	FreshTTL   = 15 * time.Minute
+	FreshTTL   = 45 * time.Minute
 	UnknownTTL = time.Hour
 )
 

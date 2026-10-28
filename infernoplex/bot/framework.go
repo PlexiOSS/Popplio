@@ -160,6 +160,8 @@ func Listener(ctx context.Context) bot.EventListener {
 
 	return &events.ListenerAdapter{
 		OnReady:                         func(e *events.Ready) { onReady(ctx, e) },
+		OnGuildReady:                    func(e *events.GuildReady) { onGuildMemberCount(ctx, e.Guild) },
+		OnGuildJoin:                     func(e *events.GuildJoin) { onGuildMemberCount(ctx, e.Guild) },
 		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, e) },
 		OnComponentInteraction:          func(e *events.ComponentInteractionCreate) { onComponent(ctx, e) },
 		OnModalSubmit:                   func(e *events.ModalSubmitInteractionCreate) { onModalSubmit(ctx, e) },

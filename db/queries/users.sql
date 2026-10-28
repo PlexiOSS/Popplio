@@ -26,7 +26,7 @@ UPDATE users SET app_banned = $2 WHERE user_id = $1;
 UPDATE users SET banned = $2 WHERE user_id = $1;
 
 -- name: GetUserByID :one
-SELECT itag, user_id, experiments, certified, developer, bug_hunters, captcha_sponsor_enabled, extra_links, about, vote_banned, banned, created_at, updated_at, last_booster_claim
+SELECT itag, user_id, experiments, certified, developer, bug_hunters, captcha_sponsor_enabled, extra_links, about, vote_banned, banned, created_at, updated_at, last_booster_claim, pinned_target_type, pinned_target_id
 FROM users
 WHERE user_id = $1;
 
@@ -60,3 +60,6 @@ FROM users
 INNER JOIN internal_user_cache__discord discord_users ON users.user_id = discord_users.id
 WHERE users.user_id = sqlc.arg('query')::text OR discord_users.username ILIKE sqlc.arg('pattern')::text
 ORDER BY users.created_at;
+
+-- name: SetUserPinnedListing :exec
+UPDATE users SET pinned_target_type = sqlc.narg('target_type'), pinned_target_id = sqlc.narg('target_id') WHERE user_id = sqlc.arg('user_id');

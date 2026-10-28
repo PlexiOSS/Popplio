@@ -218,6 +218,9 @@ type Bot struct {
 	ModerationCheckedAt  pgtype.Timestamptz `db:"moderation_checked_at" json:"moderation_checked_at"`
 	SpotlightedUntil     pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
 	AutoVotesOptOut      bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HighlightedUntil     pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
+	CardTheme            bool               `db:"card_theme" json:"card_theme"`
+	CardColor            pgtype.Text        `db:"card_color" json:"card_color"`
 }
 
 type BotChangelog struct {
@@ -518,6 +521,9 @@ type Server struct {
 	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
 	BoostCount             int32              `db:"boost_count" json:"boost_count"`
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
+	CardTheme              bool               `db:"card_theme" json:"card_theme"`
+	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
 }
 
 type ServerTemplate struct {
@@ -790,6 +796,8 @@ type User struct {
 	UpdatedAt             pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	LastBoosterClaim      pgtype.Timestamptz `db:"last_booster_claim" json:"last_booster_claim"`
 	AppBanned             bool               `db:"app_banned" json:"app_banned"`
+	PinnedTargetType      pgtype.Text        `db:"pinned_target_type" json:"pinned_target_type"`
+	PinnedTargetID        pgtype.Text        `db:"pinned_target_id" json:"pinned_target_id"`
 }
 
 type UserNotification struct {

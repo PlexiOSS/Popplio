@@ -11,6 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyBotCardTheme = `-- name: ApplyBotCardTheme :exec
+UPDATE bots SET card_theme = true WHERE bot_id = $1
+`
+
+func (q *Queries) ApplyBotCardTheme(ctx context.Context, botID string) error {
+	_, err := q.db.Exec(ctx, applyBotCardTheme, botID)
+	return err
+}
+
 const applyBotFeaturedSlot = `-- name: ApplyBotFeaturedSlot :exec
 UPDATE bots SET featured_until = GREATEST(COALESCE(featured_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2
 `
@@ -22,6 +31,20 @@ type ApplyBotFeaturedSlotParams struct {
 
 func (q *Queries) ApplyBotFeaturedSlot(ctx context.Context, arg ApplyBotFeaturedSlotParams) error {
 	_, err := q.db.Exec(ctx, applyBotFeaturedSlot, arg.Hours, arg.BotID)
+	return err
+}
+
+const applyBotHighlight = `-- name: ApplyBotHighlight :exec
+UPDATE bots SET highlighted_until = GREATEST(COALESCE(highlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2
+`
+
+type ApplyBotHighlightParams struct {
+	Hours int32  `db:"hours" json:"hours"`
+	BotID string `db:"bot_id" json:"bot_id"`
+}
+
+func (q *Queries) ApplyBotHighlight(ctx context.Context, arg ApplyBotHighlightParams) error {
+	_, err := q.db.Exec(ctx, applyBotHighlight, arg.Hours, arg.BotID)
 	return err
 }
 
@@ -57,6 +80,20 @@ func (q *Queries) ApplyBotPriorityBoost(ctx context.Context, arg ApplyBotPriorit
 	return err
 }
 
+const applyBotSpotlightSlot = `-- name: ApplyBotSpotlightSlot :exec
+UPDATE bots SET spotlighted_until = GREATEST(COALESCE(spotlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2
+`
+
+type ApplyBotSpotlightSlotParams struct {
+	Hours int32  `db:"hours" json:"hours"`
+	BotID string `db:"bot_id" json:"bot_id"`
+}
+
+func (q *Queries) ApplyBotSpotlightSlot(ctx context.Context, arg ApplyBotSpotlightSlotParams) error {
+	_, err := q.db.Exec(ctx, applyBotSpotlightSlot, arg.Hours, arg.BotID)
+	return err
+}
+
 const applyBotSupporterBadge = `-- name: ApplyBotSupporterBadge :exec
 UPDATE bots SET supporter_badge = true WHERE bot_id = $1
 `
@@ -80,6 +117,15 @@ func (q *Queries) ApplyBotVoteBlitz(ctx context.Context, arg ApplyBotVoteBlitzPa
 	return err
 }
 
+const applyServerCardTheme = `-- name: ApplyServerCardTheme :exec
+UPDATE servers SET card_theme = true WHERE server_id = $1
+`
+
+func (q *Queries) ApplyServerCardTheme(ctx context.Context, serverID string) error {
+	_, err := q.db.Exec(ctx, applyServerCardTheme, serverID)
+	return err
+}
+
 const applyServerFeaturedSlot = `-- name: ApplyServerFeaturedSlot :exec
 UPDATE servers SET featured_until = GREATEST(COALESCE(featured_until, NOW()), NOW()) + make_interval(hours => $1) WHERE server_id = $2
 `
@@ -91,6 +137,20 @@ type ApplyServerFeaturedSlotParams struct {
 
 func (q *Queries) ApplyServerFeaturedSlot(ctx context.Context, arg ApplyServerFeaturedSlotParams) error {
 	_, err := q.db.Exec(ctx, applyServerFeaturedSlot, arg.Hours, arg.ServerID)
+	return err
+}
+
+const applyServerHighlight = `-- name: ApplyServerHighlight :exec
+UPDATE servers SET highlighted_until = GREATEST(COALESCE(highlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE server_id = $2
+`
+
+type ApplyServerHighlightParams struct {
+	Hours    int32  `db:"hours" json:"hours"`
+	ServerID string `db:"server_id" json:"server_id"`
+}
+
+func (q *Queries) ApplyServerHighlight(ctx context.Context, arg ApplyServerHighlightParams) error {
+	_, err := q.db.Exec(ctx, applyServerHighlight, arg.Hours, arg.ServerID)
 	return err
 }
 
@@ -119,6 +179,20 @@ type ApplyServerPriorityBoostParams struct {
 
 func (q *Queries) ApplyServerPriorityBoost(ctx context.Context, arg ApplyServerPriorityBoostParams) error {
 	_, err := q.db.Exec(ctx, applyServerPriorityBoost, arg.Hours, arg.ServerID)
+	return err
+}
+
+const applyServerSpotlightSlot = `-- name: ApplyServerSpotlightSlot :exec
+UPDATE servers SET spotlighted_until = GREATEST(COALESCE(spotlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE server_id = $2
+`
+
+type ApplyServerSpotlightSlotParams struct {
+	Hours    int32  `db:"hours" json:"hours"`
+	ServerID string `db:"server_id" json:"server_id"`
+}
+
+func (q *Queries) ApplyServerSpotlightSlot(ctx context.Context, arg ApplyServerSpotlightSlotParams) error {
+	_, err := q.db.Exec(ctx, applyServerSpotlightSlot, arg.Hours, arg.ServerID)
 	return err
 }
 
@@ -284,6 +358,37 @@ func (q *Queries) DeleteVoteCreditTier(ctx context.Context, id string) error {
 	return err
 }
 
+const getBotCardCosmetics = `-- name: GetBotCardCosmetics :many
+SELECT bot_id, (highlighted_until IS NOT NULL AND highlighted_until > NOW())::boolean AS highlighted, COALESCE(CASE WHEN card_theme THEN card_color END, '')::text AS card_color
+FROM bots WHERE bot_id = ANY($1::text[])
+`
+
+type GetBotCardCosmeticsRow struct {
+	BotID       string `db:"bot_id" json:"bot_id"`
+	Highlighted bool   `db:"highlighted" json:"highlighted"`
+	CardColor   string `db:"card_color" json:"card_color"`
+}
+
+func (q *Queries) GetBotCardCosmetics(ctx context.Context, ids []string) ([]GetBotCardCosmeticsRow, error) {
+	rows, err := q.db.Query(ctx, getBotCardCosmetics, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBotCardCosmeticsRow
+	for rows.Next() {
+		var i GetBotCardCosmeticsRow
+		if err := rows.Scan(&i.BotID, &i.Highlighted, &i.CardColor); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLastShopCouponRedemptionForTarget = `-- name: GetLastShopCouponRedemptionForTarget :one
 SELECT created_at FROM shop_coupon_redemptions
 WHERE coupon_id = $1 AND target_type = $2 AND target_id = $3
@@ -378,6 +483,37 @@ func (q *Queries) GetRedeemableCreditBatches(ctx context.Context, arg GetRedeema
 	for rows.Next() {
 		var i GetRedeemableCreditBatchesRow
 		if err := rows.Scan(&i.ID, &i.Credits, &i.RedeemedCredits); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getServerCardCosmetics = `-- name: GetServerCardCosmetics :many
+SELECT server_id, (highlighted_until IS NOT NULL AND highlighted_until > NOW())::boolean AS highlighted, COALESCE(CASE WHEN card_theme THEN card_color END, '')::text AS card_color
+FROM servers WHERE server_id = ANY($1::text[])
+`
+
+type GetServerCardCosmeticsRow struct {
+	ServerID    string `db:"server_id" json:"server_id"`
+	Highlighted bool   `db:"highlighted" json:"highlighted"`
+	CardColor   string `db:"card_color" json:"card_color"`
+}
+
+func (q *Queries) GetServerCardCosmetics(ctx context.Context, ids []string) ([]GetServerCardCosmeticsRow, error) {
+	rows, err := q.db.Query(ctx, getServerCardCosmetics, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetServerCardCosmeticsRow
+	for rows.Next() {
+		var i GetServerCardCosmeticsRow
+		if err := rows.Scan(&i.ServerID, &i.Highlighted, &i.CardColor); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -884,6 +1020,34 @@ SELECT pg_advisory_xact_lock(hashtext($1::text))
 // max_uses is a global-across-targets limit.
 func (q *Queries) LockShopCoupon(ctx context.Context, couponID string) error {
 	_, err := q.db.Exec(ctx, lockShopCoupon, couponID)
+	return err
+}
+
+const setBotCardColor = `-- name: SetBotCardColor :exec
+UPDATE bots SET card_color = $2 WHERE bot_id = $1 AND card_theme = true
+`
+
+type SetBotCardColorParams struct {
+	BotID     string      `db:"bot_id" json:"bot_id"`
+	CardColor pgtype.Text `db:"card_color" json:"card_color"`
+}
+
+func (q *Queries) SetBotCardColor(ctx context.Context, arg SetBotCardColorParams) error {
+	_, err := q.db.Exec(ctx, setBotCardColor, arg.BotID, arg.CardColor)
+	return err
+}
+
+const setServerCardColor = `-- name: SetServerCardColor :exec
+UPDATE servers SET card_color = $2 WHERE server_id = $1 AND card_theme = true
+`
+
+type SetServerCardColorParams struct {
+	ServerID  string      `db:"server_id" json:"server_id"`
+	CardColor pgtype.Text `db:"card_color" json:"card_color"`
+}
+
+func (q *Queries) SetServerCardColor(ctx context.Context, arg SetServerCardColorParams) error {
+	_, err := q.db.Exec(ctx, setServerCardColor, arg.ServerID, arg.CardColor)
 	return err
 }
 

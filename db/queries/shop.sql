@@ -184,3 +184,35 @@ UPDATE bot_whitelist SET reason = $1 WHERE bot_id = $2;
 
 -- name: DeleteBotWhitelist :exec
 DELETE FROM bot_whitelist WHERE bot_id = $1;
+
+-- name: ApplyBotHighlight :exec
+UPDATE bots SET highlighted_until = GREATEST(COALESCE(highlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2;
+
+-- name: ApplyServerHighlight :exec
+UPDATE servers SET highlighted_until = GREATEST(COALESCE(highlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE server_id = $2;
+
+-- name: ApplyBotSpotlightSlot :exec
+UPDATE bots SET spotlighted_until = GREATEST(COALESCE(spotlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE bot_id = $2;
+
+-- name: ApplyServerSpotlightSlot :exec
+UPDATE servers SET spotlighted_until = GREATEST(COALESCE(spotlighted_until, NOW()), NOW()) + make_interval(hours => $1) WHERE server_id = $2;
+
+-- name: ApplyBotCardTheme :exec
+UPDATE bots SET card_theme = true WHERE bot_id = $1;
+
+-- name: ApplyServerCardTheme :exec
+UPDATE servers SET card_theme = true WHERE server_id = $1;
+
+-- name: GetBotCardCosmetics :many
+SELECT bot_id, (highlighted_until IS NOT NULL AND highlighted_until > NOW())::boolean AS highlighted, COALESCE(CASE WHEN card_theme THEN card_color END, '')::text AS card_color
+FROM bots WHERE bot_id = ANY(sqlc.arg('ids')::text[]);
+
+-- name: GetServerCardCosmetics :many
+SELECT server_id, (highlighted_until IS NOT NULL AND highlighted_until > NOW())::boolean AS highlighted, COALESCE(CASE WHEN card_theme THEN card_color END, '')::text AS card_color
+FROM servers WHERE server_id = ANY(sqlc.arg('ids')::text[]);
+
+-- name: SetBotCardColor :exec
+UPDATE bots SET card_color = $2 WHERE bot_id = $1 AND card_theme = true;
+
+-- name: SetServerCardColor :exec
+UPDATE servers SET card_color = $2 WHERE server_id = $1 AND card_theme = true;

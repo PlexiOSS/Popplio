@@ -78,3 +78,9 @@ UPDATE user_role_connections SET last_metadata = $2, updated_at = NOW() WHERE us
 
 -- name: DeleteUserRoleConnection :exec
 DELETE FROM user_role_connections WHERE user_id = $1;
+
+-- name: ListPublicBadges :many
+SELECT b.id, b.name, b.description, b.icon, b.color, b.target_types, b.auto_rule, b.linked_role,
+       (SELECT COUNT(*) FROM entity_badges eb WHERE eb.badge_id = b.id)::int AS holders
+FROM badges b
+ORDER BY (b.auto_rule IS NULL), b.name;

@@ -426,7 +426,10 @@ CREATE TABLE public.bots (
     spotlighted_until timestamp with time zone,
     CONSTRAINT bots_self_status_check CHECK (((self_status IS NULL) OR (self_status = ANY (ARRAY['online'::text, 'idle'::text, 'dnd'::text, 'offline'::text])))),
     CONSTRAINT owner_team_oneof CHECK (((owner IS NULL) <> (team_owner IS NULL))),
-    auto_votes_opt_out boolean DEFAULT false NOT NULL
+    auto_votes_opt_out boolean DEFAULT false NOT NULL,
+    highlighted_until timestamp with time zone,
+    card_theme boolean DEFAULT false NOT NULL,
+    card_color text
 );
 
 
@@ -813,7 +816,10 @@ CREATE TABLE public.servers (
     spotlighted_until timestamp with time zone,
     premium_tier smallint DEFAULT 0 NOT NULL,
     boost_count integer DEFAULT 0 NOT NULL,
-    auto_votes_opt_out boolean DEFAULT false NOT NULL
+    auto_votes_opt_out boolean DEFAULT false NOT NULL,
+    highlighted_until timestamp with time zone,
+    card_theme boolean DEFAULT false NOT NULL,
+    card_color text
 );
 
 
@@ -1211,7 +1217,10 @@ CREATE TABLE public.users (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     last_booster_claim timestamp with time zone,
-    app_banned boolean DEFAULT false NOT NULL
+    app_banned boolean DEFAULT false NOT NULL,
+    pinned_target_type text,
+    pinned_target_id text,
+    CONSTRAINT users_pinned_target_check CHECK ((((pinned_target_type IS NULL) AND (pinned_target_id IS NULL)) OR ((pinned_target_type = ANY (ARRAY['bot'::text, 'server'::text])) AND (pinned_target_id IS NOT NULL))))
 );
 
 

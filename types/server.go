@@ -30,6 +30,8 @@ type IndexServer struct {
 	FeaturedUntil    pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
 	SpotlightedUntil pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the server appears in the home page's Spotlight section until this time"`
 	AssetVersions    map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
+	Highlighted      bool               `db:"-" json:"highlighted" description:"Whether the server has an active Highlighted Card from the shop" ci:"internal"`
+	CardColor        string             `db:"-" json:"card_color" description:"The server's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set" ci:"internal"`
 }
 
 // @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users+stats_self_managed+last_stats_post+moderation_checked_at
@@ -58,12 +60,15 @@ type Server struct {
 	NSFW                   bool               `db:"nsfw" json:"nsfw" description:"Whether the serber is NSFW or not"`
 	ApproximateVotes       int                `db:"approximate_votes" json:"approximate_votes" description:"The bot's approximate vote count, used for home page listing etc."`
 	Votes                  int                `db:"-" json:"votes" description:"The server's vote count" ci:"internal"` // Votes are retrieved from entity_votes
+	AutoVotes              int                `db:"-" json:"auto_votes" description:"How many of this month's upvotes came from Auto-vote" ci:"internal"`
 	VoteBanned             bool               `db:"vote_banned" json:"vote_banned" description:"Whether the server is vote banned or not"`
 	Premium                bool               `db:"premium" json:"premium" description:"Whether the server is a premium server or not"`
 	StartPeriod            pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
 	PremiumPeriodLength    time.Duration      `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the server in nanoseconds"`
 	CaptchaOptOut          bool               `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the server should have captchas shown if the user has captcha_sponsor_enabled"`
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
+	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the server's card has an accent glow until this time"`
+	CardTheme              bool               `db:"card_theme" json:"card_theme" description:"Whether the server has bought the Card Theme, which unlocks card_color"`
 	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at" description:"The server's creation date"`
 	ClaimedBy              pgtype.Text        `db:"claimed_by" json:"claimed_by" description:"The user who claimed the server"`
 	LastClaimed            pgtype.Timestamptz `db:"last_claimed" json:"last_claimed" description:"The server's last claimed date"`
@@ -82,6 +87,8 @@ type Server struct {
 	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the server's short/long description at submission time. A signal for reviewers, not a verdict"`
 	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
 	AssetVersions          map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
+	Highlighted            bool               `db:"-" json:"highlighted" description:"Whether the server has an active Highlighted Card from the shop" ci:"internal"`
+	CardColor              string             `db:"card_color" json:"card_color" description:"The server's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set"`
 }
 
 type ServerEmojiPreview struct {
@@ -143,6 +150,7 @@ type ServerSettingsUpdate struct {
 	NSFW                   bool     `db:"nsfw" json:"nsfw"`
 	CaptchaOptOut          bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
 	AutoVotesOptOut        *bool    `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
+	CardColor              *string  `db:"card_color" json:"card_color,omitempty" validate:"omitempty,len=0|hex6" msg:"Card colour must be a hex colour like #5865f2"`
 	LoginRequiredForInvite bool     `db:"login_required_for_invite" json:"login_required_for_invite" description:"Whether the server requires a login to be invited to it"`
 	ShowEmojis             bool     `db:"show_emojis" json:"show_emojis" description:"Whether to show this server's emojis and stickers on its listing page. Requires the tracking bot to be in the server to actually have anything to show"`
 }

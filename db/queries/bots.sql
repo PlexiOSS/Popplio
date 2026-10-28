@@ -105,6 +105,9 @@ UPDATE bots SET last_japi_update = NOW() WHERE bot_id = $1;
 -- name: GetListedBotIDs :many
 SELECT bot_id FROM bots WHERE type = 'approved' OR type = 'certified';
 
+-- name: GetListedBotPresenceInputs :many
+SELECT bot_id, self_status, servers, last_stats_post FROM bots WHERE type = 'approved' OR type = 'certified';
+
 -- name: RecordBotUptimeCheck :exec
 UPDATE bots SET
 	total_uptime = total_uptime + 1,
@@ -222,7 +225,7 @@ WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1);
 SELECT short FROM bots WHERE bot_id = $1;
 
 -- name: GetBotByID :one
-SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out
+SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out, highlighted_until, card_theme, card_color
 FROM bots
 WHERE bot_id = $1;
 
@@ -323,11 +326,11 @@ AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(b.tags) AS e
 
 -- name: GetCertifiedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE type = 'certified' ORDER BY approximate_votes DESC LIMIT 9;
+FROM bots WHERE type = 'certified' ORDER BY approximate_votes DESC, servers DESC, bot_id LIMIT 9;
 
 -- name: GetPremiumIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9;
+FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC, servers DESC, bot_id LIMIT 9;
 
 -- name: GetMostViewedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
@@ -339,7 +342,7 @@ FROM bots WHERE type = 'approved' ORDER BY created_at DESC LIMIT 9;
 
 -- name: GetTopVotedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY approximate_votes DESC LIMIT 9;
+FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY approximate_votes DESC, servers DESC, bot_id LIMIT 9;
 
 -- name: GetFeaturedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until

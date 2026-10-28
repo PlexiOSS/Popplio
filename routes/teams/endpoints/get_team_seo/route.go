@@ -60,6 +60,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}(),
 	}
 
+	if v, err := db.New(state.Pool).ResolveVanityByTargetID(d.Context, row.ID); err == nil {
+		seoData.Vanity = v.Code
+	}
+
 	return uapi.HttpResponse{
 		Json: seoData,
 	}

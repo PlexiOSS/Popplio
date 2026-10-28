@@ -1,7 +1,3 @@
-// Package patch_user_profile implements PATCH /users/{id} — "Update User
-// Profile".
-//
-// Updates a users profile. Returns 204 on success
 package patch_user_profile
 
 import (
@@ -12,6 +8,7 @@ import (
 
 	"popplio/db"
 	"popplio/state"
+	"popplio/teams"
 	"popplio/types"
 	"popplio/validators"
 
@@ -45,7 +42,6 @@ func Docs() *docs.Doc {
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	id := chi.URLParam(r, "id")
 
-	// Fetch profile update from body
 	var profile types.ProfileUpdate
 
 	hresp, ok := uapi.MarshalReq(r, &profile)
@@ -66,6 +62,24 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if state.ContainsSuspiciousMarkup(profile.About) {
 		return resp.BadRequest("About me contains markup that isn't allowed (scripts, event handlers, or similar)")
+	}
+
+	if profile.PinnedListing != nil {
+		if err := state.Validator.Struct(profile.PinnedListing); err != nil {
+			return resp.BadRequest("Invalid pinned listing")
+		}
+
+		if profile.PinnedListing.TargetID != "" {
+			if profile.PinnedListing.TargetType == "" {
+				return resp.BadRequest("Pinned listing needs a target_type of bot or server")
+			}
+
+			entityPerms, err := teams.GetEntityPerms(d.Context, id, profile.PinnedListing.TargetType, profile.PinnedListing.TargetID)
+
+			if err != nil || entityPerms.IsEmpty() {
+				return resp.BadRequest("You can only pin a bot or server you own or manage")
+			}
+		}
 	}
 
 	extraLinksJSON, err := json.Marshal(profile.ExtraLinks)
@@ -100,14 +114,25 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while updating extra links", err, zap.String("userID", d.Auth.ID))
 	}
 
-	if profile.About != "" {
-		err = q.UpdateUserAbout(d.Context, db.UpdateUserAboutParams{
-			About:  pgtype.Text{String: profile.About, Valid: true},
-			UserID: id,
-		})
+	err = q.UpdateUserAbout(d.Context, db.UpdateUserAboutParams{
+		About:  pgtype.Text{String: profile.About, Valid: profile.About != ""},
+		UserID: id,
+	})
 
-		if err != nil {
-			return resp.Err("Error while updating about", err, zap.String("userID", d.Auth.ID))
+	if err != nil {
+		return resp.Err("Error while updating about", err, zap.String("userID", d.Auth.ID))
+	}
+
+	if profile.PinnedListing != nil {
+		params := db.SetUserPinnedListingParams{UserID: id}
+
+		if profile.PinnedListing.TargetID != "" {
+			params.TargetType = pgtype.Text{String: profile.PinnedListing.TargetType, Valid: true}
+			params.TargetID = pgtype.Text{String: profile.PinnedListing.TargetID, Valid: true}
+		}
+
+		if err := q.SetUserPinnedListing(d.Context, params); err != nil {
+			return resp.Err("Error while updating pinned listing", err, zap.String("userID", d.Auth.ID))
 		}
 	}
 

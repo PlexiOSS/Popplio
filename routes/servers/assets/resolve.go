@@ -157,5 +157,31 @@ func ResolveIndexServers(ctx context.Context, servers []types.IndexServer) error
 		return nil
 	})
 
+	g.Go(func() error {
+		ids := make([]string, len(servers))
+		for i := range servers {
+			ids[i] = servers[i].ServerID
+		}
+
+		rows, err := db.New(state.Pool).GetServerCardCosmetics(ctx, ids)
+		if err != nil {
+			return fmt.Errorf("error getting card cosmetics: %w", err)
+		}
+
+		byID := make(map[string]db.GetServerCardCosmeticsRow, len(rows))
+		for _, row := range rows {
+			byID[row.ServerID] = row
+		}
+
+		for i := range servers {
+			if row, ok := byID[servers[i].ServerID]; ok {
+				servers[i].Highlighted = row.Highlighted
+				servers[i].CardColor = row.CardColor
+			}
+		}
+
+		return nil
+	})
+
 	return g.Wait()
 }

@@ -98,7 +98,7 @@ func (q *Queries) GetUserAboutAndTimestamps(ctx context.Context, userID string) 
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT itag, user_id, experiments, certified, developer, bug_hunters, captcha_sponsor_enabled, extra_links, about, vote_banned, banned, created_at, updated_at, last_booster_claim
+SELECT itag, user_id, experiments, certified, developer, bug_hunters, captcha_sponsor_enabled, extra_links, about, vote_banned, banned, created_at, updated_at, last_booster_claim, pinned_target_type, pinned_target_id
 FROM users
 WHERE user_id = $1
 `
@@ -118,6 +118,8 @@ type GetUserByIDRow struct {
 	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	LastBoosterClaim      pgtype.Timestamptz `db:"last_booster_claim" json:"last_booster_claim"`
+	PinnedTargetType      pgtype.Text        `db:"pinned_target_type" json:"pinned_target_type"`
+	PinnedTargetID        pgtype.Text        `db:"pinned_target_id" json:"pinned_target_id"`
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, userID string) (GetUserByIDRow, error) {
@@ -138,6 +140,8 @@ func (q *Queries) GetUserByID(ctx context.Context, userID string) (GetUserByIDRo
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastBoosterClaim,
+		&i.PinnedTargetType,
+		&i.PinnedTargetID,
 	)
 	return i, err
 }
@@ -236,6 +240,21 @@ UPDATE users SET bug_hunters = true WHERE user_id = $1
 
 func (q *Queries) SetUserBugHunter(ctx context.Context, userID string) error {
 	_, err := q.db.Exec(ctx, setUserBugHunter, userID)
+	return err
+}
+
+const setUserPinnedListing = `-- name: SetUserPinnedListing :exec
+UPDATE users SET pinned_target_type = $1, pinned_target_id = $2 WHERE user_id = $3
+`
+
+type SetUserPinnedListingParams struct {
+	TargetType pgtype.Text `db:"target_type" json:"target_type"`
+	TargetID   pgtype.Text `db:"target_id" json:"target_id"`
+	UserID     string      `db:"user_id" json:"user_id"`
+}
+
+func (q *Queries) SetUserPinnedListing(ctx context.Context, arg SetUserPinnedListingParams) error {
+	_, err := q.db.Exec(ctx, setUserPinnedListing, arg.TargetType, arg.TargetID, arg.UserID)
 	return err
 }
 

@@ -37,6 +37,8 @@ type IndexBot struct {
 	SpotlightedUntil pgtype.Timestamptz      `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the bot appears in the home page's Spotlight section until this time"`
 	VoteBlitzUntil   pgtype.Timestamptz      `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the bot's vote cooldown is halved until this time"`
 	AssetVersions    map[string]string       `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
+	Highlighted      bool                    `db:"-" json:"highlighted" description:"Whether the bot has an active Highlighted Card from the shop" ci:"internal"`
+	CardColor        string                  `db:"-" json:"card_color" description:"The bot's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set" ci:"internal"`
 }
 
 type BotStats struct {
@@ -75,6 +77,7 @@ type Bot struct {
 	ShardList            []int                   `db:"shard_list" json:"shard_list" description:"The number of servers per shard"`
 	Users                int                     `db:"users" json:"users" description:"The bot's user count"`
 	Votes                int                     `db:"-" json:"votes" description:"The bot's vote count" ci:"internal"` // Votes are retrieved from entity_votes
+	AutoVotes            int                     `db:"-" json:"auto_votes" description:"How many of this month's upvotes came from Auto-vote" ci:"internal"`
 	ApproximateVotes     int                     `db:"approximate_votes" json:"approximate_votes" description:"The bot's approximate vote count, used for home page listing etc."`
 	Clicks               int                     `db:"clicks" json:"clicks" description:"The bot's total click count"`
 	UniqueClicks         int64                   `db:"-" json:"unique_clicks" description:"The bot's unique click count based on SHA256 hashed IPs" ci:"internal"` // Must be parsed internally
@@ -99,6 +102,8 @@ type Bot struct {
 	TeamOwner            *Team                   `db:"-" json:"team_owner" description:"If the bot is in a team, who owns the bot. If not in a team, this will be null and owner will instead be set" ci:"internal"` // Must be parsed internally
 	CaptchaOptOut        bool                    `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the bot should have captchas shown if the user has captcha_sponsor_enabled"`
 	AutoVotesOptOut      bool                    `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the bot refuses automatic votes from auto-vote subscribers"`
+	HighlightedUntil     pgtype.Timestamptz      `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the bot's card has an accent glow until this time"`
+	CardTheme            bool                    `db:"card_theme" json:"card_theme" description:"Whether the bot has bought the Card Theme, which unlocks card_color"`
 	SelfStatus           pgtype.Text             `db:"self_status" json:"-" description:"Presence self-reported by the bot via Post Bot Stats. Folded into user.status when present, not exposed directly."`
 	SupporterBadge       bool                    `db:"supporter_badge" json:"supporter_badge" description:"Whether the bot's owner has purchased the cosmetic supporter badge from the shop"`
 	BoostedUntil         pgtype.Timestamptz      `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the bot gets priority placement in listings until this time"`
@@ -108,6 +113,8 @@ type Bot struct {
 	ModerationFlagged    bool                    `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the bot's short/long description at submission time. A signal for reviewers, not a verdict"`
 	ModerationCategories []string                `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
 	AssetVersions        map[string]string       `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
+	Highlighted          bool                    `db:"-" json:"highlighted" description:"Whether the bot has an active Highlighted Card from the shop" ci:"internal"`
+	CardColor            string                  `db:"card_color" json:"card_color" description:"The bot's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set"`
 }
 
 // @ci table=bots, unfilled=1
@@ -143,6 +150,7 @@ type BotSettingsUpdate struct {
 	NSFW            bool     `db:"nsfw" json:"nsfw"`
 	CaptchaOptOut   bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
 	AutoVotesOptOut *bool    `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
+	CardColor       *string  `db:"card_color" json:"card_color,omitempty" validate:"omitempty,len=0|hex6" msg:"Card colour must be a hex colour like #5865f2"`
 }
 
 type Invite struct {

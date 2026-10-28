@@ -9,7 +9,9 @@ import (
 
 	"popplio/captcha"
 	"popplio/db"
+	"popplio/notifications"
 	"popplio/state"
+	"popplio/types"
 	"popplio/votes"
 	"popplio/votes/cast"
 
@@ -54,6 +56,10 @@ func AutoVote(ctx context.Context) error {
 				LastSkipReason: pgtype.Text{String: reason, Valid: true},
 			}); err != nil {
 				state.Logger.Warn("Failed to record auto-vote skip", zap.Error(err), zap.String("userId", t.UserID))
+			}
+
+			if !t.LastSkipReason.Valid || t.LastSkipReason.String != reason {
+				notifyAutoVoteSkipped(ctx, t.UserID, t.TargetType, t.TargetID, reason)
 			}
 		}
 	}
@@ -142,6 +148,24 @@ func autoVoteOne(ctx context.Context, q *db.Queries, userID, targetType, targetI
 	cast.Announce(userID, targetType, targetID, res, true)
 
 	return true, "", nil
+}
+
+func notifyAutoVoteSkipped(ctx context.Context, userID, targetType, targetID, reason string) {
+	name := "a listing"
+
+	if info, err := votes.GetEntityInfo(ctx, state.Pool, targetID, targetType); err == nil {
+		name = info.Name
+	}
+
+	if err := notifications.PushNotification(userID, types.Alert{
+		Type:     types.AlertTypeWarning,
+		Title:    "Auto-vote skipped " + name,
+		Message:  reason + " Auto-vote will keep trying, or you can swap it for another listing.",
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/dashboard?tab=auto-vote", Valid: true},
+		Category: types.AlertCategoryVotes,
+	}); err != nil {
+		state.Logger.Warn("Failed to send auto-vote skipped alert", zap.Error(err), zap.String("userId", userID))
+	}
 }
 
 func inSchedule(days []int16, startMinute, endMinute int, timezone string, now time.Time) bool {

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	botPresenceBatchSize = 100
+	botPresenceBatchSize = 200
 	botPresenceWorkers   = 4
 )
 

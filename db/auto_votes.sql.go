@@ -137,21 +137,22 @@ func (q *Queries) ListAutoVoteTargets(ctx context.Context, userID string) ([]Aut
 }
 
 const listDueAutoVoteTargets = `-- name: ListDueAutoVoteTargets :many
-SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at
+SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at, t.last_skip_reason
 FROM auto_vote_targets t
 INNER JOIN auto_vote_subscriptions s ON s.user_id = t.user_id
 WHERE s.status IN ('active', 'trialing') AND (s.current_period_end IS NULL OR s.current_period_end > NOW())
 `
 
 type ListDueAutoVoteTargetsRow struct {
-	UserID      string             `db:"user_id" json:"user_id"`
-	TargetType  string             `db:"target_type" json:"target_type"`
-	TargetID    string             `db:"target_id" json:"target_id"`
-	Days        []int16            `db:"days" json:"days"`
-	StartMinute int16              `db:"start_minute" json:"start_minute"`
-	EndMinute   int16              `db:"end_minute" json:"end_minute"`
-	Timezone    string             `db:"timezone" json:"timezone"`
-	LastVotedAt pgtype.Timestamptz `db:"last_voted_at" json:"last_voted_at"`
+	UserID         string             `db:"user_id" json:"user_id"`
+	TargetType     string             `db:"target_type" json:"target_type"`
+	TargetID       string             `db:"target_id" json:"target_id"`
+	Days           []int16            `db:"days" json:"days"`
+	StartMinute    int16              `db:"start_minute" json:"start_minute"`
+	EndMinute      int16              `db:"end_minute" json:"end_minute"`
+	Timezone       string             `db:"timezone" json:"timezone"`
+	LastVotedAt    pgtype.Timestamptz `db:"last_voted_at" json:"last_voted_at"`
+	LastSkipReason pgtype.Text        `db:"last_skip_reason" json:"last_skip_reason"`
 }
 
 func (q *Queries) ListDueAutoVoteTargets(ctx context.Context) ([]ListDueAutoVoteTargetsRow, error) {
@@ -172,6 +173,7 @@ func (q *Queries) ListDueAutoVoteTargets(ctx context.Context) ([]ListDueAutoVote
 			&i.EndMinute,
 			&i.Timezone,
 			&i.LastVotedAt,
+			&i.LastSkipReason,
 		); err != nil {
 			return nil, err
 		}

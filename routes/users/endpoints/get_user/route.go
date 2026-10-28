@@ -89,6 +89,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		Banned:                row.Banned,
 		CreatedAt:             row.CreatedAt.Time,
 		UpdatedAt:             row.UpdatedAt.Time,
+		PinnedTargetType:      row.PinnedTargetType,
+		PinnedTargetID:        row.PinnedTargetID,
 	}
 
 	if row.LastBoosterClaim.Valid {

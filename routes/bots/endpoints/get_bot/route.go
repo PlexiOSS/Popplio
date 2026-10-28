@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"popplio/api"
 	"popplio/api/resp"
@@ -222,6 +223,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		TeamOwnerID:          row.TeamOwner,
 		CaptchaOptOut:        row.CaptchaOptOut,
 		AutoVotesOptOut:      row.AutoVotesOptOut,
+		HighlightedUntil:     row.HighlightedUntil,
+		CardTheme:            row.CardTheme,
+		Highlighted:          row.HighlightedUntil.Valid && row.HighlightedUntil.Time.After(time.Now()),
 		SelfStatus:           row.SelfStatus,
 		SupporterBadge:       row.SupporterBadge,
 		BoostedUntil:         row.BoostedUntil,
@@ -325,7 +329,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	bot.Vanity = code
 
-	bot.Votes, err = votes.EntityGetVoteCount(d.Context, state.Pool, bot.BotID, "bot")
+	if row.CardTheme {
+		bot.CardColor = row.CardColor.String
+	}
+
+	bot.Votes, bot.AutoVotes, err = votes.EntityGetVoteCounts(d.Context, state.Pool, bot.BotID, "bot")
 
 	if err != nil {
 		return resp.ErrBody("Error while getting bot vote count [db fetch]", "Error while getting bot vote count [db fetch].", err)

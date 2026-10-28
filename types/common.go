@@ -38,6 +38,7 @@ type SEO struct {
 	ID     string `json:"id" description:"ID of the entity"`
 	Avatar string `json:"avatar" description:"The entities resolved avatar URL (not just hash)"`
 	Short  string `json:"short" description:"Short description of the entity"`
+	Vanity string `json:"vanity,omitempty" description:"The entity's vanity code, used to build its canonical URL. Omitted when it has none"`
 }
 
 // This represents a IBL Popplio API Error

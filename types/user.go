@@ -36,6 +36,8 @@ type User struct {
 	CreatedAt             time.Time               `db:"created_at" json:"created_at" description:"The time the user was created"`
 	UpdatedAt             time.Time               `db:"updated_at" json:"updated_at" description:"The time the user was last updated"`
 	LastBoosterClaim      *time.Time              `db:"last_booster_claim" json:"last_booster_claim" description:"The last time the user claimed a booster reward"`
+	PinnedTargetType      pgtype.Text             `db:"pinned_target_type" json:"pinned_target_type" description:"The type (bot or server) of the listing the user pinned to their profile, null if none"`
+	PinnedTargetID        pgtype.Text             `db:"pinned_target_id" json:"pinned_target_id" description:"The ID of the listing the user pinned to their profile, null if none"`
 }
 
 type UserPerm struct {
@@ -74,9 +76,15 @@ type StaffPosition struct {
 }
 
 type ProfileUpdate struct {
-	About                 string `json:"about"`
-	ExtraLinks            []Link `json:"extra_links"`
-	CaptchaSponsorEnabled *bool  `json:"captcha_sponsor_enabled"`
+	About                 string               `json:"about"`
+	ExtraLinks            []Link               `json:"extra_links"`
+	CaptchaSponsorEnabled *bool                `json:"captcha_sponsor_enabled"`
+	PinnedListing         *PinnedListingUpdate `json:"pinned_listing,omitempty" description:"Pin a bot or server you own or manage to your profile. Send an empty target_id to unpin."`
+}
+
+type PinnedListingUpdate struct {
+	TargetType string `json:"target_type" validate:"omitempty,oneof=bot server"`
+	TargetID   string `json:"target_id" validate:"omitempty,numeric,max=32"`
 }
 
 type BoosterStatus struct {

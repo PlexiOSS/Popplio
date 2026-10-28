@@ -302,16 +302,21 @@ func EntityVoteCheck(ctx context.Context, c DbConn, userId, targetId, targetType
 }
 
 func EntityGetVoteCount(ctx context.Context, c DbConn, targetId, targetType string) (int, error) {
+	total, _, err := EntityGetVoteCounts(ctx, c, targetId, targetType)
+	return total, err
+}
+
+func EntityGetVoteCounts(ctx context.Context, c DbConn, targetId, targetType string) (total int, auto int, err error) {
 	row, err := db.New(c).CountEntityVotes(ctx, db.CountEntityVotesParams{
 		TargetID:   targetId,
 		TargetType: targetType,
 	})
 
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	return int(row.Upvotes - row.Downvotes), nil
+	return int(row.Upvotes - row.Downvotes), int(row.AutoUpvotes), nil
 }
 
 func EntityGetRedeemableVoteCount(ctx context.Context, c DbConn, targetId, targetType string) (int, error) {

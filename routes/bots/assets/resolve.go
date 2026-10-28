@@ -122,6 +122,32 @@ func ResolveIndexBots(ctx context.Context, bots []types.IndexBot) error {
 		return nil
 	})
 
+	g.Go(func() error {
+		ids := make([]string, len(bots))
+		for i := range bots {
+			ids[i] = bots[i].BotID
+		}
+
+		rows, err := db.New(state.Pool).GetBotCardCosmetics(ctx, ids)
+		if err != nil {
+			return fmt.Errorf("error getting card cosmetics: %w", err)
+		}
+
+		byID := make(map[string]db.GetBotCardCosmeticsRow, len(rows))
+		for _, row := range rows {
+			byID[row.BotID] = row
+		}
+
+		for i := range bots {
+			if row, ok := byID[bots[i].BotID]; ok {
+				bots[i].Highlighted = row.Highlighted
+				bots[i].CardColor = row.CardColor
+			}
+		}
+
+		return nil
+	})
+
 	return g.Wait()
 }
 

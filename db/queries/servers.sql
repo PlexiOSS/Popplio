@@ -85,7 +85,13 @@ SELECT server_id FROM servers WHERE show_emojis = true;
 UPDATE servers SET emojis = $2, stickers = $3, emojis_synced_at = NOW() WHERE server_id = $1;
 
 -- name: GetServerIDsAndStatsSelfManaged :many
-SELECT server_id, stats_self_managed FROM servers;
+SELECT server_id, stats_self_managed, invite FROM servers;
+
+-- name: SyncServerTotalMembers :exec
+UPDATE servers SET total_members = $2 WHERE server_id = $1 AND stats_self_managed = false;
+
+-- name: UpdateServerMemberCounts :exec
+UPDATE servers SET total_members = sqlc.arg('total_members')::integer, online_members = sqlc.arg('online_members')::integer WHERE server_id = sqlc.arg('server_id')::text AND stats_self_managed = false;
 
 -- name: UpdateServerAvatarAndNsfwStats :exec
 -- nsfw_channel_count uses COALESCE against a nullable arg: when the caller
@@ -297,11 +303,11 @@ FROM servers WHERE server_id = sqlc.arg('query')::text OR name ILIKE sqlc.arg('p
 
 -- name: GetCertifiedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_votes DESC LIMIT 9;
+FROM servers WHERE state = 'public' AND type = 'certified' ORDER BY approximate_votes DESC, total_members DESC, server_id LIMIT 9;
 
 -- name: GetPremiumIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9;
+FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC, total_members DESC, server_id LIMIT 9;
 
 -- name: GetMostViewedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
@@ -313,7 +319,7 @@ FROM servers WHERE state = 'public' AND type = 'approved' ORDER BY created_at DE
 
 -- name: GetTopVotedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9;
+FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC, total_members DESC, server_id LIMIT 9;
 
 -- name: GetFeaturedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
@@ -324,7 +330,7 @@ SELECT server_id, name, avatar, total_members, online_members, short, type, stat
 FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9;
 
 -- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color
 FROM servers
 WHERE server_id = $1;
 

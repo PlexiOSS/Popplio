@@ -3,6 +3,7 @@ package patch_bot_settings
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 
 	"popplio/api/resp"
@@ -100,6 +101,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if payload.AutoVotesOptOut != nil {
 		if err := db.New(state.Pool).SetBotAutoVotesOptOut(d.Context, db.SetBotAutoVotesOptOutParams{BotID: id, AutoVotesOptOut: *payload.AutoVotesOptOut}); err != nil {
 			return resp.Err("Failed to update auto-vote setting", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
+		}
+	}
+
+	if payload.CardColor != nil {
+		if err := db.New(state.Pool).SetBotCardColor(d.Context, db.SetBotCardColorParams{BotID: id, CardColor: pgtype.Text{String: *payload.CardColor, Valid: *payload.CardColor != ""}}); err != nil {
+			return resp.Err("Failed to update card colour", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 		}
 	}
 

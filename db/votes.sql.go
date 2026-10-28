@@ -12,7 +12,7 @@ import (
 )
 
 const countEntityVotes = `-- name: CountEntityVotes :one
-SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes
+SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes, COUNT(*) FILTER (WHERE upvote AND auto) AS auto_upvotes
 FROM entity_votes
 WHERE target_id = $1 AND target_type = $2 AND void = false
 `
@@ -23,14 +23,15 @@ type CountEntityVotesParams struct {
 }
 
 type CountEntityVotesRow struct {
-	Upvotes   int64 `db:"upvotes" json:"upvotes"`
-	Downvotes int64 `db:"downvotes" json:"downvotes"`
+	Upvotes     int64 `db:"upvotes" json:"upvotes"`
+	Downvotes   int64 `db:"downvotes" json:"downvotes"`
+	AutoUpvotes int64 `db:"auto_upvotes" json:"auto_upvotes"`
 }
 
 func (q *Queries) CountEntityVotes(ctx context.Context, arg CountEntityVotesParams) (CountEntityVotesRow, error) {
 	row := q.db.QueryRow(ctx, countEntityVotes, arg.TargetID, arg.TargetType)
 	var i CountEntityVotesRow
-	err := row.Scan(&i.Upvotes, &i.Downvotes)
+	err := row.Scan(&i.Upvotes, &i.Downvotes, &i.AutoUpvotes)
 	return i, err
 }
 

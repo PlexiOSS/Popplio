@@ -415,7 +415,7 @@ func (q *Queries) GetAllBotIDs(ctx context.Context) ([]string, error) {
 }
 
 const getBotByID = `-- name: GetBotByID :one
-SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out
+SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out, highlighted_until, card_theme, card_color
 FROM bots
 WHERE bot_id = $1
 `
@@ -467,6 +467,9 @@ type GetBotByIDRow struct {
 	ModerationFlagged    bool               `db:"moderation_flagged" json:"moderation_flagged"`
 	ModerationCategories []string           `db:"moderation_categories" json:"moderation_categories"`
 	AutoVotesOptOut      bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HighlightedUntil     pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
+	CardTheme            bool               `db:"card_theme" json:"card_theme"`
+	CardColor            pgtype.Text        `db:"card_color" json:"card_color"`
 }
 
 func (q *Queries) GetBotByID(ctx context.Context, botID string) (GetBotByIDRow, error) {
@@ -519,6 +522,9 @@ func (q *Queries) GetBotByID(ctx context.Context, botID string) (GetBotByIDRow, 
 		&i.ModerationFlagged,
 		&i.ModerationCategories,
 		&i.AutoVotesOptOut,
+		&i.HighlightedUntil,
+		&i.CardTheme,
+		&i.CardColor,
 	)
 	return i, err
 }
@@ -1002,7 +1008,7 @@ func (q *Queries) GetBotsWithCommands(ctx context.Context, limit int32) ([]GetBo
 
 const getCertifiedIndexBots = `-- name: GetCertifiedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE type = 'certified' ORDER BY approximate_votes DESC LIMIT 9
+FROM bots WHERE type = 'certified' ORDER BY approximate_votes DESC, servers DESC, bot_id LIMIT 9
 `
 
 type GetCertifiedIndexBotsRow struct {
@@ -1493,6 +1499,42 @@ func (q *Queries) GetListedBotIDs(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const getListedBotPresenceInputs = `-- name: GetListedBotPresenceInputs :many
+SELECT bot_id, self_status, servers, last_stats_post FROM bots WHERE type = 'approved' OR type = 'certified'
+`
+
+type GetListedBotPresenceInputsRow struct {
+	BotID         string             `db:"bot_id" json:"bot_id"`
+	SelfStatus    pgtype.Text        `db:"self_status" json:"self_status"`
+	Servers       int32              `db:"servers" json:"servers"`
+	LastStatsPost pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+}
+
+func (q *Queries) GetListedBotPresenceInputs(ctx context.Context) ([]GetListedBotPresenceInputsRow, error) {
+	rows, err := q.db.Query(ctx, getListedBotPresenceInputs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetListedBotPresenceInputsRow
+	for rows.Next() {
+		var i GetListedBotPresenceInputsRow
+		if err := rows.Scan(
+			&i.BotID,
+			&i.SelfStatus,
+			&i.Servers,
+			&i.LastStatsPost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMostViewedIndexBots = `-- name: GetMostViewedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
 FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY clicks DESC LIMIT 9
@@ -1566,7 +1608,7 @@ func (q *Queries) GetMostViewedIndexBots(ctx context.Context) ([]GetMostViewedIn
 
 const getPremiumIndexBots = `-- name: GetPremiumIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC LIMIT 9
+FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORDER BY approximate_votes DESC, servers DESC, bot_id LIMIT 9
 `
 
 type GetPremiumIndexBotsRow struct {
@@ -2017,7 +2059,7 @@ func (q *Queries) GetStaleClaimedBotsForUpdate(ctx context.Context) ([]GetStaleC
 
 const getTopVotedIndexBots = `-- name: GetTopVotedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY approximate_votes DESC LIMIT 9
+FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY approximate_votes DESC, servers DESC, bot_id LIMIT 9
 `
 
 type GetTopVotedIndexBotsRow struct {

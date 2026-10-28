@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
+	"sync/atomic"
 
 	"popplio/db"
 	"popplio/infernoplex/dclient"
@@ -13,9 +16,11 @@ import (
 	"popplio/types"
 
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 func ServerSync(ctx context.Context) error {
@@ -122,6 +127,35 @@ func stickerFormatName(t discord.StickerFormatType) string {
 type syncTarget struct {
 	serverID         string
 	statsSelfManaged bool
+	invite           string
+}
+
+const metaSyncWorkers = 4
+
+var inviteCodeRegex = regexp.MustCompile(`(?:discord(?:\.gg|\.com/invite|app\.com/invite)/)?([a-zA-Z0-9-]+)/?$`)
+
+func syncFromInvite(ctx context.Context, q *db.Queries, target syncTarget) error {
+	match := inviteCodeRegex.FindStringSubmatch(strings.TrimSpace(target.invite))
+
+	if len(match) < 2 || match[1] == "" {
+		return errors.New("no usable invite code")
+	}
+
+	inv, err := dclient.Get().Rest().GetInvite(match[1], rest.WithQueryParam("with_counts", true))
+
+	if err != nil {
+		return err
+	}
+
+	if inv.Guild == nil || inv.Guild.ID.String() != target.serverID {
+		return errors.New("invite points at a different server")
+	}
+
+	return q.UpdateServerMemberCounts(ctx, db.UpdateServerMemberCountsParams{
+		ServerID:      target.serverID,
+		TotalMembers:  int32(inv.ApproximateMemberCount),
+		OnlineMembers: int32(inv.ApproximatePresenceCount),
+	})
 }
 
 func syncServerMeta(ctx context.Context) error {
@@ -135,75 +169,99 @@ func syncServerMeta(ctx context.Context) error {
 
 	targets := make([]syncTarget, len(rows))
 	for i, row := range rows {
-		targets[i] = syncTarget{serverID: row.ServerID, statsSelfManaged: row.StatsSelfManaged}
+		targets[i] = syncTarget{serverID: row.ServerID, statsSelfManaged: row.StatsSelfManaged, invite: row.Invite}
 	}
 
-	var failed int
+	var failed atomic.Int64
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(metaSyncWorkers)
 
 	for _, target := range targets {
-		serverID := target.serverID
-		guildID, err := snowflake.Parse(serverID)
-
-		if err != nil {
-			continue
-		}
-
-		guild, err := dclient.Get().Rest().GetGuild(guildID, true)
-
-		if err != nil {
-			state.Logger.Warn("Server sync: failed to fetch guild, keeping last-known metadata", zap.Error(err), zap.String("server_id", serverID))
-			continue
-		}
-
-		avatar := ""
-
-		if url := guild.IconURL(); url != nil {
-			avatar = *url
-		}
-
-		var nsfwChannelCount pgtype.Int4
-
-		if channels, err := dclient.Get().Rest().GetGuildChannels(guildID); err == nil {
-			nsfwChannelCount = pgtype.Int4{Int32: int32(countNSFWChannels(channels)), Valid: true}
-		} else {
-			state.Logger.Warn("Server sync: failed to fetch channels, leaving nsfw_channel_count untouched", zap.Error(err), zap.String("server_id", serverID))
-		}
-
-		if target.statsSelfManaged {
-			if err := q.UpdateServerAvatarAndNsfwStats(ctx, db.UpdateServerAvatarAndNsfwStatsParams{
-				ServerID:         serverID,
-				Avatar:           avatar,
-				PremiumTier:      int16(guild.PremiumTier),
-				BoostCount:       int32(guild.PremiumSubscriptionCount),
-				DiscordNsfwLevel: int16(guild.NSFWLevel),
-				NsfwChannelCount: nsfwChannelCount,
-			}); err != nil {
-				state.Logger.Error("Server sync: failed to save server metadata, skipping", zap.Error(err), zap.String("server_id", serverID))
-				failed++
+		g.Go(func() error {
+			if syncServerTarget(gctx, q, target) {
+				failed.Add(1)
 			}
-			continue
+			return nil
+		})
+	}
+
+	_ = g.Wait()
+
+	if n := failed.Load(); n > 0 {
+		return fmt.Errorf("meta sync failed to save %d of %d servers", n, len(targets))
+	}
+
+	return nil
+}
+
+func syncServerTarget(ctx context.Context, q *db.Queries, target syncTarget) bool {
+	serverID := target.serverID
+	guildID, err := snowflake.Parse(serverID)
+
+	if err != nil {
+		return false
+	}
+
+	guild, err := dclient.Get().Rest().GetGuild(guildID, true)
+
+	if err != nil {
+		if target.statsSelfManaged {
+			state.Logger.Warn("Server sync: failed to fetch guild, keeping last-known metadata", zap.Error(err), zap.String("server_id", serverID))
+			return false
 		}
 
-		if err := q.UpdateServerAvatarMembersAndNsfw(ctx, db.UpdateServerAvatarMembersAndNsfwParams{
+		if invErr := syncFromInvite(ctx, q, target); invErr != nil {
+			state.Logger.Warn("Server sync: guild and invite both unavailable, keeping last-known metadata", zap.Error(err), zap.NamedError("invite_error", invErr), zap.String("server_id", serverID))
+		}
+
+		return false
+	}
+
+	avatar := ""
+
+	if url := guild.IconURL(); url != nil {
+		avatar = *url
+	}
+
+	var nsfwChannelCount pgtype.Int4
+
+	if channels, err := dclient.Get().Rest().GetGuildChannels(guildID); err == nil {
+		nsfwChannelCount = pgtype.Int4{Int32: int32(countNSFWChannels(channels)), Valid: true}
+	} else {
+		state.Logger.Warn("Server sync: failed to fetch channels, leaving nsfw_channel_count untouched", zap.Error(err), zap.String("server_id", serverID))
+	}
+
+	if target.statsSelfManaged {
+		if err := q.UpdateServerAvatarAndNsfwStats(ctx, db.UpdateServerAvatarAndNsfwStatsParams{
 			ServerID:         serverID,
 			Avatar:           avatar,
 			PremiumTier:      int16(guild.PremiumTier),
 			BoostCount:       int32(guild.PremiumSubscriptionCount),
-			TotalMembers:     int32(guild.ApproximateMemberCount),
-			OnlineMembers:    int32(guild.ApproximatePresenceCount),
 			DiscordNsfwLevel: int16(guild.NSFWLevel),
 			NsfwChannelCount: nsfwChannelCount,
 		}); err != nil {
 			state.Logger.Error("Server sync: failed to save server metadata, skipping", zap.Error(err), zap.String("server_id", serverID))
-			failed++
+			return true
 		}
+		return false
 	}
 
-	if failed > 0 {
-		return fmt.Errorf("meta sync failed to save %d of %d servers", failed, len(targets))
+	if err := q.UpdateServerAvatarMembersAndNsfw(ctx, db.UpdateServerAvatarMembersAndNsfwParams{
+		ServerID:         serverID,
+		Avatar:           avatar,
+		PremiumTier:      int16(guild.PremiumTier),
+		BoostCount:       int32(guild.PremiumSubscriptionCount),
+		TotalMembers:     int32(guild.ApproximateMemberCount),
+		OnlineMembers:    int32(guild.ApproximatePresenceCount),
+		DiscordNsfwLevel: int16(guild.NSFWLevel),
+		NsfwChannelCount: nsfwChannelCount,
+	}); err != nil {
+		state.Logger.Error("Server sync: failed to save server metadata, skipping", zap.Error(err), zap.String("server_id", serverID))
+		return true
 	}
 
-	return nil
+	return false
 }
 
 func countNSFWChannels(channels []discord.GuildChannel) int {

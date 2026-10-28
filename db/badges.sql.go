@@ -317,6 +317,55 @@ func (q *Queries) ListLinkedRoleBadges(ctx context.Context) ([]ListLinkedRoleBad
 	return items, nil
 }
 
+const listPublicBadges = `-- name: ListPublicBadges :many
+SELECT b.id, b.name, b.description, b.icon, b.color, b.target_types, b.auto_rule, b.linked_role,
+       (SELECT COUNT(*) FROM entity_badges eb WHERE eb.badge_id = b.id)::int AS holders
+FROM badges b
+ORDER BY (b.auto_rule IS NULL), b.name
+`
+
+type ListPublicBadgesRow struct {
+	ID          string         `db:"id" json:"id"`
+	Name        string         `db:"name" json:"name"`
+	Description string         `db:"description" json:"description"`
+	Icon        string         `db:"icon" json:"icon"`
+	Color       string         `db:"color" json:"color"`
+	TargetTypes []string       `db:"target_types" json:"target_types"`
+	AutoRule    map[string]any `db:"auto_rule" json:"auto_rule"`
+	LinkedRole  bool           `db:"linked_role" json:"linked_role"`
+	Holders     int32          `db:"holders" json:"holders"`
+}
+
+func (q *Queries) ListPublicBadges(ctx context.Context) ([]ListPublicBadgesRow, error) {
+	rows, err := q.db.Query(ctx, listPublicBadges)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublicBadgesRow
+	for rows.Next() {
+		var i ListPublicBadgesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Icon,
+			&i.Color,
+			&i.TargetTypes,
+			&i.AutoRule,
+			&i.LinkedRole,
+			&i.Holders,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserRoleConnections = `-- name: ListUserRoleConnections :many
 SELECT user_id, access_token, refresh_token, expires_at, last_metadata FROM user_role_connections
 `

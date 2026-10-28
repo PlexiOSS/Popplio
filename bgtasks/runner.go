@@ -25,7 +25,7 @@ func All() []Task {
 	return []Task{
 		{
 			Name:        "bot_uptime_check",
-			Description: "Checking every listed bot's presence in the main server for uptime tracking",
+			Description: "Recording uptime for every listed bot with a known presence (self-reported, main server, japi.rest or recent stats posts)",
 			Enabled:     true,
 			Interval:    5 * time.Minute,
 			Run:         BotUptimeCheck,

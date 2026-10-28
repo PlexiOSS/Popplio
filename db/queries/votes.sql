@@ -128,7 +128,7 @@ WHERE author = $1 AND target_id = $2 AND target_type = $3 AND void = false
 ORDER BY created_at DESC;
 
 -- name: CountEntityVotes :one
-SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes
+SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes, COUNT(*) FILTER (WHERE upvote AND auto) AS auto_upvotes
 FROM entity_votes
 WHERE target_id = $1 AND target_type = $2 AND void = false;
 

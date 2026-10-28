@@ -1,0 +1,13 @@
+.git
+.github
+.vscode
+.claude
+.env
+config.yaml
+*.config.yaml
+coverage.out
+popplio
+cmd/kitehelper/kitehelper
+data/seed.iblseed
+__pycache__
+docs/cdocs/node_modules

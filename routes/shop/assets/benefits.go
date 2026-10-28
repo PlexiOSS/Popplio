@@ -15,6 +15,9 @@ const (
 	BenefitFeaturedSlot   = "featured_slot"
 	BenefitSupporterBadge = "supporter_badge"
 	BenefitVoteBlitz      = "vote_blitz"
+	BenefitHighlight      = "highlight"
+	BenefitSpotlightSlot  = "spotlight_slot"
+	BenefitCardTheme      = "card_theme"
 )
 
 var recognizedBenefits = map[string]bool{
@@ -23,6 +26,9 @@ var recognizedBenefits = map[string]bool{
 	BenefitFeaturedSlot:   true,
 	BenefitSupporterBadge: true,
 	BenefitVoteBlitz:      true,
+	BenefitHighlight:      true,
+	BenefitSpotlightSlot:  true,
+	BenefitCardTheme:      true,
 }
 
 func HasRecognizedBenefit(benefitIDs []string) bool {
@@ -68,6 +74,21 @@ func ApplyBenefit(ctx context.Context, tx pgx.Tx, benefitID, targetType, targetI
 			return q.ApplyBotVoteBlitz(ctx, db.ApplyBotVoteBlitzParams{Hours: int32(durationHours), BotID: targetID})
 		}
 		return q.ApplyServerVoteBlitz(ctx, db.ApplyServerVoteBlitzParams{Hours: int32(durationHours), ServerID: targetID})
+	case BenefitHighlight:
+		if isBot {
+			return q.ApplyBotHighlight(ctx, db.ApplyBotHighlightParams{Hours: int32(durationHours), BotID: targetID})
+		}
+		return q.ApplyServerHighlight(ctx, db.ApplyServerHighlightParams{Hours: int32(durationHours), ServerID: targetID})
+	case BenefitSpotlightSlot:
+		if isBot {
+			return q.ApplyBotSpotlightSlot(ctx, db.ApplyBotSpotlightSlotParams{Hours: int32(durationHours), BotID: targetID})
+		}
+		return q.ApplyServerSpotlightSlot(ctx, db.ApplyServerSpotlightSlotParams{Hours: int32(durationHours), ServerID: targetID})
+	case BenefitCardTheme:
+		if isBot {
+			return q.ApplyBotCardTheme(ctx, targetID)
+		}
+		return q.ApplyServerCardTheme(ctx, targetID)
 	default:
 		return nil
 	}

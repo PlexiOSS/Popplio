@@ -5,6 +5,7 @@
 package badges
 
 import (
+	"popplio/routes/badges/endpoints/get_badges"
 	"popplio/routes/badges/endpoints/get_entity_badges"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +22,14 @@ func (b Router) Tag() (string, string) {
 }
 
 func (b Router) Routes(r *chi.Mux) {
+	uapi.Route{
+		Pattern: "/badges",
+		OpId:    "get_badges",
+		Method:  uapi.GET,
+		Docs:    get_badges.Docs,
+		Handler: get_badges.Route,
+	}.Route(r)
+
 	uapi.Route{
 		Pattern: "/{target_type}/{target_id}/badges",
 		OpId:    "get_entity_badges",
