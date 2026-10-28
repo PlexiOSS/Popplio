@@ -15,19 +15,8 @@ import (
 const Dir = "db/migrations"
 
 func Apply(dsn string) error {
-	db, err := goose.OpenDBWithDriver("postgres", dsn)
-
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-
-	defer db.Close()
-
-	if err := goose.Up(db, Dir); err != nil {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
-
-	return nil
+	_, err := ApplyEmbedded(context.Background(), dsn)
+	return err
 }
 
 func Status(dsn string) error {
@@ -39,7 +28,10 @@ func Status(dsn string) error {
 
 	defer db.Close()
 
-	if err := goose.Status(db, Dir); err != nil {
+	goose.SetBaseFS(migrations.FS)
+	defer goose.SetBaseFS(nil)
+
+	if err := goose.Status(db, "."); err != nil {
 		return fmt.Errorf("failed to get migration status: %w", err)
 	}
 

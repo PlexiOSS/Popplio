@@ -30,7 +30,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ${{ matrix.module.dir }}/go.mod
+          go-version-file: go.work
           cache-dependency-path: ${{ matrix.module.dir }}/go.sum
 
       - name: go build
