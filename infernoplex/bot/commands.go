@@ -8,5 +8,7 @@ func registerCommands() {
 		cmdDelete(),
 		cmdLeaderboard(),
 		cmdStats(),
+		cmdVote(),
+		cmdBump(),
 	)
 }

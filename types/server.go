@@ -3,6 +3,7 @@ package types
 import (
 	"time"
 
+	"github.com/PlexiOSS/Keel/dovewing/dovetypes"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -69,6 +70,7 @@ type Server struct {
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
 	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the server's card has an accent glow until this time"`
 	CardTheme              bool               `db:"card_theme" json:"card_theme" description:"Whether the server has bought the Card Theme, which unlocks card_color"`
+	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at" description:"When the server was last bumped with /bump, null if never"`
 	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at" description:"The server's creation date"`
 	ClaimedBy              pgtype.Text        `db:"claimed_by" json:"claimed_by" description:"The user who claimed the server"`
 	LastClaimed            pgtype.Timestamptz `db:"last_claimed" json:"last_claimed" description:"The server's last claimed date"`
@@ -172,15 +174,28 @@ type DiscordServerMeta struct {
 }
 
 type ListIndexServer struct {
-	Certified     []IndexServer `json:"certified" description:"The certified servers (if any)"`
-	Premium       []IndexServer `json:"premium" description:"The premium servers, usually limited to 12"`
-	MostViewed    []IndexServer `json:"most_viewed" description:"The most viewed servers, usually limited to 12"`
-	RecentlyAdded []IndexServer `json:"recently_added" description:"The recently added servers, usually limited to 12"`
-	TopVoted      []IndexServer `json:"top_voted" description:"The top voted servers, usually limited to 12"`
-	Featured      []IndexServer `json:"featured" description:"Servers with an active featured_until from a shop purchase"`
-	Spotlight     []IndexServer `json:"spotlight" description:"Servers with an active spotlighted_until, set by staff"`
+	Certified      []IndexServer `json:"certified" description:"The certified servers (if any)"`
+	Premium        []IndexServer `json:"premium" description:"The premium servers, usually limited to 12"`
+	MostViewed     []IndexServer `json:"most_viewed" description:"The most viewed servers, usually limited to 12"`
+	RecentlyAdded  []IndexServer `json:"recently_added" description:"The recently added servers, usually limited to 12"`
+	TopVoted       []IndexServer `json:"top_voted" description:"The top voted servers, usually limited to 12"`
+	Featured       []IndexServer `json:"featured" description:"Servers with an active featured_until from a shop purchase"`
+	Spotlight      []IndexServer `json:"spotlight" description:"Servers with an active spotlighted_until, set by staff"`
+	RecentlyBumped []IndexServer `json:"recently_bumped" description:"Servers most recently bumped with /bump"`
 }
 
 type RandomServers struct {
 	Servers []IndexServer `json:"servers"`
+}
+
+type ServerBumper struct {
+	User  *dovetypes.PlatformUser `json:"user" description:"The member who bumped"`
+	Bumps int                     `json:"bumps" description:"How many times they bumped the server in the last 30 days"`
+}
+
+type ServerBumpInfo struct {
+	BumpedAt   *time.Time     `json:"bumped_at" description:"When the server was last bumped, null if never"`
+	NextBumpAt *time.Time     `json:"next_bump_at" description:"When the server can next be bumped, null if it can be bumped now"`
+	Bumps30d   int            `json:"bumps_30d" description:"How many times the server was bumped in the last 30 days"`
+	TopBumpers []ServerBumper `json:"top_bumpers" description:"The members who bumped the server most in the last 30 days"`
 }

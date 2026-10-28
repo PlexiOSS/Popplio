@@ -202,6 +202,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		AutoVotesOptOut:        row.AutoVotesOptOut,
 		HighlightedUntil:       row.HighlightedUntil,
 		CardTheme:              row.CardTheme,
+		BumpedAt:               row.BumpedAt,
 		Highlighted:            row.HighlightedUntil.Valid && row.HighlightedUntil.Time.After(time.Now()),
 		CreatedAt:              row.CreatedAt,
 		ClaimedBy:              row.ClaimedBy,

@@ -819,7 +819,8 @@ CREATE TABLE public.servers (
     auto_votes_opt_out boolean DEFAULT false NOT NULL,
     highlighted_until timestamp with time zone,
     card_theme boolean DEFAULT false NOT NULL,
-    card_color text
+    card_color text,
+    bumped_at timestamp with time zone
 );
 
 
@@ -2619,3 +2620,34 @@ CREATE TABLE public.auto_vote_targets (
     last_skip_reason text,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
+
+CREATE TABLE public.server_bumps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    server_id text NOT NULL REFERENCES public.servers (server_id) ON DELETE CASCADE,
+    user_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.server_bumps
+    ADD CONSTRAINT server_bumps_pkey PRIMARY KEY (id);
+
+CREATE INDEX server_bumps_server_created_idx ON public.server_bumps (server_id, created_at DESC);
+CREATE INDEX servers_bumped_at_idx ON public.servers (bumped_at DESC) WHERE bumped_at IS NOT NULL;
+
+CREATE TABLE public.entity_stats_daily (
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    day date NOT NULL,
+    clicks integer DEFAULT 0 NOT NULL,
+    invite_clicks integer DEFAULT 0 NOT NULL,
+    servers integer DEFAULT 0 NOT NULL,
+    users integer DEFAULT 0 NOT NULL,
+    total_members integer DEFAULT 0 NOT NULL,
+    online_members integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.entity_stats_daily
+    ADD CONSTRAINT entity_stats_daily_pkey PRIMARY KEY (target_type, target_id, day);
+
+CREATE INDEX entity_votes_target_all_created_idx ON public.entity_votes (target_type, target_id, created_at);

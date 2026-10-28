@@ -93,6 +93,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while processing spotlight servers", err)
 	}
 
+	bumpedRows, err := q.GetRecentlyBumpedIndexServers(d.Context)
+	if err != nil {
+		return resp.Err("Error while getting recently bumped servers", err)
+	}
+	listIndex.RecentlyBumped, err = processRow(d.Context, toIndexServersFromBumped(bumpedRows))
+	if err != nil {
+		return resp.Err("Error while processing recently bumped servers", err)
+	}
+
 	return uapi.HttpResponse{
 		Json: listIndex,
 	}
@@ -284,6 +293,34 @@ func toIndexServersFromFeatured(rows []db.GetFeaturedIndexServersRow) []types.In
 }
 
 func toIndexServersFromSpotlight(rows []db.GetSpotlightIndexServersRow) []types.IndexServer {
+	servers := make([]types.IndexServer, len(rows))
+	for i, row := range rows {
+		servers[i] = types.IndexServer{
+			ServerID:         row.ServerID,
+			Name:             row.Name,
+			Avatar:           row.Avatar,
+			TotalMembers:     int(row.TotalMembers),
+			OnlineMembers:    int(row.OnlineMembers),
+			Short:            row.Short,
+			Type:             row.Type,
+			State:            row.State,
+			VanityRef:        row.VanityRef,
+			ApproximateVotes: int(row.ApproximateVotes),
+			InviteClicks:     int(row.InviteClicks),
+			Clicks:           int(row.Clicks),
+			NSFW:             row.Nsfw,
+			Tags:             row.Tags,
+			Premium:          row.Premium,
+			SupporterBadge:   row.SupporterBadge,
+			BoostedUntil:     row.BoostedUntil,
+			FeaturedUntil:    row.FeaturedUntil,
+			SpotlightedUntil: row.SpotlightedUntil,
+		}
+	}
+	return servers
+}
+
+func toIndexServersFromBumped(rows []db.GetRecentlyBumpedIndexServersRow) []types.IndexServer {
 	servers := make([]types.IndexServer, len(rows))
 	for i, row := range rows {
 		servers[i] = types.IndexServer{

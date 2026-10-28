@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
+	"time"
 
 	"popplio/botpresence"
 	"popplio/db"
@@ -15,12 +15,11 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
 	botPresenceBatchSize = 200
-	botPresenceWorkers   = 4
+	botPresenceGap       = 1200 * time.Millisecond
 )
 
 func BotPresenceSync(ctx context.Context) error {
@@ -72,59 +71,60 @@ func BotPresenceSync(ctx context.Context) error {
 		return nil
 	}
 
-	var updated, unknown, failed atomic.Int64
+	var updated, unknown, failed int64
+	rateLimited := false
 
-	runCtx, stop := context.WithCancel(ctx)
-	defer stop()
+	pace := time.NewTicker(botPresenceGap)
+	defer pace.Stop()
 
-	g, gctx := errgroup.WithContext(runCtx)
-	g.SetLimit(botPresenceWorkers)
-
-	for _, botID := range due {
-		g.Go(func() error {
-			if gctx.Err() != nil {
-				return nil
+	for i, botID := range due {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-pace.C:
 			}
+		}
 
-			presence, err := japi.GetPresence(gctx, botID)
+		presence, err := japi.GetPresence(ctx, botID)
 
-			switch {
-			case err == nil:
-				if err := botpresence.Set(ctx, botID, presence.Status); err != nil {
-					failed.Add(1)
-					return nil
-				}
-				updated.Add(1)
-			case errors.Is(err, japi.ErrNotFound):
-				if err := botpresence.SetUnknown(ctx, botID); err != nil {
-					failed.Add(1)
-					return nil
-				}
-				unknown.Add(1)
-			case errors.Is(err, japi.ErrUnavailable), errors.Is(err, japi.ErrRateLimited):
-				failed.Add(1)
-				stop()
-			default:
-				failed.Add(1)
-				state.Logger.Warn("bot_presence_sync: presence lookup failed", zap.String("botID", botID), zap.Error(err))
+		switch {
+		case err == nil:
+			if err := botpresence.Set(ctx, botID, presence.Status); err != nil {
+				failed++
+				continue
 			}
+			updated++
+		case errors.Is(err, japi.ErrNotFound):
+			if err := botpresence.SetUnknown(ctx, botID); err != nil {
+				failed++
+				continue
+			}
+			unknown++
+		case errors.Is(err, japi.ErrUnavailable), errors.Is(err, japi.ErrRateLimited):
+			rateLimited = true
+			state.Logger.Info("bot_presence_sync: japi.rest asked us to slow down, stopping this batch", zap.Error(err))
+		default:
+			failed++
+			state.Logger.Warn("bot_presence_sync: presence lookup failed", zap.String("botID", botID), zap.Error(err))
+		}
 
-			return nil
-		})
+		if rateLimited {
+			break
+		}
 	}
-
-	_ = g.Wait()
 
 	state.Logger.Info("bot_presence_sync: batch done",
 		zap.Int("due", len(due)),
-		zap.Int64("updated", updated.Load()),
-		zap.Int64("unknown", unknown.Load()),
-		zap.Int64("failed", failed.Load()),
+		zap.Int64("updated", updated),
+		zap.Int64("unknown", unknown),
+		zap.Int64("failed", failed),
 		zap.Bool("backlog", untracked > len(due)),
+		zap.Bool("rate_limited", rateLimited),
 	)
 
-	if updated.Load() == 0 && unknown.Load() == 0 && failed.Load() > 0 {
-		return fmt.Errorf("no bot presences could be fetched from japi.rest (%d failed)", failed.Load())
+	if updated == 0 && unknown == 0 && failed > 0 {
+		return fmt.Errorf("no bot presences could be fetched from japi.rest (%d failed)", failed)
 	}
 
 	return nil

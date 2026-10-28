@@ -14,6 +14,7 @@ import (
 	"popplio/routes/bots/endpoints/delete_bot_changelog"
 	"popplio/routes/bots/endpoints/get_all_bots"
 	"popplio/routes/bots/endpoints/get_bot"
+	"popplio/routes/bots/endpoints/get_bot_analytics"
 	"popplio/routes/bots/endpoints/get_bot_changelogs"
 	"popplio/routes/bots/endpoints/get_bot_changelogs_feed"
 	"popplio/routes/bots/endpoints/get_bot_commands"
@@ -141,6 +142,33 @@ func (b Router) Routes(r *chi.Mux) {
 		},
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/analytics",
+		OpId:    "get_bot_analytics",
+		Method:  uapi.GET,
+		Docs:    get_bot_analytics.Docs,
+		Handler: get_bot_analytics.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeBot,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditBots),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeBot, chi.URLParam(r, "id")
+				},
+			},
 		},
 	}.Route(r)
 

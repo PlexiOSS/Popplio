@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-28
+
+### Added
+
+- `/bump` in Infernoplex moves a public, approved server to the top of a
+  new Recently bumped list, once every 2 hours per server. Any member can
+  bump. Each bump is recorded in a new `server_bumps` table and sets
+  `servers.bumped_at` (migration `20261028100000_server_bumps`). After a
+  bump the bot shows the server's top bumpers for the last 30 days.
+- `/vote` in Infernoplex votes for the server it's used in, through the
+  same vote code and rules as the website (cooldowns, weekend bonus,
+  bans and vote bans). Users must have signed in to Omniplex once. When
+  the server requires a captcha, the bot links to the website instead.
+- `GET /servers/{id}/bumps` returns the last bump, when the next one is
+  allowed, the 30-day bump count and the top 5 bumpers.
+- `GET /servers/@all` accepts `sort=bumped`, and `GET /servers/@index`
+  returns `recently_bumped`. `GET /servers/{id}` returns `bumped_at`.
+- Owner analytics. A new hourly `entity_stats_snapshot` task records each
+  approved bot's and server's views, invite clicks, and server/user or
+  member counts for the day in a new `entity_stats_daily` table (migration
+  `20261028110000_entity_stats_daily`, which also adds an index on
+  `entity_votes` by target and date). Rows older than 400 days are pruned.
+- `GET /bots/{id}/analytics` and `GET /servers/{id}/analytics` return one
+  entry per UTC day for the last 7 to 365 days (`?days=`, default 30):
+  votes and automatic votes, views and invite clicks, and server/user or
+  member counts. Votes come from vote history, so they cover the whole
+  range. Everything else starts from the first snapshot and is reported
+  as `tracked_since`. Requires Edit Bots or Edit Servers on the listing.
+
+### Fixed
+
+- The bot presence sync fired its japi.rest lookups four at a time, so
+  japi.rest rate-limited it within about a second and each run only got
+  through a few dozen bots. The lookups still in flight were then
+  logged as "context canceled" failures. It now makes one lookup about
+  every 1.2 seconds, spreading a batch of 200 across the 5-minute
+  interval, stops cleanly when japi.rest asks it to slow down, and logs
+  that as `rate_limited` instead of as failures.
+
 ## [1.15.2] - 2026-10-27
 
 ### Fixed

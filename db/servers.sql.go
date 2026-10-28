@@ -56,6 +56,7 @@ ORDER BY
     CASE WHEN $1::text = 'trending' THEN t.score END DESC,
     CASE WHEN $1::text = 'votes' THEN s.approximate_votes END DESC,
     CASE WHEN $1::text = 'members' THEN s.total_members END DESC,
+    CASE WHEN $1::text = 'bumped' THEN s.bumped_at END DESC NULLS LAST,
     s.created_at DESC
 LIMIT $5 OFFSET $4
 `
@@ -1001,7 +1002,7 @@ func (q *Queries) GetRecentlyAddedIndexServers(ctx context.Context) ([]GetRecent
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at
 FROM servers
 WHERE server_id = $1
 `
@@ -1052,6 +1053,7 @@ type GetServerByIDRow struct {
 	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
 	CardTheme              bool               `db:"card_theme" json:"card_theme"`
 	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
+	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at"`
 }
 
 func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServerByIDRow, error) {
@@ -1103,6 +1105,7 @@ func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServer
 		&i.HighlightedUntil,
 		&i.CardTheme,
 		&i.CardColor,
+		&i.BumpedAt,
 	)
 	return i, err
 }

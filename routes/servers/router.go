@@ -16,6 +16,8 @@ import (
 	"popplio/routes/servers/endpoints/get_flat_stickers"
 	"popplio/routes/servers/endpoints/get_random_servers"
 	"popplio/routes/servers/endpoints/get_server"
+	"popplio/routes/servers/endpoints/get_server_analytics"
+	"popplio/routes/servers/endpoints/get_server_bumps"
 	"popplio/routes/servers/endpoints/get_server_meta"
 	"popplio/routes/servers/endpoints/get_server_seo"
 	"popplio/routes/servers/endpoints/get_servers_emojis"
@@ -183,6 +185,41 @@ func (b Router) Routes(r *chi.Mux) {
 		AuthOptional: true,
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/bumps",
+		OpId:    "get_server_bumps",
+		Method:  uapi.GET,
+		Docs:    get_server_bumps.Docs,
+		Handler: get_server_bumps.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/analytics",
+		OpId:    "get_server_analytics",
+		Method:  uapi.GET,
+		Docs:    get_server_analytics.Docs,
+		Handler: get_server_analytics.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeServer,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditServers),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeServer, chi.URLParam(r, "id")
+				},
+			},
 		},
 	}.Route(r)
 

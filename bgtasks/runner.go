@@ -80,6 +80,13 @@ func All() []Task {
 			Run:         CreditHoldSweep,
 		},
 		{
+			Name:        "entity_stats_snapshot",
+			Description: "Recording each listed bot and server's views, invite clicks and counts for the day so owners can see them over time",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         EntityStatsSnapshot,
+		},
+		{
 			Name:        "auto_vote",
 			Description: "Casting automatic votes for auto-vote subscribers whose cooldown and schedule allow it",
 			Enabled:     true,

@@ -293,6 +293,19 @@ type EntityBadge struct {
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type EntityStatsDaily struct {
+	TargetType    string             `db:"target_type" json:"target_type"`
+	TargetID      string             `db:"target_id" json:"target_id"`
+	Day           pgtype.Date        `db:"day" json:"day"`
+	Clicks        int32              `db:"clicks" json:"clicks"`
+	InviteClicks  int32              `db:"invite_clicks" json:"invite_clicks"`
+	Servers       int32              `db:"servers" json:"servers"`
+	Users         int32              `db:"users" json:"users"`
+	TotalMembers  int32              `db:"total_members" json:"total_members"`
+	OnlineMembers int32              `db:"online_members" json:"online_members"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type EntityVote struct {
 	Itag         pgtype.UUID        `db:"itag" json:"itag"`
 	TargetID     string             `db:"target_id" json:"target_id"`
@@ -524,6 +537,14 @@ type Server struct {
 	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
 	CardTheme              bool               `db:"card_theme" json:"card_theme"`
 	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
+	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at"`
+}
+
+type ServerBump struct {
+	ID        pgtype.UUID        `db:"id" json:"id"`
+	ServerID  string             `db:"server_id" json:"server_id"`
+	UserID    string             `db:"user_id" json:"user_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type ServerTemplate struct {

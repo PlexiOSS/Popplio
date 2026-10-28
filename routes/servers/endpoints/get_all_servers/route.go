@@ -27,6 +27,7 @@ var sorts = map[string]bool{
 	"new":      true,
 	"trending": true,
 	"votes":    true,
+	"bumped":   true,
 	"members":  true,
 }
 
@@ -46,7 +47,7 @@ func Docs() *docs.Doc {
 			},
 			{
 				Name:        "sort",
-				Description: "Sort order: new (default; newest first, with boosted listings on top), trending (net votes in the last 7 days, only servers with at least one vote in that window), votes (most votes this cycle) or members (highest member count).",
+				Description: "Sort order: new (default; newest first, with boosted listings on top), trending (net votes in the last 7 days, only servers with at least one vote in that window), votes (most votes this cycle) members (highest member count) or bumped (most recently bumped with /bump first).",
 				Required:    false,
 				In:          "query",
 				Schema:      docs.IdSchema,
@@ -85,7 +86,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if !sorts[sort] {
-		return resp.BadRequest("sort must be new, trending, votes or members")
+		return resp.BadRequest("sort must be new, trending, votes, members or bumped")
 	}
 
 	var tag pgtype.Text
