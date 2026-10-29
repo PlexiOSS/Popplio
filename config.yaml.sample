@@ -103,4 +103,4 @@ infernoplex:
   token:  # Infernoplex bot Discord token
 
 captcha:
-  hmac_secret:  # Secret used to sign and verify proof-of-work vote captcha challenges. Generate with e.g. openssl rand -hex 32 — rotating it invalidates all outstanding challenges
+  turnstile_secret:  # Cloudflare Turnstile secret key used to verify vote captchas. The matching site key goes in Omniplex's NEXT_PUBLIC_TURNSTILE_SITE_KEY

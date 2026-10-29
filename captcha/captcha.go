@@ -4,15 +4,12 @@ package captcha
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
-	"strconv"
+	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,117 +17,82 @@ import (
 	"popplio/state"
 )
 
-const Difficulty = 20
-const Lifetime = 2 * time.Minute
-const saltBytes = 16
+const (
+	VerifyURL      = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+	Action         = "vote"
+	MaxTokenLength = 2048
+)
 
-type Challenge struct {
-	Salt       string `json:"salt"`
-	Difficulty int    `json:"difficulty"`
-	Expires    int64  `json:"expires"`
-	Signature  string `json:"signature"`
-}
+var (
+	ErrUnavailable = errors.New("captcha verification is unavailable")
+	ErrInvalid     = errors.New("captcha verification failed")
+	ErrExpired     = errors.New("captcha expired or already used")
+)
+
+var client = &http.Client{Timeout: 10 * time.Second}
 
 type Solution struct {
-	Salt       string `json:"salt"`
-	Difficulty int    `json:"difficulty"`
-	Expires    int64  `json:"expires"`
-	Signature  string `json:"signature"`
-	Nonce      string `json:"nonce"`
+	Token string `json:"token"`
 }
 
-func secret() []byte {
-	return []byte(state.Config.Captcha.HMACSecret)
-}
-
-func sign(salt string, difficulty int, expires int64) string {
-	mac := hmac.New(sha256.New, secret())
-	mac.Write([]byte(payloadToSign(salt, difficulty, expires)))
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
-func payloadToSign(salt string, difficulty int, expires int64) string {
-	return salt + "|" + strconv.Itoa(difficulty) + "|" + strconv.FormatInt(expires, 10)
-}
-
-func New() (*Challenge, error) {
-	saltRaw := make([]byte, saltBytes)
-	if _, err := rand.Read(saltRaw); err != nil {
-		return nil, fmt.Errorf("failed to generate salt: %w", err)
-	}
-	salt := hex.EncodeToString(saltRaw)
-	expires := time.Now().Add(Lifetime).UnixMilli()
-
-	return &Challenge{
-		Salt:       salt,
-		Difficulty: Difficulty,
-		Expires:    expires,
-		Signature:  sign(salt, Difficulty, expires),
-	}, nil
-}
-
-func leadingZeroBits(h [32]byte) int {
-	count := 0
-	for _, b := range h {
-		if b == 0 {
-			count += 8
-			continue
-		}
-		count += bitsLeadingZero(b)
-		break
-	}
-	return count
-}
-
-func bitsLeadingZero(b byte) int {
-	n := 0
-	for i := 7; i >= 0; i-- {
-		if (b>>uint(i))&1 != 0 {
-			break
-		}
-		n++
-	}
-	return n
+type siteverifyResponse struct {
+	Success    bool     `json:"success"`
+	ErrorCodes []string `json:"error-codes"`
+	Action     string   `json:"action"`
+	Hostname   string   `json:"hostname"`
 }
 
 func Verify(ctx context.Context, s Solution) error {
-	if s.Salt == "" || s.Signature == "" || s.Nonce == "" {
-		return errors.New("captcha solution is missing required fields")
+	token := strings.TrimSpace(s.Token)
+
+	if token == "" || len(token) > MaxTokenLength {
+		return ErrInvalid
 	}
 
-	expectedSig := sign(s.Salt, s.Difficulty, s.Expires)
-	if subtle.ConstantTimeCompare([]byte(expectedSig), []byte(s.Signature)) != 1 {
-		return errors.New("captcha challenge signature is invalid")
+	form := url.Values{
+		"secret":   {state.Config.Captcha.TurnstileSecret},
+		"response": {token},
 	}
 
-	if time.Now().UnixMilli() > s.Expires {
-		return errors.New("captcha challenge has expired, please try again")
-	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, VerifyURL, strings.NewReader(form.Encode()))
 
-	if len(s.Nonce) > 32 {
-		return errors.New("captcha solution is invalid")
-	}
-	if _, ok := new(big.Int).SetString(s.Nonce, 10); !ok {
-		return errors.New("captcha solution is invalid")
-	}
-
-	sum := sha256.Sum256([]byte(s.Salt + ":" + s.Nonce))
-	if leadingZeroBits(sum) < s.Difficulty {
-		return errors.New("captcha proof of work is insufficient")
-	}
-
-	ttl := time.Until(time.UnixMilli(s.Expires))
-	if ttl <= 0 {
-		ttl = time.Second
-	}
-
-	key := "captcha:used:" + s.Signature
-	ok, err := state.Redis.SetNX(ctx, key, "1", ttl).Result()
 	if err != nil {
-		return fmt.Errorf("failed to check captcha replay state: %w", err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	if !ok {
-		return errors.New("captcha solution has already been used")
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	res, err := client.Do(req)
+
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: siteverify returned %d", ErrUnavailable, res.StatusCode)
+	}
+
+	var out siteverifyResponse
+
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+
+	if !out.Success {
+		switch {
+		case slices.Contains(out.ErrorCodes, "timeout-or-duplicate"):
+			return ErrExpired
+		case slices.Contains(out.ErrorCodes, "missing-input-secret"), slices.Contains(out.ErrorCodes, "invalid-input-secret"), slices.Contains(out.ErrorCodes, "internal-error"):
+			return fmt.Errorf("%w: %s", ErrUnavailable, strings.Join(out.ErrorCodes, ","))
+		}
+
+		return ErrInvalid
+	}
+
+	if out.Action != "" && out.Action != Action {
+		return ErrInvalid
 	}
 
 	return nil
@@ -157,5 +119,3 @@ func RequiresCaptcha(ctx context.Context, targetType, targetId string) (bool, er
 
 	return !optOut, nil
 }
-
-var _ = strings.TrimSpace

@@ -14,7 +14,6 @@ import (
 	"popplio/routes/votes/endpoints/get_entity_voters"
 	"popplio/routes/votes/endpoints/get_general_vote_credit_tiers"
 	"popplio/routes/votes/endpoints/get_user_entity_votes"
-	"popplio/routes/votes/endpoints/get_vote_captcha_challenge"
 	"popplio/routes/votes/endpoints/get_vote_credit_tiers"
 	"popplio/routes/votes/endpoints/get_vote_redeem_logs"
 	"popplio/routes/votes/endpoints/get_voter_leaderboard"
@@ -63,14 +62,6 @@ func (b Router) Routes(r *chi.Mux) {
 	}.Route(r)
 
 	uapi.Route{
-		Pattern: "/votes/captcha/challenge",
-		OpId:    "get_vote_captcha_challenge",
-		Method:  uapi.GET,
-		Docs:    get_vote_captcha_challenge.Docs,
-		Handler: get_vote_captcha_challenge.Route,
-	}.Route(r)
-
-	uapi.Route{
 		Pattern: "/{target_type}/{target_id}/votes/credit-tiers",
 		OpId:    "get_vote_credit_tiers",
 		Method:  uapi.GET,
@@ -100,13 +91,6 @@ func (b Router) Routes(r *chi.Mux) {
 					targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
 					targetId := chi.URLParam(r, "target_id")
 
-					// "pack" isn't a registered auth type (no AuthTypeMap
-					// entry -- see the identical fix in
-					// routes/vanity/router.go for pack_emoji/pack_sticker/
-					// pack_sound), so AuthzEntityPermissionCheck would reject
-					// it outright before ever reaching teams.GetEntityPerms's
-					// already-correct "pack" owner-comparison case. Resolve
-					// down to the owning user instead, same pattern.
 					if targetType == "pack" {
 						owner, err := db.New(state.Pool).GetPackOwner(r.Context(), targetId)
 						if err != nil {

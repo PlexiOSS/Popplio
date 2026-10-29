@@ -1,8 +1,3 @@
-// Package create_user_entity_vote implements PUT
-// /users/{uid}/{target_type}/{target_id}/votes — "Create Entity Vote".
-//
-// Creates a vote for an entity. Returns 204 on success. Note that for
-// compatibility, a trailing 's' is removed
 package create_user_entity_vote
 
 import (
@@ -28,14 +23,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// maxCaptchaBodyBytes bounds how much of the request body we'll read to look
-// for a captcha solution, well above any real payload's size.
 const maxCaptchaBodyBytes = 4096
 
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Create Entity Vote",
-		Description: "Creates a vote for an entity. Returns 204 on success. Note that for compatibility, a trailing 's' is removed. If the target is a bot or server that has not opted out of captchas, the request body must contain a solved captcha.Solution obtained from GET /votes/captcha/challenge",
+		Description: "Creates a vote for an entity. Returns 204 on success. Note that for compatibility, a trailing 's' is removed. If the target is a bot or server that has not opted out of captchas, the request body must be {\"token\": \"...\"} with a Cloudflare Turnstile token rendered with the action \"vote\"",
 		Params: []docs.Parameter{
 			{
 				Name:        "uid",
@@ -78,7 +71,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("Both target_id and target_type must be specified")
 	}
 
-	// Check if upvote query parameter is valid
 	upvoteStr := r.URL.Query().Get("upvote")
 
 	if upvoteStr != "true" && upvoteStr != "false" {
@@ -87,7 +79,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	upvote := upvoteStr == "true"
 
-	// Check if user is allowed to even make a vote right now.
 	voteBanned, err := db.New(state.Pool).GetUserVoteBanned(d.Context, d.Auth.ID)
 
 	if err != nil {
@@ -99,9 +90,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Forbidden("You are banned from voting right now! Contact support if you think this is a mistake")
 	}
 
-	// Bots/servers require a solved captcha unless the owner has opted out
-	// (captcha_opt_out). The solution, if any, travels as a JSON body; it's
-	// optional at the transport level since most target types don't need one.
 	requiresCaptcha, err := captcha.RequiresCaptcha(d.Context, targetType, targetId)
 
 	if err != nil {
@@ -117,7 +105,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		if len(bodyBytes) == 0 || len(bodyBytes) > maxCaptchaBodyBytes {
-			return resp.BadRequest("This vote requires solving a captcha first. Fetch a challenge from GET /votes/captcha/challenge, solve it, and submit the solution as the request body")
+			return resp.BadRequest("This vote requires completing the captcha first")
 		}
 
 		var solution captcha.Solution
@@ -127,7 +115,18 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		if err := captcha.Verify(d.Context, solution); err != nil {
-			return resp.BadRequest("Captcha verification failed: " + err.Error())
+			switch {
+			case errors.Is(err, captcha.ErrExpired):
+				return resp.BadRequest("The captcha expired or was already used. Please complete it again.")
+			case errors.Is(err, captcha.ErrUnavailable):
+				state.Logger.Error("Turnstile verification unavailable", zap.Error(err))
+				return uapi.HttpResponse{
+					Status: http.StatusServiceUnavailable,
+					Json:   types.ApiError{Message: "We couldn't check the captcha right now. Please try again in a moment."},
+				}
+			default:
+				return resp.BadRequest("The captcha check failed. Please complete it again.")
+			}
 		}
 	}
 

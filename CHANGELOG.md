@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-29
+
+### Changed
+
+- The `changelog_drafts` task checks GitHub for new CHANGELOG.md releases
+  every 5 minutes instead of every hour, so a release's draft appears in
+  the admin panel shortly after it's pushed. That's three GitHub API calls
+  per check, well within the authenticated rate limit.
+- Vote captchas now use Cloudflare Turnstile instead of the built-in
+  proof-of-work puzzle. A vote on a bot or server that hasn't opted out of
+  captchas must send `{"token": "..."}` as its body, a Turnstile token
+  rendered with the action `vote`, which Popplio checks with Cloudflare's
+  siteverify API. Expired or reused tokens and failed checks return 400
+  with a message asking the voter to try again, and Cloudflare being
+  unreachable returns 503. Owners still turn captchas off with
+  `captcha_opt_out`, and they stay on by default.
+- **Config:** `captcha.hmac_secret` is replaced by the required
+  `captcha.turnstile_secret`, the secret key of the Turnstile widget.
+  Popplio won't start without it. The old key is ignored and can be
+  deleted.
+
+### Removed
+
+- `GET /votes/captcha/challenge`, which issued proof-of-work challenges.
+
 ## [1.16.0] - 2026-10-28
 
 ### Added

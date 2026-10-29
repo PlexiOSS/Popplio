@@ -41,7 +41,7 @@ func All() []Task {
 			Name:        "changelog_drafts",
 			Description: "Creating unpublished public changelog drafts for new CHANGELOG.md releases",
 			Enabled:     true,
-			Interval:    time.Hour,
+			Interval:    5 * time.Minute,
 			Run:         ChangelogDrafts,
 		},
 		{

@@ -125,7 +125,7 @@ type Infernoplex struct {
 }
 
 type Captcha struct {
-	HMACSecret string `yaml:"hmac_secret" comment:"Secret used to sign and verify proof-of-work vote captcha challenges. Generate with e.g. openssl rand -hex 32 — rotating it invalidates all outstanding challenges" validate:"required"`
+	TurnstileSecret string `yaml:"turnstile_secret" comment:"Cloudflare Turnstile secret key used to verify vote captchas. The matching site key goes in Omniplex's NEXT_PUBLIC_TURNSTILE_SITE_KEY" validate:"required"`
 }
 
 type Naevis struct {
