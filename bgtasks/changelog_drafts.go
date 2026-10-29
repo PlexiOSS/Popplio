@@ -48,7 +48,7 @@ func draftNewReleases(ctx context.Context, project, author string) ([]string, er
 		return nil, nil
 	}
 
-	markdown, err := changeloggen.FetchChangelogFile(ctx, owner, repoName)
+	markdown, err := changeloggen.FetchChangelogFile(ctx, owner, repoName, changeloggen.ChangelogPathsFor(project))
 
 	if errors.Is(err, changeloggen.ErrNoChangelog) {
 		return nil, nil

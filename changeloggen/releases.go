@@ -27,8 +27,22 @@ const maxReleaseChars = 14000
 
 var releaseHeading = regexp.MustCompile(`^## \[([^\]]+)\](?:\s*-\s*(\S+))?`)
 
-func FetchChangelogFile(ctx context.Context, owner, repoName string) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/CHANGELOG.md", owner, repoName)
+func FetchChangelogFile(ctx context.Context, owner, repoName string, paths []string) (string, error) {
+	for _, path := range paths {
+		markdown, err := fetchChangelogPath(ctx, owner, repoName, path)
+
+		if errors.Is(err, ErrNoChangelog) {
+			continue
+		}
+
+		return markdown, err
+	}
+
+	return "", ErrNoChangelog
+}
+
+func fetchChangelogPath(ctx context.Context, owner, repoName, path string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repoName, path)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
@@ -64,7 +78,7 @@ func FetchChangelogFile(ctx context.Context, owner, repoName string) (string, er
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 
 	if err != nil {
-		return "", fmt.Errorf("failed to read CHANGELOG.md: %w", err)
+		return "", fmt.Errorf("failed to read %s: %w", path, err)
 	}
 
 	return string(body), nil

@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/PlexiOSS/Keel v1.0.1
+	github.com/PlexiOSS/Keel v1.0.4
 	github.com/disgoorg/disgo v0.18.11
 )
 

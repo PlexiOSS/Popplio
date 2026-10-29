@@ -3,7 +3,7 @@ module popplio
 go 1.25.0
 
 require (
-	github.com/PlexiOSS/Keel v1.0.3
+	github.com/PlexiOSS/Keel v1.0.4
 	github.com/getkin/kin-openapi v0.127.0 // indirect
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/google/uuid v1.6.0
@@ -50,7 +50,6 @@ require (
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	golang.org/x/net v0.42.0 // indirect
 )
 

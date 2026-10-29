@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-10-29
+
+### Security
+
+- Session tokens, API tokens, data-export task keys, webhook nonces and
+  every other value from Keel's `crypto.RandString` now come from
+  `crypto/rand`. They used to come from `math/rand` seeded with the clock,
+  which allows only about 2.1 billion different values, so tokens could be
+  guessed from their creation time and two tokens could come out the same.
+  Keel is now v1.0.4.
+
+### Changed
+
+- The changelog drafts task tries `apps/web/CHANGELOG.md` before
+  `CHANGELOG.md` for Omniplex, since the website moved into `apps/web`
+  when the repo became a monorepo. Other projects still read the root
+  `CHANGELOG.md`.
+
 ## [1.17.0] - 2026-10-29
 
 ### Changed
