@@ -95,14 +95,19 @@ func (q *Queries) GetChangelogList(ctx context.Context, arg GetChangelogListPara
 }
 
 const getChangelogPublishedByItag = `-- name: GetChangelogPublishedByItag :one
-SELECT published FROM changelogs WHERE itag = $1
+SELECT published, package FROM changelogs WHERE itag = $1
 `
 
-func (q *Queries) GetChangelogPublishedByItag(ctx context.Context, itag string) (bool, error) {
+type GetChangelogPublishedByItagRow struct {
+	Published bool        `db:"published" json:"published"`
+	Package   pgtype.Text `db:"package" json:"package"`
+}
+
+func (q *Queries) GetChangelogPublishedByItag(ctx context.Context, itag string) (GetChangelogPublishedByItagRow, error) {
 	row := q.db.QueryRow(ctx, getChangelogPublishedByItag, itag)
-	var published bool
-	err := row.Scan(&published)
-	return published, err
+	var i GetChangelogPublishedByItagRow
+	err := row.Scan(&i.Published, &i.Package)
+	return i, err
 }
 
 const getChangelogVersions = `-- name: GetChangelogVersions :many

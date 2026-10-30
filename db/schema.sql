@@ -1525,14 +1525,6 @@ ALTER TABLE ONLY public.changelogs
 
 
 --
--- Name: changelogs changelogs_project_version_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.changelogs
-    ADD CONSTRAINT changelogs_project_version_key UNIQUE (project, version);
-
-
---
 -- Name: entity_badges entity_badges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2078,6 +2070,13 @@ CREATE INDEX bots_short_fts_idx ON public.bots USING gin (to_tsvector('english':
 --
 
 CREATE INDEX changelogs_project_published_idx ON public.changelogs USING btree (project, published, created_at DESC);
+
+
+--
+-- Name: changelogs_project_package_version_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX changelogs_project_package_version_key ON public.changelogs USING btree (project, COALESCE(package, ''::text), version);
 
 
 --

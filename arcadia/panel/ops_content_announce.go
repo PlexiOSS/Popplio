@@ -69,7 +69,7 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 	addField("Removed", entry.Removed)
 	addField("Security", entry.Security)
 
-	ping := entry.Project == "omniplex" && entry.Package == nil
+	ping := entry.Project == "omniplex" && (entry.Package == nil || *entry.Package == "")
 	if entry.PingRoles != nil {
 		ping = *entry.PingRoles
 	}

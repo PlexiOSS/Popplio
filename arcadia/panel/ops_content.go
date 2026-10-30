@@ -326,6 +326,8 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "package must be lowercase letters, digits and hyphens"), nil
 		}
 
+		entry.Package = textPtr(pkg)
+
 		var createdAt pgtype.Timestamptz
 
 		if entry.CreatedAt != nil {
@@ -379,7 +381,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return response{}, newError(err)
 		}
 
-		wasPublished, err := queries.GetChangelogPublishedByItag(ctx, entry.Itag)
+		existing, err := queries.GetChangelogPublishedByItag(ctx, entry.Itag)
 
 		if err != nil {
 			exists, existsErr := queries.CountChangelogByItag(ctx, entry.Itag)
@@ -393,6 +395,12 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			}
 
 			return response{}, newError(err)
+		}
+
+		wasPublished := existing.Published
+
+		if entry.Package == nil {
+			pkg = existing.Package
 		}
 
 		var createdAt pgtype.Timestamptz

@@ -20,7 +20,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE(sqlc.narg('create
 SELECT EXISTS(SELECT 1 FROM changelogs WHERE itag = $1);
 
 -- name: GetChangelogPublishedByItag :one
-SELECT published FROM changelogs WHERE itag = $1;
+SELECT published, package FROM changelogs WHERE itag = $1;
 
 -- name: UpdateChangelogEntry :exec
 UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, security = $7, removed = $8, extra_description = $9, prerelease = $10, published = $11, created_at = COALESCE(sqlc.narg('created_at')::timestamptz, created_at), package = sqlc.narg('package')
