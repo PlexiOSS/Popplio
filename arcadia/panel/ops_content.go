@@ -250,6 +250,26 @@ func validChangelogProject(project string) bool {
 	return project == "popplio" || project == "omniplex" || project == "keel"
 }
 
+func changelogPackage(pkg *string) (pgtype.Text, bool) {
+	if pkg == nil || *pkg == "" {
+		return pgtype.Text{}, true
+	}
+
+	if !changeloggen.ValidPackageName(*pkg) {
+		return pgtype.Text{}, false
+	}
+
+	return pgtype.Text{String: *pkg, Valid: true}, true
+}
+
+func textPtr(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+
+	return &t.String
+}
+
 func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog) (response, error) {
 	authData, userPerms, err := authorize(ctx, q.LoginToken)
 
@@ -273,6 +293,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			entries = append(entries, types.ChangelogEntry{
 				Itag:             row.Itag,
 				Project:          row.Project,
+				Package:          textPtr(row.Package),
 				Version:          row.Version,
 				Added:            types.NonNilStrings(row.Added),
 				Updated:          types.NonNilStrings(row.Updated),
@@ -299,6 +320,14 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
+		pkg, ok := changelogPackage(entry.Package)
+
+		if !ok {
+			return writeText(http.StatusBadRequest, "package must be lowercase letters, digits and hyphens"), nil
+		}
+
+		entry.Package = textPtr(pkg)
+
 		var createdAt pgtype.Timestamptz
 
 		if entry.CreatedAt != nil {
@@ -321,6 +350,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			Published:        entry.Published,
 			CreatedBy:        authData.UserID,
 			CreatedAt:        createdAt,
+			Package:          pkg,
 		})
 
 		if err != nil {
@@ -341,11 +371,17 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			return writeText(http.StatusBadRequest, "project must be 'popplio', 'omniplex', or 'keel'"), nil
 		}
 
+		pkg, ok := changelogPackage(entry.Package)
+
+		if !ok {
+			return writeText(http.StatusBadRequest, "package must be lowercase letters, digits and hyphens"), nil
+		}
+
 		if _, err := uuid.Parse(entry.Itag); err != nil {
 			return response{}, newError(err)
 		}
 
-		wasPublished, err := queries.GetChangelogPublishedByItag(ctx, entry.Itag)
+		existing, err := queries.GetChangelogPublishedByItag(ctx, entry.Itag)
 
 		if err != nil {
 			exists, existsErr := queries.CountChangelogByItag(ctx, entry.Itag)
@@ -359,6 +395,12 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			}
 
 			return response{}, newError(err)
+		}
+
+		wasPublished := existing.Published
+
+		if entry.Package == nil {
+			pkg = existing.Package
 		}
 
 		var createdAt pgtype.Timestamptz
@@ -380,6 +422,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 			Prerelease:       entry.Prerelease,
 			Published:        entry.Published,
 			CreatedAt:        createdAt,
+			Package:          pkg,
 		})
 
 		if err != nil {
@@ -389,6 +432,7 @@ func (s *Server) updateChangelog(ctx context.Context, q *types.QUpdateChangelog)
 		if entry.Published && !wasPublished {
 			announceChangelogEntry(types.ChangelogCreateEntry{
 				Project:          entry.Project,
+				Package:          textPtr(pkg),
 				Version:          entry.Version,
 				Added:            entry.Added,
 				Updated:          entry.Updated,

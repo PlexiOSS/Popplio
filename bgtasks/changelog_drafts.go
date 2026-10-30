@@ -11,6 +11,7 @@ import (
 	"popplio/db"
 	"popplio/state"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -26,29 +27,51 @@ func ChangelogDrafts(ctx context.Context) error {
 	var errs []error
 
 	for _, project := range changelogProjects {
-		created, err := draftNewReleases(ctx, project, author)
+		owner, repoName, ok := changeloggen.RepoFor(project)
 
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", project, err))
+		if !ok {
 			continue
 		}
 
-		for _, version := range created {
-			state.Logger.Info("changelog_drafts: created unpublished draft", zap.String("project", project), zap.String("version", version))
+		sources := []changelogSource{{paths: changeloggen.ChangelogPathsFor(project)}}
+
+		if dir := changeloggen.PackagesDirFor(project); dir != "" {
+			packages, err := changeloggen.ListPackages(ctx, owner, repoName, dir)
+
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: listing packages: %w", project, err))
+			}
+
+			for _, pkg := range packages {
+				sources = append(sources, changelogSource{pkg: pkg, paths: []string{dir + "/" + pkg + "/CHANGELOG.md"}})
+			}
+		}
+
+		for _, source := range sources {
+			created, err := draftNewReleases(ctx, project, owner, repoName, source, author)
+
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s %s: %w", project, source.pkg, err))
+				continue
+			}
+
+			for _, version := range created {
+				state.Logger.Info("changelog_drafts: created unpublished draft",
+					zap.String("project", project), zap.String("package", source.pkg), zap.String("version", version))
+			}
 		}
 	}
 
 	return errors.Join(errs...)
 }
 
-func draftNewReleases(ctx context.Context, project, author string) ([]string, error) {
-	owner, repoName, ok := changeloggen.RepoFor(project)
+type changelogSource struct {
+	pkg   string
+	paths []string
+}
 
-	if !ok {
-		return nil, nil
-	}
-
-	markdown, err := changeloggen.FetchChangelogFile(ctx, owner, repoName, changeloggen.ChangelogPathsFor(project))
+func draftNewReleases(ctx context.Context, project, owner, repoName string, source changelogSource, author string) ([]string, error) {
+	markdown, err := changeloggen.FetchChangelogFile(ctx, owner, repoName, source.paths)
 
 	if errors.Is(err, changeloggen.ErrNoChangelog) {
 		return nil, nil
@@ -66,7 +89,13 @@ func draftNewReleases(ctx context.Context, project, author string) ([]string, er
 
 	q := db.New(state.Pool)
 
-	existing, err := q.GetChangelogVersionsByProject(ctx, project)
+	var pkg pgtype.Text
+
+	if source.pkg != "" {
+		pkg = pgtype.Text{String: source.pkg, Valid: true}
+	}
+
+	existing, err := q.GetChangelogVersions(ctx, db.GetChangelogVersionsParams{Project: project, Package: pkg})
 
 	if err != nil {
 		return nil, fmt.Errorf("reading existing versions: %w", err)
@@ -105,7 +134,7 @@ func draftNewReleases(ctx context.Context, project, author string) ([]string, er
 	var created []string
 
 	for _, r := range due {
-		draft, err := changeloggen.SummarizeRelease(ctx, project, r)
+		draft, err := changeloggen.SummarizeRelease(ctx, project, source.pkg, r)
 
 		if err != nil {
 			return created, fmt.Errorf("summarizing %s: %w", r.Version, err)
@@ -123,6 +152,7 @@ func draftNewReleases(ctx context.Context, project, author string) ([]string, er
 			Prerelease:       false,
 			Published:        false,
 			CreatedBy:        author,
+			Package:          pkg,
 		})
 
 		if err != nil {

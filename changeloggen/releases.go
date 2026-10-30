@@ -4,11 +4,13 @@ package changeloggen
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -41,16 +43,16 @@ func FetchChangelogFile(ctx context.Context, owner, repoName string, paths []str
 	return "", ErrNoChangelog
 }
 
-func fetchChangelogPath(ctx context.Context, owner, repoName, path string) (string, error) {
+func githubContents(ctx context.Context, owner, repoName, path, accept string) (*http.Response, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s", owner, repoName, path)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to build GitHub request: %w", err)
+		return nil, fmt.Errorf("failed to build GitHub request: %w", err)
 	}
 
-	req.Header.Set("Accept", "application/vnd.github.raw+json")
+	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "Popplio-Changeloggen")
 
@@ -61,7 +63,57 @@ func fetchChangelogPath(ctx context.Context, owner, repoName, path string) (stri
 	resp, err := httpClient.Do(req)
 
 	if err != nil {
-		return "", fmt.Errorf("GitHub request failed: %w", err)
+		return nil, fmt.Errorf("GitHub request failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+func ListPackages(ctx context.Context, owner, repoName, dir string) ([]string, error) {
+	resp, err := githubContents(ctx, owner, repoName, dir, "application/vnd.github+json")
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
+		return nil, fmt.Errorf("GitHub returned status %d listing %s: %s", resp.StatusCode, dir, string(body))
+	}
+
+	var entries []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to decode the listing of %s: %w", dir, err)
+	}
+
+	var packages []string
+
+	for _, e := range entries {
+		if e.Type == "dir" && ValidPackageName(e.Name) {
+			packages = append(packages, e.Name)
+		}
+	}
+
+	sort.Strings(packages)
+
+	return packages, nil
+}
+
+func fetchChangelogPath(ctx context.Context, owner, repoName, path string) (string, error) {
+	resp, err := githubContents(ctx, owner, repoName, path, "application/vnd.github.raw+json")
+
+	if err != nil {
+		return "", err
 	}
 
 	defer resp.Body.Close()
@@ -72,7 +124,7 @@ func fetchChangelogPath(ctx context.Context, owner, repoName, path string) (stri
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2000))
-		return "", fmt.Errorf("GitHub returned status %d for %s: %s", resp.StatusCode, url, string(body))
+		return "", fmt.Errorf("GitHub returned status %d for %s: %s", resp.StatusCode, path, string(body))
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -158,7 +210,12 @@ const releaseSystemPrompt = `You are turning a developer-facing changelog sectio
 Respond with ONLY a JSON object of this exact shape:
 {"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "security": ["..."], "extra_description": "..."}`
 
-func SummarizeRelease(ctx context.Context, project string, release Release) (Draft, error) {
+const packageReleaseSystemPrompt = `You are turning one version's section from a Keep a Changelog CHANGELOG.md into release notes for the developers who use this library, such as Discord bot developers using an SDK. Keep what a developer needs: new or changed functions, methods, options and types by name, behaviour changes, breaking changes and how to upgrade. Categorize into Added, Updated, Fixed, Removed, and Security. Security is for fixes to vulnerabilities, described without giving away how to exploit them. Each bullet is one short sentence; fixes start with "Fixed". Put identifiers in backticks. Drop entries that only affect the library's own build, tests or CI. Do not use em dashes. Also write a one-sentence "extra_description" summarizing the release, mentioning a breaking change if there is one.
+
+Respond with ONLY a JSON object of this exact shape:
+{"added": ["..."], "updated": ["..."], "fixed": ["..."], "removed": ["..."], "security": ["..."], "extra_description": "..."}`
+
+func SummarizeRelease(ctx context.Context, project, pkg string, release Release) (Draft, error) {
 	body := release.Body
 
 	if len(body) > maxReleaseChars {
@@ -166,6 +223,11 @@ func SummarizeRelease(ctx context.Context, project string, release Release) (Dra
 	}
 
 	if apiKey := state.Config.Meta.OpenAIAPIKey; apiKey != "" {
+		if pkg != "" {
+			prompt := fmt.Sprintf("Project: %s\nPackage: %s (%s)\nVersion: %s\n\n%s", project, PackageLabel(pkg), pkg, release.Version, body)
+			return callChat(ctx, apiKey, packageReleaseSystemPrompt, prompt)
+		}
+
 		prompt := fmt.Sprintf("Project: %s\nVersion: %s\n\n%s", project, release.Version, body)
 		return callChat(ctx, apiKey, releaseSystemPrompt, prompt)
 	}

@@ -133,6 +133,7 @@ type ChangelogDraft struct {
 // against changelogs' own CHECK constraint at the SQL layer.
 type ChangelogCreateEntry struct {
 	Project          string   `json:"project"`
+	Package          *string  `json:"package"`
 	Version          string   `json:"version"`
 	ExtraDescription string   `json:"extra_description"`
 	Prerelease       bool     `json:"prerelease"`
@@ -151,6 +152,7 @@ type ChangelogCreateEntry struct {
 type ChangelogUpdateEntry struct {
 	Itag             string   `json:"itag"`
 	Project          string   `json:"project"`
+	Package          *string  `json:"package"`
 	Version          string   `json:"version"`
 	ExtraDescription string   `json:"extra_description"`
 	Prerelease       bool     `json:"prerelease"`
@@ -221,6 +223,7 @@ func (a ChangelogAction) MarshalJSON() ([]byte, error) {
 type ChangelogEntry struct {
 	Itag             string    `json:"itag"`
 	Project          string    `json:"project"`
+	Package          *string   `json:"package"`
 	Version          string    `json:"version"`
 	Added            []string  `json:"added"`
 	Updated          []string  `json:"updated"`

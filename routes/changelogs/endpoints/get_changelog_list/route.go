@@ -33,19 +33,30 @@ func Docs() *docs.Doc {
 				In:          "query",
 				Schema:      docs.IdSchema,
 			},
+			{
+				Name:        "package",
+				Description: "Filter to one package within the project, such as 'sdk-js'. Omit for all.",
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
+			},
 		},
 		Resp: types.ChangelogList{},
 	}
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
-	var project pgtype.Text
+	var params db.GetChangelogListParams
 
 	if v := r.URL.Query().Get("project"); v != "" {
-		project = pgtype.Text{String: v, Valid: true}
+		params.Project = pgtype.Text{String: v, Valid: true}
 	}
 
-	rows, err := db.New(state.Pool).GetChangelogList(d.Context, project)
+	if v := r.URL.Query().Get("package"); v != "" {
+		params.Package = pgtype.Text{String: v, Valid: true}
+	}
+
+	rows, err := db.New(state.Pool).GetChangelogList(d.Context, params)
 
 	if err != nil {
 		return resp.Err("Error while fetching changelog entries [db query]", err)
@@ -56,6 +67,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		entries[i] = types.ChangelogEntry{
 			Itag:             row.Itag,
 			Project:          row.Project,
+			Package:          textPtr(row.Package),
 			Version:          row.Version,
 			Added:            row.Added,
 			Updated:          row.Updated,
@@ -82,4 +94,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			Entries: entries,
 		},
 	}
+}
+
+func textPtr(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	return &t.String
 }

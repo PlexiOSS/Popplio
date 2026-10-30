@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Changelog drafts cover the packages in a project's repository as well as
+  the project itself. For Omniplex, every folder under `packages/` with a
+  `CHANGELOG.md` is picked up automatically, so a new SDK needs no change
+  here. Package entries are stored under their project with a new
+  `package` value (for example `sdk-js`), and drafts for them are written
+  for developers, keeping method names, breaking changes and upgrade notes.
+  A package seen for the first time gets a draft for its newest release
+  only.
+- `GET /changelogs` returns each entry's `package` (null for the project
+  itself) and accepts a `package` filter. The staff panel's changelog
+  actions accept and return `package` too. When updating an entry, an
+  omitted or null `package` keeps the entry's current one and `""` moves
+  it back to the project itself, so a client that doesn't know about
+  packages can't clear one by accident.
 - `POST /auth/logout` ends the session used to make the request and clears
   the website's session cookie. It always returns `204`, signed in or not.
 
@@ -36,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Announcements for package releases are titled with the package, such as
+  "Omniplex JavaScript SDK 0.1.1 Released", and don't ping roles by
+  default. Only Omniplex website releases ping.
+- A migration adds the nullable `package` column to `changelogs`, limited
+  to lowercase letters, digits and hyphens. A second replaces the
+  `(project, version)` unique constraint with a unique index on project,
+  package and version, so a package can share a version number with the
+  project or another package. Both run on startup like the others.
 - The Go build, CodeQL and Kitescratch test workflows run on `master` and
   `development`. Build and CodeQL were set to `staging`, `production` and
   `develop`, which don't exist, so they never ran. The test workflow ran on

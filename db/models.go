@@ -266,6 +266,7 @@ type Changelog struct {
 	CreatedBy        string             `db:"created_by" json:"created_by"`
 	Fixed            []string           `db:"fixed" json:"fixed"`
 	Security         []string           `db:"security" json:"security"`
+	Package          pgtype.Text        `db:"package" json:"package"`
 }
 
 type DpMfa struct {
