@@ -208,7 +208,8 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 			origin := req.Header.Get("Origin")
 
-			if urlutil.DifferentHost(origin, state.Config.Sites.Frontend) &&
+			if !(fromCookie && sessioncookie.SameOrigin(req)) &&
+				urlutil.DifferentHost(origin, state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
 				state.Logger.Warn("Rejected user session from a non-frontend origin",
 					zap.String("origin", origin),

@@ -1,9 +1,7 @@
 package sessioncookie
 
 import (
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -14,43 +12,11 @@ const Name = "popplio_session"
 
 const lifetime = 30 * 24 * time.Hour
 
-func Domain(frontend, api string) string {
-	f, err := url.Parse(frontend)
-	if err != nil {
-		return ""
-	}
-	a, err := url.Parse(api)
-	if err != nil {
-		return ""
-	}
-
-	fh, ah := f.Hostname(), a.Hostname()
-	if net.ParseIP(fh) != nil || net.ParseIP(ah) != nil {
-		return ""
-	}
-
-	fl, al := strings.Split(fh, "."), strings.Split(ah, ".")
-	shared := []string{}
-	for i := 1; i <= len(fl) && i <= len(al); i++ {
-		if fl[len(fl)-i] != al[len(al)-i] {
-			break
-		}
-		shared = append([]string{fl[len(fl)-i]}, shared...)
-	}
-
-	if len(shared) < 2 {
-		return ""
-	}
-
-	return strings.Join(shared, ".")
-}
-
 func build(value string, maxAge int) string {
 	c := &http.Cookie{
 		Name:     Name,
 		Value:    value,
 		Path:     "/",
-		Domain:   Domain(state.Config.Sites.Frontend, state.Config.Sites.API),
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   strings.HasPrefix(state.Config.Sites.Frontend, "https://"),
@@ -75,4 +41,8 @@ func Token(r *http.Request) string {
 	}
 
 	return c.Value
+}
+
+func SameOrigin(r *http.Request) bool {
+	return r.Header.Get("Origin") == "" && r.Header.Get("Sec-Fetch-Site") == "same-origin"
 }

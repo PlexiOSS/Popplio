@@ -1,24 +1,34 @@
 package sessioncookie
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+)
 
-func TestDomain(t *testing.T) {
+func TestSameOrigin(t *testing.T) {
 	cases := []struct {
-		frontend, api, want string
+		origin, fetchSite string
+		want              bool
 	}{
-		{"https://omniplex.gg", "https://api.omniplex.gg", "omniplex.gg"},
-		{"https://omniplex.gg", "https://spider.omniplex.gg", "omniplex.gg"},
-		{"https://www.omniplex.gg", "https://api.omniplex.gg", "omniplex.gg"},
-		{"https://omniplex.gg", "https://omniplex.gg", "omniplex.gg"},
-		{"http://localhost:3000", "http://localhost:8080", ""},
-		{"http://127.0.0.1:3000", "http://127.0.0.1:8080", ""},
-		{"https://omniplex.gg", "https://api.example.com", ""},
-		{"https://a.example.com", "https://b.example.com", "example.com"},
+		{"", "same-origin", true},
+		{"", "same-site", false},
+		{"", "cross-site", false},
+		{"", "none", false},
+		{"", "", false},
+		{"https://omniplex.gg", "same-origin", false},
 	}
 
 	for _, c := range cases {
-		if got := Domain(c.frontend, c.api); got != c.want {
-			t.Errorf("Domain(%q, %q) = %q, want %q", c.frontend, c.api, got, c.want)
+		r := httptest.NewRequest("GET", "https://omniplex.gg/api/v1/users/1", nil)
+		if c.origin != "" {
+			r.Header.Set("Origin", c.origin)
+		}
+		if c.fetchSite != "" {
+			r.Header.Set("Sec-Fetch-Site", c.fetchSite)
+		}
+
+		if got := SameOrigin(r); got != c.want {
+			t.Errorf("SameOrigin(Origin=%q, Sec-Fetch-Site=%q) = %v, want %v", c.origin, c.fetchSite, got, c.want)
 		}
 	}
 }
