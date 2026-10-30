@@ -451,6 +451,8 @@ CREATE TABLE public.changelogs (
     created_by text DEFAULT 'unknown'::text NOT NULL,
     fixed text[] DEFAULT '{}'::text[] NOT NULL,
     security text[] DEFAULT '{}'::text[] NOT NULL,
+    package text,
+    CONSTRAINT changelogs_package_check CHECK (((package IS NULL) OR (package ~ '^[a-z0-9][a-z0-9-]{0,63}$'::text))),
     CONSTRAINT changelogs_project_check CHECK ((project = ANY (ARRAY['popplio'::text, 'omniplex'::text, 'keel'::text])))
 );
 

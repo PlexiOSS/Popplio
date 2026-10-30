@@ -4,6 +4,7 @@ package panel
 
 import (
 	"popplio/arcadia/types"
+	"popplio/changeloggen"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
@@ -68,7 +69,7 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 	addField("Removed", entry.Removed)
 	addField("Security", entry.Security)
 
-	ping := entry.Project == "omniplex"
+	ping := entry.Project == "omniplex" && entry.Package == nil
 	if entry.PingRoles != nil {
 		ping = *entry.PingRoles
 	}
@@ -82,7 +83,7 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 		Content: content,
 		Embeds: []discord.Embed{
 			{
-				Title:       projectLabel(entry.Project) + " " + entry.Version + " Released",
+				Title:       releaseLabel(entry.Project, entry.Package) + " " + entry.Version + " Released",
 				URL:         state.Config.Sites.Frontend + "/changelog",
 				Description: entry.ExtraDescription,
 				Color:       0x00ff00,
@@ -95,6 +96,14 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 		state.Logger.Warn("Failed to announce new changelog entry",
 			zap.String("project", entry.Project), zap.String("version", entry.Version), zap.Error(err))
 	}
+}
+
+func releaseLabel(project string, pkg *string) string {
+	if pkg != nil && *pkg != "" {
+		return projectLabel(project) + " " + changeloggen.PackageLabel(*pkg)
+	}
+
+	return projectLabel(project)
 }
 
 func projectLabel(project string) string {

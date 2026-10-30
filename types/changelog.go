@@ -10,6 +10,7 @@ import (
 type ChangelogEntry struct {
 	Itag             string                  `db:"itag" json:"itag" description:"The unique id of the changelog entry"`
 	Project          string                  `db:"project" json:"project" description:"Which project this entry belongs to: 'popplio', 'omniplex', or 'keel'"`
+	Package          *string                 `db:"package" json:"package" description:"The package within the project this entry is for, such as 'sdk-js' for Omniplex's JavaScript SDK. Null for the project itself"`
 	Version          string                  `db:"version" json:"version" description:"The version this entry is for"`
 	Added            []string                `db:"added" json:"added" description:"What was added in this version"`
 	Updated          []string                `db:"updated" json:"updated" description:"What was changed in this version"`

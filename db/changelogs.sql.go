@@ -32,15 +32,22 @@ func (q *Queries) DeleteChangelogByItag(ctx context.Context, itag string) error 
 }
 
 const getChangelogList = `-- name: GetChangelogList :many
-SELECT itag, project, version, added, updated, fixed, security, removed, extra_description, prerelease, created_by, created_at
+SELECT itag, project, package, version, added, updated, fixed, security, removed, extra_description, prerelease, created_by, created_at
 FROM changelogs
 WHERE published = true AND ($1::text IS NULL OR project = $1)
+  AND ($2::text IS NULL OR package = $2)
 ORDER BY created_at DESC
 `
+
+type GetChangelogListParams struct {
+	Project pgtype.Text `db:"project" json:"project"`
+	Package pgtype.Text `db:"package" json:"package"`
+}
 
 type GetChangelogListRow struct {
 	Itag             string             `db:"itag" json:"itag"`
 	Project          string             `db:"project" json:"project"`
+	Package          pgtype.Text        `db:"package" json:"package"`
 	Version          string             `db:"version" json:"version"`
 	Added            []string           `db:"added" json:"added"`
 	Updated          []string           `db:"updated" json:"updated"`
@@ -53,8 +60,8 @@ type GetChangelogListRow struct {
 	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
-func (q *Queries) GetChangelogList(ctx context.Context, project pgtype.Text) ([]GetChangelogListRow, error) {
-	rows, err := q.db.Query(ctx, getChangelogList, project)
+func (q *Queries) GetChangelogList(ctx context.Context, arg GetChangelogListParams) ([]GetChangelogListRow, error) {
+	rows, err := q.db.Query(ctx, getChangelogList, arg.Project, arg.Package)
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +72,7 @@ func (q *Queries) GetChangelogList(ctx context.Context, project pgtype.Text) ([]
 		if err := rows.Scan(
 			&i.Itag,
 			&i.Project,
+			&i.Package,
 			&i.Version,
 			&i.Added,
 			&i.Updated,
@@ -97,12 +105,17 @@ func (q *Queries) GetChangelogPublishedByItag(ctx context.Context, itag string) 
 	return published, err
 }
 
-const getChangelogVersionsByProject = `-- name: GetChangelogVersionsByProject :many
-SELECT version FROM changelogs WHERE project = $1
+const getChangelogVersions = `-- name: GetChangelogVersions :many
+SELECT version FROM changelogs WHERE project = $1 AND package IS NOT DISTINCT FROM $2
 `
 
-func (q *Queries) GetChangelogVersionsByProject(ctx context.Context, project string) ([]string, error) {
-	rows, err := q.db.Query(ctx, getChangelogVersionsByProject, project)
+type GetChangelogVersionsParams struct {
+	Project string      `db:"project" json:"project"`
+	Package pgtype.Text `db:"package" json:"package"`
+}
+
+func (q *Queries) GetChangelogVersions(ctx context.Context, arg GetChangelogVersionsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, getChangelogVersions, arg.Project, arg.Package)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +135,8 @@ func (q *Queries) GetChangelogVersionsByProject(ctx context.Context, project str
 }
 
 const insertChangelogEntry = `-- name: InsertChangelogEntry :exec
-INSERT INTO changelogs (project, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, NOW()))
+INSERT INTO changelogs (project, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at, package)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, NOW()), $13)
 `
 
 type InsertChangelogEntryParams struct {
@@ -139,6 +152,7 @@ type InsertChangelogEntryParams struct {
 	Published        bool               `db:"published" json:"published"`
 	CreatedBy        string             `db:"created_by" json:"created_by"`
 	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Package          pgtype.Text        `db:"package" json:"package"`
 }
 
 func (q *Queries) InsertChangelogEntry(ctx context.Context, arg InsertChangelogEntryParams) error {
@@ -155,19 +169,21 @@ func (q *Queries) InsertChangelogEntry(ctx context.Context, arg InsertChangelogE
 		arg.Published,
 		arg.CreatedBy,
 		arg.CreatedAt,
+		arg.Package,
 	)
 	return err
 }
 
 const listChangelogEntries = `-- name: ListChangelogEntries :many
 
-SELECT itag, project, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at
+SELECT itag, project, package, version, added, updated, fixed, security, removed, extra_description, prerelease, published, created_by, created_at
 FROM changelogs ORDER BY created_at DESC
 `
 
 type ListChangelogEntriesRow struct {
 	Itag             string             `db:"itag" json:"itag"`
 	Project          string             `db:"project" json:"project"`
+	Package          pgtype.Text        `db:"package" json:"package"`
 	Version          string             `db:"version" json:"version"`
 	Added            []string           `db:"added" json:"added"`
 	Updated          []string           `db:"updated" json:"updated"`
@@ -195,6 +211,7 @@ func (q *Queries) ListChangelogEntries(ctx context.Context) ([]ListChangelogEntr
 		if err := rows.Scan(
 			&i.Itag,
 			&i.Project,
+			&i.Package,
 			&i.Version,
 			&i.Added,
 			&i.Updated,
@@ -218,7 +235,7 @@ func (q *Queries) ListChangelogEntries(ctx context.Context) ([]ListChangelogEntr
 }
 
 const updateChangelogEntry = `-- name: UpdateChangelogEntry :exec
-UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, security = $7, removed = $8, extra_description = $9, prerelease = $10, published = $11, created_at = COALESCE($12::timestamptz, created_at)
+UPDATE changelogs SET project = $2, version = $3, added = $4, updated = $5, fixed = $6, security = $7, removed = $8, extra_description = $9, prerelease = $10, published = $11, created_at = COALESCE($12::timestamptz, created_at), package = $13
 WHERE itag = $1
 `
 
@@ -235,6 +252,7 @@ type UpdateChangelogEntryParams struct {
 	Prerelease       bool               `db:"prerelease" json:"prerelease"`
 	Published        bool               `db:"published" json:"published"`
 	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Package          pgtype.Text        `db:"package" json:"package"`
 }
 
 func (q *Queries) UpdateChangelogEntry(ctx context.Context, arg UpdateChangelogEntryParams) error {
@@ -251,6 +269,7 @@ func (q *Queries) UpdateChangelogEntry(ctx context.Context, arg UpdateChangelogE
 		arg.Prerelease,
 		arg.Published,
 		arg.CreatedAt,
+		arg.Package,
 	)
 	return err
 }
