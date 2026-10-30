@@ -42,7 +42,13 @@ func Snapshot(ctx context.Context) (int64, error) {
 }
 
 func Get(ctx context.Context, targetType, targetID string, days int) (*types.EntityAnalytics, error) {
-	days = max(MinDays, min(days, MaxDays))
+	if days > MaxDays {
+		days = MaxDays
+	}
+
+	if days < MinDays {
+		days = MinDays
+	}
 
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 	start := today.AddDate(0, 0, -(days - 1))
