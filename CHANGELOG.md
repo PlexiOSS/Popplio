@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `POST /auth/logout` ends the session used to make the request and clears
+  the website's session cookie. It always returns `204`, signed in or not.
+
+### Security
+
+- Logging in through Discord also sets the session in a `popplio_session`
+  cookie: HttpOnly, SameSite=Lax, Secure when `sites.frontend` is https,
+  and valid for the session's 30 days. It's host-only, with no `Domain`,
+  so only the host that served the login gets it. The website serves the
+  API from its own host at `/api/v1`, so the cookie belongs to
+  `omniplex.gg` and is never sent to other `omniplex.gg` subdomains such as
+  staging, the status page or the docs. Nothing needs adding to
+  `config.yaml`.
+- Requests without an `Authorization` header are authenticated from that
+  cookie as a user session. The existing check that user sessions come from
+  `sites.frontend` still applies, which also stops other sites from using
+  the cookie. Browsers send no `Origin` on same-origin `GET` requests, so a
+  cookie session with no `Origin` is also accepted when the browser marks
+  the request `Sec-Fetch-Site: same-origin`, a header page scripts can't
+  set. A cookie with an invalid session is cleared in the response. Bots,
+  API tokens and the SDKs keep using the `Authorization` header.
+- CORS only allows credentials for `sites.frontend`. Other origins still
+  get CORS responses, without credentials, so the cookie is never usable
+  from them. Responses now send `Vary: Origin`.
+
+### Changed
+
+- The Go build, CodeQL and Kitescratch test workflows run on `master` and
+  `development`. Build and CodeQL were set to `staging`, `production` and
+  `develop`, which don't exist, so they never ran. The test workflow ran on
+  every push, including tags, and now runs on those two branches and their
+  pull requests, committing its results only on pushes.
+
 ## [1.17.1] - 2026-10-29
 
 ### Security

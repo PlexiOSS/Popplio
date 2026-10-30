@@ -12,6 +12,7 @@ import (
 	"popplio/routes/auth/endpoints/create_session"
 	"popplio/routes/auth/endpoints/get_oauth_url"
 	"popplio/routes/auth/endpoints/get_sessions"
+	"popplio/routes/auth/endpoints/logout"
 	"popplio/routes/auth/endpoints/revoke_session"
 	"popplio/routes/auth/endpoints/test_auth"
 	"popplio/validators"
@@ -95,6 +96,23 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.POST,
 		Docs:    create_oauth2_login.Docs,
 		Handler: create_oauth2_login.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/auth/logout",
+		OpId:    "logout",
+		Method:  uapi.POST,
+		Docs:    logout.Docs,
+		Handler: logout.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{

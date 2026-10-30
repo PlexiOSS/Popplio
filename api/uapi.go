@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"popplio/api/sessioncookie"
 	"popplio/constants"
 	"popplio/db"
 	"popplio/perms"
@@ -101,6 +102,14 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 	}
 
 	authHeader := req.Header.Get("Authorization")
+	fromCookie := false
+
+	if authHeader == "" {
+		if token := sessioncookie.Token(req); token != "" {
+			authHeader = "User " + token
+			fromCookie = true
+		}
+	}
 
 	if len(r.Auth) > 0 && authHeader == "" && !r.AuthOptional {
 		return uapi.AuthData{}, uapi.DefaultResponse(http.StatusUnauthorized), false
@@ -137,13 +146,19 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 			return uapi.AuthData{}, uapi.HttpResponse{}, true
 		}
 
-		return uapi.AuthData{}, uapi.HttpResponse{
+		invalid := uapi.HttpResponse{
 			Status: http.StatusUnauthorized,
 			Json:   types.ApiError{Message: "Invalid session token"},
 			Headers: map[string]string{
 				"X-Session-Invalid": "true",
 			},
-		}, false
+		}
+
+		if fromCookie {
+			invalid.Headers["Set-Cookie"] = sessioncookie.Clear()
+		}
+
+		return uapi.AuthData{}, invalid, false
 	}
 
 	if err != nil {
@@ -193,7 +208,8 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 
 			origin := req.Header.Get("Origin")
 
-			if urlutil.DifferentHost(origin, state.Config.Sites.Frontend) &&
+			if !(fromCookie && sessioncookie.SameOrigin(req)) &&
+				urlutil.DifferentHost(origin, state.Config.Sites.Frontend) &&
 				!bugHunter && !perms.IsConfigOwner(targetId) {
 				state.Logger.Warn("Rejected user session from a non-frontend origin",
 					zap.String("origin", origin),

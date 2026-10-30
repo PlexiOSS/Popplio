@@ -2,9 +2,9 @@ name: Go Build & Vet
 
 on:
   push:
-    branches: [ "staging", "production", "develop" ]
+    branches: [ "master", "development" ]
   pull_request:
-    branches: [ "staging", "production", "develop" ]
+    branches: [ "master", "development" ]
 
 permissions:
   contents: read
