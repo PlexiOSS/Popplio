@@ -65,6 +65,7 @@ import (
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/jsonimpl"
 	"github.com/PlexiOSS/Keel/uapi"
+	"github.com/PlexiOSS/Keel/urlutil"
 
 	"github.com/PlexiOSS/Keel/zapchi"
 
@@ -102,7 +103,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 			origin = state.Config.Sites.Frontend
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Vary", "Origin")
+		if !urlutil.DifferentHost(origin, state.Config.Sites.Frontend) {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		w.Header().Set("Access-Control-Allow-Headers", "X-Client, Content-Type, Authorization")
 		w.Header().Set("Access-Control-Expose-Headers", "X-Session-Invalid, Retry-After")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")

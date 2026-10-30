@@ -1,9 +1,11 @@
 name: Kitescratch Tests
 
-on: [push]
+on:
+  push:
+    branches: [ "master", "development" ]
+  pull_request:
+    branches: [ "master", "development" ]
 
-# git-auto-commit-action below pushes a commit back to the repo; nothing else
-# in this workflow needs write access to anything.
 permissions:
   contents: write
 
@@ -44,6 +46,7 @@ jobs:
           ./kitehelper test
       
       - uses: stefanzweifel/git-auto-commit-action@v4
+        if: github.event_name == 'push'
         with:
           commit_message: "Kitescratch: CI Task"
           commit_user_name: "Kitescratch Tests[bot]"

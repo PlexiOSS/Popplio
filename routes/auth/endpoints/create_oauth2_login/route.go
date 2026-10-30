@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/api/sessioncookie"
 	"popplio/state"
 	"popplio/types"
 
@@ -28,16 +29,8 @@ var (
 	compiledMessages = uapi.CompileValidationErrors(types.AuthorizeRequest{})
 )
 
-// supportedProtocol is the client protocol this endpoint speaks. Clients send
-// their protocol so an outdated one gets a clear message rather than a confusing
-// failure further down the exchange.
 const supportedProtocol = "persepolis-infernoplex"
 
-// codeReuseWindow is how long a used authorization code is remembered.
-//
-// Discord rejects a replayed code itself; remembering codes here means a replay
-// is refused before it costs a round trip, and closes the window in which two
-// concurrent requests could both exchange the same code.
 const codeReuseWindow = 5 * time.Minute
 
 func Docs() *docs.Doc {
@@ -49,13 +42,6 @@ func Docs() *docs.Doc {
 	}
 }
 
-// validateRequest checks the parts of the request that can be rejected without
-// talking to Discord.
-//
-// These are all misconfigured- or outdated-client conditions rather than user
-// error, which is why each gets its own message. Failures are reported as
-// [oauthError] so the handler can route them through oauthFailure alongside
-// every other failure in the exchange.
 func validateRequest(req types.AuthorizeRequest) error {
 	switch {
 	case req.Protocol != supportedProtocol:
@@ -81,11 +67,6 @@ func validateRequest(req types.AuthorizeRequest) error {
 	return nil
 }
 
-// sessionName describes the client a session was created from, so users can
-// recognise their own devices in their session list.
-//
-// A missing User-Agent falls back to a generic desktop Chrome string rather than
-// an empty name, so the session list never shows a blank entry.
 func sessionName(userAgent string) string {
 	if userAgent == "" {
 		userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36"
@@ -111,8 +92,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.RateLimited(limit)
 	}
 
-	// Every response below carries the ratelimit headers, so clients can see
-	// their remaining budget on failures as well as successes.
 	headers := limit.Headers()
 
 	var req types.AuthorizeRequest
@@ -134,10 +113,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return oauthFailure(err, headers)
 	}
 
-	// SetNX marks the code used and checks whether it was already used in a
-	// single atomic round trip — a separate Exists+Set here would leave a
-	// window where two concurrent requests carrying the same code could both
-	// pass the check before either marked it used.
 	isNew, err := state.Redis.SetNX(d.Context, "codecache:"+req.Code, "0", codeReuseWindow).Result()
 
 	if err != nil {
@@ -168,8 +143,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	go sendAuthLog(user, req, !existed)
 
-	// Only an existing user can carry a ban, so a first-time login skips the
-	// check entirely.
 	if existed {
 		if err := checkBanScope(d.Context, user.ID, req.Scope); err != nil {
 			return oauthFailure(err, headers)
@@ -185,6 +158,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if err != nil {
 		return oauthFailure(err, headers)
 	}
+
+	headers["Set-Cookie"] = sessioncookie.Set(token)
 
 	return resp.WithHeaders(resp.OK(types.CreateSessionResponse{
 		TargetID:  user.ID,
