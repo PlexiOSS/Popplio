@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Promo codes for premium and Auto-vote. Staff with the new
+  `manage_promo_codes` permission create them through the staff panel's
+  `UpdatePromoCodes` action. Each code becomes a Stripe coupon plus
+  promotion code, so Stripe handles the discount, the receipt, the expiry
+  and the total number of uses. A code can be a percentage off or a fixed
+  amount off, and on Auto-vote it can last for the first month, a set number
+  of months or forever, so a 100% code for one month is a free first month.
+  `view_shop` can list codes with how many times each has been used, and
+  codes can be turned off and back on, but not edited, since Stripe doesn't
+  allow a coupon's discount to change.
+- Popplio checks the rules Stripe can't: which products a code works on,
+  once per user, and new customers only (no earlier premium purchase or
+  Auto-vote subscription). `POST /users/{id}/promo-codes/check` previews a
+  code for premium or Auto-vote before checkout, and checkout checks it
+  again. A use only counts once the payment completes.
+- `POST /users/{id}/stripe` accepts `promo_code`. Credits are applied
+  first and the code is applied to what's left. A code that would leave a
+  total between $0.01 and $0.49 is refused, since that's below Stripe's
+  card minimum.
+- `POST /users/{id}/auto-vote/checkout` accepts an optional body with
+  `promo_code`.
+- Starting a new checkout with a code expires the user's earlier unpaid
+  checkout with the same code, so one code can't be held open in several
+  checkouts.
+
+### Fixed
+
+- Premium checkouts that cost nothing after discounts (Stripe's
+  `no_payment_required`) are fulfilled, by both the webhook and the
+  reconcile task. The reconcile task skips subscription checkouts, which
+  it can't fulfil.
+- When Popplio creates its own Stripe webhook endpoint, it now subscribes
+  to the `customer.subscription.*` events Auto-vote already relies on, and
+  to `checkout.session.expired`. An endpoint set up by hand in the Stripe
+  dashboard (`stripe_webhook_secret` in `config.yaml`) needs
+  `checkout.session.expired` added there.
+
 ## [1.18.0] - 2026-10-30
 
 ### Added

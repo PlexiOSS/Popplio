@@ -6,6 +6,7 @@ package payments
 import (
 	"popplio/api"
 	"popplio/routes/payments/endpoints/capture_paypal_order"
+	"popplio/routes/payments/endpoints/check_promo_code"
 	"popplio/routes/payments/endpoints/create_paypal_order"
 	"popplio/routes/payments/endpoints/create_stripe_checkout"
 	"popplio/routes/payments/endpoints/get_paypal"
@@ -85,6 +86,23 @@ func (b Router) Routes(r *chi.Mux) {
 		},
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/promo-codes/check",
+		OpId:    "check_promo_code",
+		Method:  uapi.POST,
+		Docs:    check_promo_code.Docs,
+		Handler: check_promo_code.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type:   api.TargetTypeUser,
+				URLVar: "id",
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
 		},
 	}.Route(r)
 

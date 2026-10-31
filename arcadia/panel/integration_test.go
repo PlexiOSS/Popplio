@@ -282,6 +282,22 @@ func TestPermissionGates(t *testing.T) {
 			wantDenied: "You do not have permission to list shop coupons [view_shop]",
 		},
 		{
+			name: "UpdatePromoCodes/List",
+			perm: "view_shop",
+			body: func(tok string) string {
+				return fmt.Sprintf(`{"UpdatePromoCodes":{"login_token":%q,"action":"List"}}`, tok)
+			},
+			wantDenied: "You do not have permission to list promo codes [view_shop]",
+		},
+		{
+			name: "UpdatePromoCodes/SetActive",
+			perm: "manage_promo_codes",
+			body: func(tok string) string {
+				return fmt.Sprintf(`{"UpdatePromoCodes":{"login_token":%q,"action":{"SetActive":{"id":"00000000-0000-0000-0000-000000000000","active":false}}}}`, tok)
+			},
+			wantDenied: "You do not have permission to change promo codes [manage_promo_codes]",
+		},
+		{
 			name: "UpdateVoteCreditTiers/DeleteTier",
 			perm: "manage_shop",
 			body: func(tok string) string {

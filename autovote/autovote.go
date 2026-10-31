@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"popplio/db"
+	"popplio/promo"
 	"popplio/state"
 
 	"github.com/PlexiOSS/Keel/jsonimpl"
@@ -37,9 +38,9 @@ func Active(status string, periodEnd pgtype.Timestamptz) bool {
 	return !periodEnd.Valid || periodEnd.Time.After(time.Now())
 }
 
-func CheckoutURL(userID string) (string, error) {
+func Checkout(userID string, discounts []*stripe.CheckoutSessionDiscountParams) (*stripe.CheckoutSession, error) {
 	if state.Config.Meta.StripeSecretKey == "" {
-		return "", errors.New("stripe is not configured")
+		return nil, errors.New("stripe is not configured")
 	}
 
 	metadata := map[string]string{metadataKey: metadataVal, "user_id": userID}
@@ -69,15 +70,10 @@ func CheckoutURL(userID string) (string, error) {
 		},
 		SuccessURL: stripe.String(state.Config.Sites.Frontend + "/dashboard?tab=auto-vote&subscribed=1"),
 		CancelURL:  stripe.String(state.Config.Sites.Frontend + "/dashboard?tab=auto-vote"),
+		Discounts:  discounts,
 	}
 
-	s, err := session.New(params)
-
-	if err != nil {
-		return "", err
-	}
-
-	return s.URL, nil
+	return session.New(params)
 }
 
 func PortalURL(customerID string) (string, error) {
@@ -126,6 +122,8 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 		}); err != nil {
 			return true, failed("saving subscription", err)
 		}
+
+		promo.Complete(ctx, s.ID)
 
 		return true, ok("auto-vote subscription started")
 	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted":

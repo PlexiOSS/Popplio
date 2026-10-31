@@ -46,6 +46,8 @@ func TestActionUnionsRoundTrip(t *testing.T) {
 
 		{"ShopCouponAction unit", `"List"`, func() json.Unmarshaler { return &ShopCouponAction{} }},
 		{"ShopCouponAction Delete", `{"Delete":{"id":"x"}}`, func() json.Unmarshaler { return &ShopCouponAction{} }},
+		{"PromoCodeAction unit", `"List"`, func() json.Unmarshaler { return &PromoCodeAction{} }},
+		{"PromoCodeAction SetActive", `{"SetActive":{"id":"x","active":true}}`, func() json.Unmarshaler { return &PromoCodeAction{} }},
 
 		{"BotWhitelistAction unit", `"List"`, func() json.Unmarshaler { return &BotWhitelistAction{} }},
 		{"BotWhitelistAction Add", `{"Add":{"bot_id":"1","reason":"r"}}`, func() json.Unmarshaler { return &BotWhitelistAction{} }},

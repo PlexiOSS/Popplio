@@ -34,6 +34,7 @@ const (
 	StaffViewShop           Perm = "view_shop"
 	StaffManageShop         Perm = "manage_shop"
 	StaffManageBotWhitelist Perm = "manage_bot_whitelist"
+	StaffManagePromoCodes   Perm = "manage_promo_codes"
 
 	StaffManagePartners  Perm = "manage_partners"
 	StaffManageBlog      Perm = "manage_blog"
@@ -257,6 +258,13 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 			"shop_coupons.create", "shop_coupons.update", "shop_coupons.delete",
 			"vote_credit_tiers.create", "vote_credit_tiers.update", "vote_credit_tiers.delete",
 		},
+	},
+	{
+		ID:          StaffManagePromoCodes,
+		Name:        "Manage Promo Codes",
+		Description: "Create Stripe promo codes for premium and Auto-vote, and turn them on or off.",
+		Category:    "Shop",
+		Dangerous:   true,
 	},
 	{
 		ID:          StaffManageBotWhitelist,
