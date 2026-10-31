@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"popplio/api/resp"
+	"popplio/promo"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 
@@ -97,6 +98,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
+	var promoCode *promo.Code
+
+	if create.PromoCode != "" {
+		c, _, err := promo.Validate(d.Context, d.Auth.ID, create.PromoCode, promo.ProductPremium, priceCents-discountCents)
+
+		if err != nil {
+			return promo.ErrResponse("Error while checking promo code", err)
+		}
+
+		if err := promo.ReleasePending(d.Context, c, d.Auth.ID); err != nil {
+			return promo.ErrResponse("Error while checking promo code", err)
+		}
+
+		promoCode = c
+	}
+
 	description := "Gives " + perk.Benefit + " for " + payload.For + " with duration of " + strconv.Itoa(perk.TimePeriod) + " hours"
 
 	if creditsUsed > 0 {
@@ -132,9 +149,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		CancelURL:  stripe.String(state.Config.Sites.Frontend + "/payments/cancelled"),
 	}
 
+	if promoCode != nil {
+		params.Discounts = promo.SessionDiscount(promoCode)
+	}
+
 	order, err := session.New(params)
 
 	if err != nil {
+		if promoCode != nil {
+			return promo.StripeErrResponse("Error while creating session", err)
+		}
+
 		return resp.Err("Error while creating session", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
 	}
 
@@ -149,6 +174,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 
 			return resp.Err("Error while applying credits", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
+		}
+	}
+
+	if promoCode != nil {
+		if err := promo.Record(d.Context, promoCode, d.Auth.ID, promo.ProductPremium, order.ID); err != nil {
+			if _, expireErr := session.Expire(order.ID, nil); expireErr != nil {
+				state.Logger.Error("Failed to expire Stripe session after a failed promo code record", zap.Error(expireErr), zap.String("session", order.ID))
+			}
+
+			return resp.Err("Error while applying promo code", err, zap.String("user_id", d.Auth.ID))
 		}
 	}
 

@@ -449,6 +449,38 @@ type PaymentFulfillment struct {
 	FulfilledAt pgtype.Timestamptz `db:"fulfilled_at" json:"fulfilled_at"`
 }
 
+type PromoCode struct {
+	ID                    pgtype.UUID        `db:"id" json:"id"`
+	Code                  string             `db:"code" json:"code"`
+	Description           string             `db:"description" json:"description"`
+	Products              []string           `db:"products" json:"products"`
+	PercentOff            pgtype.Int4        `db:"percent_off" json:"percent_off"`
+	AmountOffCents        pgtype.Int4        `db:"amount_off_cents" json:"amount_off_cents"`
+	Duration              string             `db:"duration" json:"duration"`
+	DurationMonths        pgtype.Int4        `db:"duration_months" json:"duration_months"`
+	MaxRedemptions        pgtype.Int4        `db:"max_redemptions" json:"max_redemptions"`
+	ExpiresAt             pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
+	OncePerUser           bool               `db:"once_per_user" json:"once_per_user"`
+	NewCustomersOnly      bool               `db:"new_customers_only" json:"new_customers_only"`
+	Active                bool               `db:"active" json:"active"`
+	StripeCouponID        string             `db:"stripe_coupon_id" json:"stripe_coupon_id"`
+	StripePromotionCodeID string             `db:"stripe_promotion_code_id" json:"stripe_promotion_code_id"`
+	CreatedBy             string             `db:"created_by" json:"created_by"`
+	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type PromoCodeRedemption struct {
+	ID              pgtype.UUID        `db:"id" json:"id"`
+	PromoCodeID     pgtype.UUID        `db:"promo_code_id" json:"promo_code_id"`
+	UserID          string             `db:"user_id" json:"user_id"`
+	Product         string             `db:"product" json:"product"`
+	StripeSessionID string             `db:"stripe_session_id" json:"stripe_session_id"`
+	Status          string             `db:"status" json:"status"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	CompletedAt     pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
 type Report struct {
 	ID             pgtype.UUID        `db:"id" json:"id"`
 	TargetType     string             `db:"target_type" json:"target_type"`

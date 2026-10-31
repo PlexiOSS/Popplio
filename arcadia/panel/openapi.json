@@ -88,6 +88,7 @@
           { "type": "object", "required": ["UpdateShopItems"], "properties": { "UpdateShopItems": { "$ref": "#/components/schemas/ActionEnvelope" } } },
           { "type": "object", "required": ["UpdateShopItemBenefits"], "properties": { "UpdateShopItemBenefits": { "$ref": "#/components/schemas/ActionEnvelope" } } },
           { "type": "object", "required": ["UpdateShopCoupons"], "properties": { "UpdateShopCoupons": { "$ref": "#/components/schemas/ActionEnvelope" } } },
+          { "type": "object", "required": ["UpdatePromoCodes"], "properties": { "UpdatePromoCodes": { "$ref": "#/components/schemas/ActionEnvelope" } } },
           { "type": "object", "required": ["UpdateBotWhitelist"], "properties": { "UpdateBotWhitelist": { "$ref": "#/components/schemas/ActionEnvelope" } } },
           { "type": "object", "required": ["PopplioStaff"], "properties": { "PopplioStaff": { "type": "object", "required": ["login_token", "path", "method", "body"], "properties": { "login_token": { "type": "string" }, "path": { "type": "string" }, "method": { "type": "string" }, "body": { "type": "string" } } } } }
         ]

@@ -23,6 +23,7 @@ type CreatePerkData struct {
 	For         string `json:"for" validate:"required" msg:"For is required."`
 	ForType     string `json:"for_type" validate:"omitempty,oneof=bot server" msg:"for_type must be 'bot' or 'server' if sent."`
 	Credits     int    `json:"credits" validate:"omitempty,min=0" msg:"credits can't be negative."`
+	PromoCode   string `json:"promo_code" validate:"omitempty,max=40" msg:"promo_code is too long."`
 }
 
 type RedirectUser struct {

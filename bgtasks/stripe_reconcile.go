@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"popplio/db"
+	"popplio/promo"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 
@@ -63,7 +64,11 @@ func StripeReconcile(ctx context.Context) error {
 			break
 		}
 
-		if created.After(settled) || s.PaymentStatus != stripe.CheckoutSessionPaymentStatusPaid {
+		if created.After(settled) || s.Mode != stripe.CheckoutSessionModePayment {
+			continue
+		}
+
+		if s.PaymentStatus != stripe.CheckoutSessionPaymentStatusPaid && s.PaymentStatus != stripe.CheckoutSessionPaymentStatusNoPaymentRequired {
 			continue
 		}
 
@@ -98,6 +103,7 @@ func StripeReconcile(ctx context.Context) error {
 			state.Logger.Error("stripe_reconcile: failed to fulfill paid session", zap.String("session", s.ID), zap.Error(err))
 		case fulfilled:
 			reconciled++
+			promo.Complete(ctx, s.ID)
 			state.Logger.Warn("stripe_reconcile: fulfilled a paid session the webhook missed", zap.String("session", s.ID), zap.Any("payload", payload))
 		}
 	}

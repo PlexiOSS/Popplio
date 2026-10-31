@@ -13,6 +13,7 @@ import (
 	"popplio/api/resp"
 	"popplio/autovote"
 	"popplio/notifications"
+	"popplio/promo"
 	"popplio/routes/payments/assets"
 	"popplio/state"
 	"popplio/types"
@@ -75,7 +76,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.Err("Failed to unmarshal event data", err)
 		}
 
-		if s.PaymentStatus != stripe.CheckoutSessionPaymentStatusPaid {
+		if s.PaymentStatus != stripe.CheckoutSessionPaymentStatusPaid && s.PaymentStatus != stripe.CheckoutSessionPaymentStatusNoPaymentRequired {
 			state.Logger.Error("Payment status is not paid")
 			return uapi.HttpResponse{
 				Status: http.StatusOK,
@@ -90,13 +91,24 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 	case "checkout.session.async_payment_failed":
-		var s stripe.CheckoutSession
 		err := jsonimpl.Unmarshal(event.Data.Raw, &s)
 		if err != nil {
 			return resp.Err("Failed to unmarshal event data", err)
 		}
 
+		promo.Abandon(r.Context(), s.ID)
+
 		failed = true
+
+	case "checkout.session.expired":
+		err := jsonimpl.Unmarshal(event.Data.Raw, &s)
+		if err != nil {
+			return resp.Err("Failed to unmarshal event data", err)
+		}
+
+		promo.Abandon(r.Context(), s.ID)
+
+		return uapi.DefaultResponse(http.StatusNoContent)
 
 	default:
 		state.Logger.Error("Unknown event type", zap.String("event", string(event.Type)))
@@ -167,6 +179,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	if !fulfilled {
 		state.Logger.Info("Stripe purchase already fulfilled", zap.String("session", s.ID))
 	}
+
+	promo.Complete(fulfillCtx, s.ID)
 
 	return uapi.DefaultResponse(http.StatusNoContent)
 }

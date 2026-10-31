@@ -381,3 +381,89 @@ type BotWhitelist struct {
 	Reason    string    `json:"reason"`
 	CreatedAt Timestamp `json:"created_at"`
 }
+
+// PromoCodeAction is the union of Stripe promo code operations.
+type PromoCodeAction struct {
+	List      *Unit
+	Create    *PromoCodeCreate
+	SetActive *PromoCodeSetActive
+}
+
+type PromoCodeCreate struct {
+	Code             string     `json:"code"`
+	Description      string     `json:"description"`
+	Products         []string   `json:"products"`
+	PercentOff       *int       `json:"percent_off"`
+	AmountOffCents   *int       `json:"amount_off_cents"`
+	Duration         string     `json:"duration"`
+	DurationMonths   *int       `json:"duration_months"`
+	MaxRedemptions   *int       `json:"max_redemptions"`
+	ExpiresAt        *Timestamp `json:"expires_at"`
+	OncePerUser      bool       `json:"once_per_user"`
+	NewCustomersOnly bool       `json:"new_customers_only"`
+}
+
+type PromoCodeSetActive struct {
+	ID     string `json:"id"`
+	Active bool   `json:"active"`
+}
+
+func (a *PromoCodeAction) UnmarshalJSON(data []byte) error {
+	*a = PromoCodeAction{}
+
+	name, payload, err := decodeUnion(data)
+
+	if err != nil {
+		return fmt.Errorf("PromoCodeAction: %w", err)
+	}
+
+	switch name {
+	case "List":
+		a.List = unitSet()
+	case "Create":
+		a.Create = &PromoCodeCreate{}
+		return decodeVariant("PromoCodeAction", name, payload, a.Create)
+	case "SetActive":
+		a.SetActive = &PromoCodeSetActive{}
+		return decodeVariant("PromoCodeAction", name, payload, a.SetActive)
+	default:
+		return errUnknownVariant("PromoCodeAction", name)
+	}
+
+	return expectUnit("PromoCodeAction", name, payload)
+}
+
+func (a PromoCodeAction) MarshalJSON() ([]byte, error) {
+	switch {
+	case a.List != nil:
+		return encodeUnit("List")
+	case a.Create != nil:
+		return encodeVariant("Create", a.Create)
+	case a.SetActive != nil:
+		return encodeVariant("SetActive", a.SetActive)
+	default:
+		return nil, fmt.Errorf("PromoCodeAction: no variant set")
+	}
+}
+
+type PromoCode struct {
+	ID                    string     `json:"id"`
+	Code                  string     `json:"code"`
+	Description           string     `json:"description"`
+	Products              []string   `json:"products"`
+	PercentOff            *int       `json:"percent_off"`
+	AmountOffCents        *int       `json:"amount_off_cents"`
+	Duration              string     `json:"duration"`
+	DurationMonths        *int       `json:"duration_months"`
+	MaxRedemptions        *int       `json:"max_redemptions"`
+	Redemptions           int        `json:"redemptions"`
+	ExpiresAt             *Timestamp `json:"expires_at"`
+	OncePerUser           bool       `json:"once_per_user"`
+	NewCustomersOnly      bool       `json:"new_customers_only"`
+	Active                bool       `json:"active"`
+	StripeCouponID        string     `json:"stripe_coupon_id"`
+	StripePromotionCodeID string     `json:"stripe_promotion_code_id"`
+	CreatedBy             string     `json:"created_by"`
+	CreatedAt             Timestamp  `json:"created_at"`
+	UpdatedAt             Timestamp  `json:"updated_at"`
+}
