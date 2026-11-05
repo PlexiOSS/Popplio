@@ -426,8 +426,13 @@ func tierPositions(t *testing.T, ids []string) map[string]int32 {
 
 func TestShopCouponNullMeansUnconstrained(t *testing.T) {
 	f := seedStaff(t, []string{"manage_shop"}, "active")
+	id := "test-" + f.UserID
 
-	body := fmt.Sprintf(`{"UpdateShopCoupons":{"login_token":%q,"action":{"Create":{"id":"x","code":"c","public":true,"max_uses":null,"reuse_wait_duration":null,"expiry":null,"applicable_items":[],"cents":null,"requirements":[],"allowed_users":[],"usable":true,"target_types":[]}}}}`, f.Token)
+	t.Cleanup(func() {
+		state.Pool.Exec(context.Background(), "DELETE FROM shop_coupons WHERE id = $1", id)
+	})
+
+	body := fmt.Sprintf(`{"UpdateShopCoupons":{"login_token":%q,"action":{"Create":{"id":%q,"code":"c","public":true,"max_uses":null,"reuse_wait_duration":null,"expiry":null,"applicable_items":[],"cents":null,"requirements":[],"allowed_users":[],"usable":true,"target_types":[]}}}}`, f.Token, id)
 
 	rec := post(t, body)
 

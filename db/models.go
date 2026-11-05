@@ -103,6 +103,20 @@ type ArchiveCacheServersCacheServerOauthMd struct {
 	OwnerID string `db:"owner_id" json:"owner_id"`
 }
 
+type AuditEvent struct {
+	ID         int64              `db:"id" json:"id"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Source     string             `db:"source" json:"source"`
+	ActorType  string             `db:"actor_type" json:"actor_type"`
+	ActorID    pgtype.Text        `db:"actor_id" json:"actor_id"`
+	Action     string             `db:"action" json:"action"`
+	TargetType pgtype.Text        `db:"target_type" json:"target_type"`
+	TargetID   pgtype.Text        `db:"target_id" json:"target_id"`
+	Status     pgtype.Int4        `db:"status" json:"status"`
+	Ip         pgtype.Text        `db:"ip" json:"ip"`
+	Data       map[string]any     `db:"data" json:"data"`
+}
+
 type AutoVoteSubscription struct {
 	UserID               string             `db:"user_id" json:"user_id"`
 	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
@@ -440,13 +454,16 @@ type PaymentCreditHold struct {
 }
 
 type PaymentFulfillment struct {
-	Provider    string             `db:"provider" json:"provider"`
-	ExternalID  string             `db:"external_id" json:"external_id"`
-	UserID      string             `db:"user_id" json:"user_id"`
-	ProductID   string             `db:"product_id" json:"product_id"`
-	ForType     string             `db:"for_type" json:"for_type"`
-	ForID       string             `db:"for_id" json:"for_id"`
-	FulfilledAt pgtype.Timestamptz `db:"fulfilled_at" json:"fulfilled_at"`
+	Provider     string             `db:"provider" json:"provider"`
+	ExternalID   string             `db:"external_id" json:"external_id"`
+	UserID       string             `db:"user_id" json:"user_id"`
+	ProductID    string             `db:"product_id" json:"product_id"`
+	ForType      string             `db:"for_type" json:"for_type"`
+	ForID        string             `db:"for_id" json:"for_id"`
+	FulfilledAt  pgtype.Timestamptz `db:"fulfilled_at" json:"fulfilled_at"`
+	RevokedAt    pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	RevokeReason pgtype.Text        `db:"revoke_reason" json:"revoke_reason"`
+	PremiumHours pgtype.Int4        `db:"premium_hours" json:"premium_hours"`
 }
 
 type PromoCode struct {

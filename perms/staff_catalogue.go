@@ -35,6 +35,7 @@ const (
 	StaffManageShop         Perm = "manage_shop"
 	StaffManageBotWhitelist Perm = "manage_bot_whitelist"
 	StaffManagePromoCodes   Perm = "manage_promo_codes"
+	StaffViewPayments       Perm = "view_payments"
 
 	StaffManagePartners  Perm = "manage_partners"
 	StaffManageBlog      Perm = "manage_blog"
@@ -86,7 +87,7 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 	{
 		ID:          StaffViewAuditLogs,
 		Name:        "View Audit Logs",
-		Description: "See the log of every staff action taken through the panel and the staff bot.",
+		Description: "See the activity log: every change made through the API, every staff panel action, payments, refunds and background task failures.",
 		Category:    "Administration",
 		Legacy:      []string{"rpc_logs.view", "rpc_logs.*"},
 	},
@@ -258,6 +259,12 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 			"shop_coupons.create", "shop_coupons.update", "shop_coupons.delete",
 			"vote_credit_tiers.create", "vote_credit_tiers.update", "vote_credit_tiers.delete",
 		},
+	},
+	{
+		ID:          StaffViewPayments,
+		Name:        "View Payments",
+		Description: "See premium purchases (with credits, promo codes, refunds and disputes) and Auto-vote subscriptions with each subscriber's listings, cooldowns and skips.",
+		Category:    "Shop",
 	},
 	{
 		ID:          StaffManagePromoCodes,

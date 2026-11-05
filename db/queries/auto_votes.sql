@@ -59,3 +59,16 @@ UPDATE bots SET auto_votes_opt_out = $2 WHERE bot_id = $1;
 
 -- name: SetServerAutoVotesOptOut :exec
 UPDATE servers SET auto_votes_opt_out = $2 WHERE server_id = $1;
+
+-- name: ListAllAutoVoteSubscriptions :many
+SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at
+FROM auto_vote_subscriptions ORDER BY created_at DESC;
+
+-- name: ListAllAutoVoteTargets :many
+SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at
+FROM auto_vote_targets ORDER BY user_id, created_at;
+
+-- name: CountAutoVotesSince :many
+SELECT author, count(*)::int AS votes FROM entity_votes
+WHERE auto AND NOT void AND created_at > sqlc.arg(since)::timestamp
+GROUP BY author;

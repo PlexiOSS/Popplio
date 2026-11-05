@@ -3,20 +3,17 @@ package get_auto_vote
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"popplio/api/resp"
 	"popplio/autovote"
 	"popplio/db"
 	"popplio/state"
 	"popplio/types"
-	"popplio/votes"
 
 	docs "github.com/PlexiOSS/Keel/doclib"
 	"github.com/PlexiOSS/Keel/uapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"go.uber.org/zap"
 )
 
 func Docs() *docs.Doc {
@@ -70,46 +67,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	for _, row := range rows {
-		target := types.AutoVoteTarget{
-			TargetType:  row.TargetType,
-			TargetID:    row.TargetID,
-			Name:        row.TargetID,
-			Days:        make([]int, len(row.Days)),
-			StartMinute: int(row.StartMinute),
-			EndMinute:   int(row.EndMinute),
-			Timezone:    row.Timezone,
-			InSchedule:  autovote.InSchedule(row.Days, int(row.StartMinute), int(row.EndMinute), row.Timezone, time.Now()),
-		}
-
-		for i, day := range row.Days {
-			target.Days[i] = int(day)
-		}
-
-		if info, err := votes.GetEntityInfo(d.Context, state.Pool, row.TargetID, row.TargetType); err == nil {
-			target.Name = info.Name
-			target.Avatar = info.Avatar
-		}
-
-		if row.LastVotedAt.Valid {
-			at := row.LastVotedAt.Time
-			target.LastVotedAt = &at
-		}
-
-		if row.LastSkipReason.Valid {
-			reason := row.LastSkipReason.String
-			target.LastSkipReason = &reason
-		}
-
-		check, err := votes.EntityVoteCheck(d.Context, state.Pool, userID, row.TargetID, row.TargetType)
-
-		if err != nil {
-			state.Logger.Warn("Failed to check auto-vote cooldown", zap.Error(err), zap.String("userId", userID), zap.String("targetId", row.TargetID))
-		} else if check.HasVoted && len(check.ValidVotes) > 0 {
-			until := check.ValidVotes[0].CreatedAt.Add(time.Duration(check.VoteInfo.VoteTime) * time.Hour)
-			target.CooldownUntil = &until
-		}
-
-		out.Targets = append(out.Targets, target)
+		out.Targets = append(out.Targets, autovote.Target(d.Context, row))
 	}
 
 	return uapi.HttpResponse{Json: out}

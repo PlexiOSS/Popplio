@@ -19,3 +19,8 @@ LIMIT 100;
 -- name: MarkPaymentCreditHoldRefunded :execrows
 UPDATE payment_credit_holds SET state = 'refunded', resolved_at = NOW()
 WHERE id = $1 AND state = 'held';
+
+-- name: ReturnSpentPaymentCreditHold :one
+UPDATE payment_credit_holds SET state = 'refunded', resolved_at = NOW()
+WHERE provider = $1 AND external_id = $2 AND state = 'spent'
+RETURNING target_type, target_id, credits;

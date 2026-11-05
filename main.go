@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"popplio/audit"
 	"popplio/brandemoji"
 	"popplio/linkedroles"
 	"runtime"
@@ -181,6 +182,7 @@ func main() {
 		corsMiddleware,
 		zapchi.Logger(state.Logger, "api"),
 		middleware.Timeout(30*time.Second),
+		audit.Middleware,
 	)
 
 	routers := []uapi.APIRouter{

@@ -56,6 +56,7 @@ var (
 
 	Config           *config.Config
 	StripeWebhSecret string
+	PaypalWebhookID  string
 	StripeWebhIPList []string
 	SeoMapGenerator  = &seo.MapGenerator{}
 
@@ -231,6 +232,7 @@ func Setup() {
 			Logger.Error("Paypal setup [oauth2] failed, disabling paypal support", zap.Error(err))
 		} else {
 			Paypal = c
+			go setupPaypalWebhook()
 		}
 	}
 
@@ -264,6 +266,8 @@ func Setup() {
 					"checkout.session.async_payment_succeeded",
 					"checkout.session.async_payment_failed",
 					"checkout.session.expired",
+					"charge.refunded",
+					"charge.dispute.created",
 					"customer.subscription.created",
 					"customer.subscription.updated",
 					"customer.subscription.deleted",
@@ -307,4 +311,48 @@ func Setup() {
 
 		Logger.Info("Stripe webhook IP allowlist:", zap.Strings("ipList", StripeWebhIPList))
 	}()
+}
+
+func setupPaypalWebhook() {
+	if Config.Meta.PaypalWebhookID != "" {
+		PaypalWebhookID = Config.Meta.PaypalWebhookID
+		return
+	}
+
+	webhookURL := Config.Sites.API + "/payments/paypal/webhook"
+	events := []paypal.WebhookEventType{
+		{Name: "PAYMENT.CAPTURE.REFUNDED"},
+		{Name: "PAYMENT.CAPTURE.REVERSED"},
+		{Name: "CUSTOMER.DISPUTE.CREATED"},
+	}
+
+	list, err := Paypal.ListWebhooks(Context, paypal.AncorTypeApplication)
+
+	if err != nil {
+		Logger.Error("PayPal webhook setup failed [list], disabling paypal refund handling", zap.Error(err))
+		return
+	}
+
+	for _, wh := range list.Webhooks {
+		if wh.URL != webhookURL {
+			continue
+		}
+
+		if _, err := Paypal.UpdateWebhook(Context, wh.ID, []paypal.WebhookField{{Operation: "replace", Path: "/event_types", Value: events}}); err != nil {
+			Logger.Error("PayPal webhook setup failed [update], disabling paypal refund handling", zap.Error(err))
+			return
+		}
+
+		PaypalWebhookID = wh.ID
+		return
+	}
+
+	wh, err := Paypal.CreateWebhook(Context, &paypal.CreateWebhookRequest{URL: webhookURL, EventTypes: events})
+
+	if err != nil {
+		Logger.Error("PayPal webhook setup failed [create], disabling paypal refund handling", zap.Error(err))
+		return
+	}
+
+	PaypalWebhookID = wh.ID
 }

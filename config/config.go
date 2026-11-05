@@ -88,6 +88,7 @@ type Meta struct {
 	StripePublicKey           string   `yaml:"stripe_public_key" default:"" comment:"Stripe Public Key" validate:"required"`
 	StripeSecretKey           string   `yaml:"stripe_secret_key" default:"" comment:"Stripe Public Key" validate:"required"`
 	SkipAutoMigrate           bool     `yaml:"skip_auto_migrate" default:"false" comment:"Set to true to stop Popplio applying pending database migrations on startup (run go run ./cmd/migrate up yourself instead)"`
+	PaypalWebhookID           string   `yaml:"paypal_webhook_id" default:"" comment:"ID of an existing PayPal webhook for /payments/paypal/webhook. When set, Popplio uses it and never creates or updates PayPal webhooks"`
 	StripeWebhookSecret       string   `yaml:"stripe_webhook_secret" default:"" comment:"Signing secret of an existing Stripe webhook endpoint for /payments/stripe/webhook. When set, Popplio uses it and never creates or deletes Stripe webhook endpoints"`
 	PopplioProxy              string   `yaml:"popplio_proxy" default:"https://gateway.nodebyte.host/proxy/discord" comment:"Popplio Proxy URL" validate:"required"`
 	OpenAIAPIKey              string   `yaml:"openai_api_key" default:"sk-proj-your-key-here" comment:"OpenAI API key, used to run submitted bot/server descriptions through the (free) moderation endpoint at submission time, and to draft changelog entries. Moderation is skipped and the changelog generator falls back to a plain heuristic when this is unset" required:"false"`

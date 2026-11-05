@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
+	"popplio/audit"
 	"popplio/db"
 	"popplio/promo"
 	"popplio/state"
+	"popplio/types"
+	"popplio/votes"
 
 	"github.com/PlexiOSS/Keel/jsonimpl"
 	"github.com/PlexiOSS/Keel/uapi"
@@ -55,6 +59,49 @@ func InSchedule(days []int16, startMinute, endMinute int, timezone string, now t
 	minute := local.Hour()*60 + local.Minute()
 
 	return minute >= startMinute && minute < endMinute
+}
+
+func Target(ctx context.Context, row db.AutoVoteTarget) types.AutoVoteTarget {
+	target := types.AutoVoteTarget{
+		TargetType:  row.TargetType,
+		TargetID:    row.TargetID,
+		Name:        row.TargetID,
+		Days:        make([]int, len(row.Days)),
+		StartMinute: int(row.StartMinute),
+		EndMinute:   int(row.EndMinute),
+		Timezone:    row.Timezone,
+		InSchedule:  InSchedule(row.Days, int(row.StartMinute), int(row.EndMinute), row.Timezone, time.Now()),
+	}
+
+	for i, day := range row.Days {
+		target.Days[i] = int(day)
+	}
+
+	if info, err := votes.GetEntityInfo(ctx, state.Pool, row.TargetID, row.TargetType); err == nil {
+		target.Name = info.Name
+		target.Avatar = info.Avatar
+	}
+
+	if row.LastVotedAt.Valid {
+		at := row.LastVotedAt.Time
+		target.LastVotedAt = &at
+	}
+
+	if row.LastSkipReason.Valid {
+		reason := row.LastSkipReason.String
+		target.LastSkipReason = &reason
+	}
+
+	check, err := votes.EntityVoteCheck(ctx, state.Pool, row.UserID, row.TargetID, row.TargetType)
+
+	if err != nil {
+		state.Logger.Warn("Failed to check auto-vote cooldown", zap.Error(err), zap.String("userId", row.UserID), zap.String("targetId", row.TargetID))
+	} else if check.HasVoted && len(check.ValidVotes) > 0 {
+		until := check.ValidVotes[0].CreatedAt.Add(time.Duration(check.VoteInfo.VoteTime) * time.Hour)
+		target.CooldownUntil = &until
+	}
+
+	return target
 }
 
 func Checkout(userID string, discounts []*stripe.CheckoutSessionDiscountParams) (*stripe.CheckoutSession, error) {
@@ -144,6 +191,16 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 
 		promo.Complete(ctx, s.ID)
 
+		audit.Record(audit.Event{
+			Source:     audit.SourceStripe,
+			ActorType:  audit.ActorUser,
+			ActorID:    s.Metadata["user_id"],
+			Action:     "autovote.subscribed",
+			TargetType: "user",
+			TargetID:   s.Metadata["user_id"],
+			Data:       map[string]any{"session": s.ID, "subscription": sub.ID, "status": string(sub.Status)},
+		})
+
 		return true, ok("auto-vote subscription started")
 	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted":
 		var sub stripe.Subscription
@@ -164,6 +221,16 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 		}); err != nil {
 			return true, failed("updating subscription", err)
 		}
+
+		audit.Record(audit.Event{
+			Source:     audit.SourceStripe,
+			ActorType:  audit.ActorUser,
+			ActorID:    sub.Metadata["user_id"],
+			Action:     "autovote.subscription_" + strings.TrimPrefix(string(event.Type), "customer.subscription."),
+			TargetType: "user",
+			TargetID:   sub.Metadata["user_id"],
+			Data:       map[string]any{"subscription": sub.ID, "status": string(sub.Status), "cancel_at_period_end": sub.CancelAtPeriodEnd},
+		})
 
 		return true, ok("auto-vote subscription updated")
 	}

@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-11-05
+
+### Added
+
+- An activity log. A new `audit_events` table records every API request
+  that changes something (with the operation ID, who made it, the bot,
+  server, team or user it acted on, and the status code), every staff panel
+  action (with the staff member, their IP and the action's details, minus
+  login tokens, codes and secrets), and system events: premium payments
+  fulfilled, refunded and disputed, Auto-vote subscriptions changing, every
+  automatic vote, skip and failure, and background task failures and
+  panics. Request bodies of API calls aren't stored, and bot and server
+  stats posts are left out because of how often they arrive. Events are
+  kept for 180 days and pruned by the new daily `audit_prune` task.
+- `GET /staff/audit-events` lists the activity log, newest first, filtered
+  by source, actor, target, action prefix and failed requests, with
+  `before` paging. It needs `view_audit_logs`. IPs are only shown to staff
+  with `view_sensitive_data`. Each event includes the actor's and target's
+  name (and the actor's avatar) when they're a known user, bot, server or
+  team.
+- `GET /staff/payments` lists recent premium purchases with the credits and
+  promo code used and whether each was refunded or disputed.
+  Each purchase now records how many hours of premium it added
+  (`premium_hours`). `GET /staff/auto-vote` lists every Auto-vote subscriber and their
+  listings, each with its cooldown, schedule and last skip, plus the user's
+  automatic votes in the last 30 days. Both need the new `view_payments`
+  permission.
+- Stripe refunds and disputes. On a full refund (`charge.refunded`) of a
+  premium purchase, Popplio removes the premium it granted and returns any
+  vote credits used on it. On a dispute (`charge.dispute.created`) it
+  removes the premium but keeps the credits. Premium is only removed if
+  that purchase is still the one granting it, so a later purchase isn't
+  undone. A disputed Auto-vote payment cancels the subscription. Partial
+  refunds are only logged. The buyer gets a notification, and the
+  purchase is marked with `revoked_at` and `revoke_reason`. An endpoint
+  set up by hand in the Stripe dashboard needs `charge.refunded` and
+  `charge.dispute.created` added.
+- PayPal refunds and disputes, through a new `POST /payments/paypal/webhook`.
+  Popplio handles `PAYMENT.CAPTURE.REFUNDED` the same way as a Stripe
+  refund, and `PAYMENT.CAPTURE.REVERSED` and `CUSTOMER.DISPUTE.CREATED` the
+  same way as a Stripe dispute. Every event is checked with PayPal's
+  signature verification before anything happens. On startup Popplio
+  creates the PayPal webhook, or updates one that already points at that
+  URL; set `paypal_webhook_id` to use an existing webhook instead.
+- A `Go Tests` workflow runs every test against a fresh Postgres 18 with
+  all migrations applied, so the database tests (including the staff panel
+  integration tests, which used to always skip) now run in CI. Database
+  tests read `POPPLIO_TEST_DATABASE_URL` or `ARCADIA_TEST_DATABASE_URL`.
+- Database tests for refunds, promo code validation and the activity log.
+
+### Changed
+
+- `GET /staff/tickets` now takes the staff panel's auth through Arcadia's
+  `PopplioStaff` proxy, like the other staff routes, instead of a member
+  session. The staff panel moved to its own domain, where there's no member
+  session to send.
+- Premium from any source (a purchase, the shop or staff) now adds its time
+  to premium that's still running, instead of replacing it. Before, buying
+  a shop premium item or being given premium by staff while premium was
+  active threw away the time that was left.
+- A refund or dispute now removes only the hours that purchase added, so
+  premium added later from the shop or by staff stays. Purchases made
+  before `premium_hours` was recorded still lose all their premium, as
+  before.
+
+### Fixed
+
+- The shop coupon integration test always created a coupon called `x` and
+  never removed it, so it failed on any database it had already run on.
+
 ## [1.19.0] - 2026-11-04
 
 ### Added

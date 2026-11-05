@@ -12,6 +12,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/api/sessioncookie"
+	"popplio/audit"
 	"popplio/state"
 	"popplio/types"
 
@@ -160,6 +161,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	headers["Set-Cookie"] = sessioncookie.Set(token)
+
+	audit.SetActor(r, audit.ActorUser, user.ID)
 
 	return resp.WithHeaders(resp.OK(types.CreateSessionResponse{
 		TargetID:  user.ID,

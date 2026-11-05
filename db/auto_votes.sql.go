@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countAutoVotesSince = `-- name: CountAutoVotesSince :many
+SELECT author, count(*)::int AS votes FROM entity_votes
+WHERE auto AND NOT void AND created_at > $1::timestamp
+GROUP BY author
+`
+
+type CountAutoVotesSinceRow struct {
+	Author string `db:"author" json:"author"`
+	Votes  int32  `db:"votes" json:"votes"`
+}
+
+func (q *Queries) CountAutoVotesSince(ctx context.Context, since pgtype.Timestamp) ([]CountAutoVotesSinceRow, error) {
+	rows, err := q.db.Query(ctx, countAutoVotesSince, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAutoVotesSinceRow
+	for rows.Next() {
+		var i CountAutoVotesSinceRow
+		if err := rows.Scan(&i.Author, &i.Votes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteAutoVoteTargetsExcept = `-- name: DeleteAutoVoteTargetsExcept :exec
 DELETE FROM auto_vote_targets
 WHERE user_id = $1 AND NOT (target_type || ':' || target_id = ANY($2::text[]))
@@ -76,6 +107,76 @@ func (q *Queries) GetServerAutoVotesOptOut(ctx context.Context, serverID string)
 	var auto_votes_opt_out bool
 	err := row.Scan(&auto_votes_opt_out)
 	return auto_votes_opt_out, err
+}
+
+const listAllAutoVoteSubscriptions = `-- name: ListAllAutoVoteSubscriptions :many
+SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at
+FROM auto_vote_subscriptions ORDER BY created_at DESC
+`
+
+func (q *Queries) ListAllAutoVoteSubscriptions(ctx context.Context) ([]AutoVoteSubscription, error) {
+	rows, err := q.db.Query(ctx, listAllAutoVoteSubscriptions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AutoVoteSubscription
+	for rows.Next() {
+		var i AutoVoteSubscription
+		if err := rows.Scan(
+			&i.UserID,
+			&i.StripeCustomerID,
+			&i.StripeSubscriptionID,
+			&i.Status,
+			&i.CurrentPeriodEnd,
+			&i.CancelAtPeriodEnd,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllAutoVoteTargets = `-- name: ListAllAutoVoteTargets :many
+SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at
+FROM auto_vote_targets ORDER BY user_id, created_at
+`
+
+func (q *Queries) ListAllAutoVoteTargets(ctx context.Context) ([]AutoVoteTarget, error) {
+	rows, err := q.db.Query(ctx, listAllAutoVoteTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AutoVoteTarget
+	for rows.Next() {
+		var i AutoVoteTarget
+		if err := rows.Scan(
+			&i.UserID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Days,
+			&i.StartMinute,
+			&i.EndMinute,
+			&i.Timezone,
+			&i.LastVotedAt,
+			&i.LastSkipReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAutoVoteTargets = `-- name: ListAutoVoteTargets :many

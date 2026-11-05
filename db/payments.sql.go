@@ -66,6 +66,34 @@ func (q *Queries) GetFirstPaymentFulfillmentAt(ctx context.Context, provider str
 	return column_1, err
 }
 
+const getPaymentFulfillment = `-- name: GetPaymentFulfillment :one
+SELECT provider, external_id, user_id, product_id, for_type, for_id, fulfilled_at, revoked_at, revoke_reason, premium_hours
+FROM payment_fulfillments WHERE provider = $1 AND external_id = $2
+`
+
+type GetPaymentFulfillmentParams struct {
+	Provider   string `db:"provider" json:"provider"`
+	ExternalID string `db:"external_id" json:"external_id"`
+}
+
+func (q *Queries) GetPaymentFulfillment(ctx context.Context, arg GetPaymentFulfillmentParams) (PaymentFulfillment, error) {
+	row := q.db.QueryRow(ctx, getPaymentFulfillment, arg.Provider, arg.ExternalID)
+	var i PaymentFulfillment
+	err := row.Scan(
+		&i.Provider,
+		&i.ExternalID,
+		&i.UserID,
+		&i.ProductID,
+		&i.ForType,
+		&i.ForID,
+		&i.FulfilledAt,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.PremiumHours,
+	)
+	return i, err
+}
+
 const getServerTypePremium = `-- name: GetServerTypePremium :one
 SELECT type, premium FROM servers WHERE server_id = $1
 `
@@ -83,18 +111,19 @@ func (q *Queries) GetServerTypePremium(ctx context.Context, serverID string) (Ge
 }
 
 const insertPaymentFulfillment = `-- name: InsertPaymentFulfillment :execrows
-INSERT INTO payment_fulfillments (provider, external_id, user_id, product_id, for_type, for_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO payment_fulfillments (provider, external_id, user_id, product_id, for_type, for_id, premium_hours)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (provider, external_id) DO NOTHING
 `
 
 type InsertPaymentFulfillmentParams struct {
-	Provider   string `db:"provider" json:"provider"`
-	ExternalID string `db:"external_id" json:"external_id"`
-	UserID     string `db:"user_id" json:"user_id"`
-	ProductID  string `db:"product_id" json:"product_id"`
-	ForType    string `db:"for_type" json:"for_type"`
-	ForID      string `db:"for_id" json:"for_id"`
+	Provider     string      `db:"provider" json:"provider"`
+	ExternalID   string      `db:"external_id" json:"external_id"`
+	UserID       string      `db:"user_id" json:"user_id"`
+	ProductID    string      `db:"product_id" json:"product_id"`
+	ForType      string      `db:"for_type" json:"for_type"`
+	ForID        string      `db:"for_id" json:"for_id"`
+	PremiumHours pgtype.Int4 `db:"premium_hours" json:"premium_hours"`
 }
 
 func (q *Queries) InsertPaymentFulfillment(ctx context.Context, arg InsertPaymentFulfillmentParams) (int64, error) {
@@ -105,7 +134,99 @@ func (q *Queries) InsertPaymentFulfillment(ctx context.Context, arg InsertPaymen
 		arg.ProductID,
 		arg.ForType,
 		arg.ForID,
+		arg.PremiumHours,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listRecentPaymentFulfillments = `-- name: ListRecentPaymentFulfillments :many
+SELECT f.provider, f.external_id, f.user_id, f.product_id, f.for_type, f.for_id, f.fulfilled_at, f.revoked_at, f.revoke_reason, f.premium_hours,
+    h.credits AS credits_used, h.discount_cents AS credit_discount_cents, h.state AS credit_state,
+    p.code AS promo_code
+FROM payment_fulfillments f
+LEFT JOIN payment_credit_holds h ON h.provider = f.provider AND h.external_id = f.external_id
+LEFT JOIN promo_code_redemptions r ON r.stripe_session_id = f.external_id AND r.status = 'completed'
+LEFT JOIN promo_codes p ON p.id = r.promo_code_id
+WHERE ($1::text IS NULL OR f.user_id = $1::text OR f.for_id = $1::text)
+  AND (NOT $2::bool OR f.revoked_at IS NOT NULL)
+ORDER BY f.fulfilled_at DESC
+LIMIT $3::int
+`
+
+type ListRecentPaymentFulfillmentsParams struct {
+	UserID      pgtype.Text `db:"user_id" json:"user_id"`
+	RevokedOnly bool        `db:"revoked_only" json:"revoked_only"`
+	Lim         int32       `db:"lim" json:"lim"`
+}
+
+type ListRecentPaymentFulfillmentsRow struct {
+	Provider            string             `db:"provider" json:"provider"`
+	ExternalID          string             `db:"external_id" json:"external_id"`
+	UserID              string             `db:"user_id" json:"user_id"`
+	ProductID           string             `db:"product_id" json:"product_id"`
+	ForType             string             `db:"for_type" json:"for_type"`
+	ForID               string             `db:"for_id" json:"for_id"`
+	FulfilledAt         pgtype.Timestamptz `db:"fulfilled_at" json:"fulfilled_at"`
+	RevokedAt           pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	RevokeReason        pgtype.Text        `db:"revoke_reason" json:"revoke_reason"`
+	PremiumHours        pgtype.Int4        `db:"premium_hours" json:"premium_hours"`
+	CreditsUsed         pgtype.Int4        `db:"credits_used" json:"credits_used"`
+	CreditDiscountCents pgtype.Int4        `db:"credit_discount_cents" json:"credit_discount_cents"`
+	CreditState         pgtype.Text        `db:"credit_state" json:"credit_state"`
+	PromoCode           pgtype.Text        `db:"promo_code" json:"promo_code"`
+}
+
+func (q *Queries) ListRecentPaymentFulfillments(ctx context.Context, arg ListRecentPaymentFulfillmentsParams) ([]ListRecentPaymentFulfillmentsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentPaymentFulfillments, arg.UserID, arg.RevokedOnly, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentPaymentFulfillmentsRow
+	for rows.Next() {
+		var i ListRecentPaymentFulfillmentsRow
+		if err := rows.Scan(
+			&i.Provider,
+			&i.ExternalID,
+			&i.UserID,
+			&i.ProductID,
+			&i.ForType,
+			&i.ForID,
+			&i.FulfilledAt,
+			&i.RevokedAt,
+			&i.RevokeReason,
+			&i.PremiumHours,
+			&i.CreditsUsed,
+			&i.CreditDiscountCents,
+			&i.CreditState,
+			&i.PromoCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markPaymentFulfillmentRevoked = `-- name: MarkPaymentFulfillmentRevoked :execrows
+UPDATE payment_fulfillments SET revoked_at = NOW(), revoke_reason = $3
+WHERE provider = $1 AND external_id = $2 AND revoked_at IS NULL
+`
+
+type MarkPaymentFulfillmentRevokedParams struct {
+	Provider     string      `db:"provider" json:"provider"`
+	ExternalID   string      `db:"external_id" json:"external_id"`
+	RevokeReason pgtype.Text `db:"revoke_reason" json:"revoke_reason"`
+}
+
+func (q *Queries) MarkPaymentFulfillmentRevoked(ctx context.Context, arg MarkPaymentFulfillmentRevokedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markPaymentFulfillmentRevoked, arg.Provider, arg.ExternalID, arg.RevokeReason)
 	if err != nil {
 		return 0, err
 	}
@@ -126,4 +247,46 @@ func (q *Queries) PaymentFulfillmentExists(ctx context.Context, arg PaymentFulfi
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const revokeBotPremiumFrom = `-- name: RevokeBotPremiumFrom :one
+UPDATE bots SET
+    premium_period_length = CASE WHEN $1::int IS NULL THEN interval '0' ELSE GREATEST(premium_period_length - make_interval(hours => $1::int), interval '0') END,
+    premium = $1::int IS NOT NULL AND start_premium_period + premium_period_length - make_interval(hours => $1::int) > NOW()
+WHERE bot_id = $2 AND premium = true AND start_premium_period = $3::timestamptz
+RETURNING premium
+`
+
+type RevokeBotPremiumFromParams struct {
+	Hours     pgtype.Int4        `db:"hours" json:"hours"`
+	BotID     string             `db:"bot_id" json:"bot_id"`
+	GrantedAt pgtype.Timestamptz `db:"granted_at" json:"granted_at"`
+}
+
+func (q *Queries) RevokeBotPremiumFrom(ctx context.Context, arg RevokeBotPremiumFromParams) (bool, error) {
+	row := q.db.QueryRow(ctx, revokeBotPremiumFrom, arg.Hours, arg.BotID, arg.GrantedAt)
+	var premium bool
+	err := row.Scan(&premium)
+	return premium, err
+}
+
+const revokeServerPremiumFrom = `-- name: RevokeServerPremiumFrom :one
+UPDATE servers SET
+    premium_period_length = CASE WHEN $1::int IS NULL THEN interval '0' ELSE GREATEST(premium_period_length - make_interval(hours => $1::int), interval '0') END,
+    premium = $1::int IS NOT NULL AND start_premium_period + premium_period_length - make_interval(hours => $1::int) > NOW()
+WHERE server_id = $2 AND premium = true AND start_premium_period = $3::timestamptz
+RETURNING premium
+`
+
+type RevokeServerPremiumFromParams struct {
+	Hours     pgtype.Int4        `db:"hours" json:"hours"`
+	ServerID  string             `db:"server_id" json:"server_id"`
+	GrantedAt pgtype.Timestamptz `db:"granted_at" json:"granted_at"`
+}
+
+func (q *Queries) RevokeServerPremiumFrom(ctx context.Context, arg RevokeServerPremiumFromParams) (bool, error) {
+	row := q.db.QueryRow(ctx, revokeServerPremiumFrom, arg.Hours, arg.ServerID, arg.GrantedAt)
+	var premium bool
+	err := row.Scan(&premium)
+	return premium, err
 }
