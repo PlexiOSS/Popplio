@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"popplio/db"
@@ -36,6 +37,24 @@ func Active(status string, periodEnd pgtype.Timestamptz) bool {
 	}
 
 	return !periodEnd.Valid || periodEnd.Time.After(time.Now())
+}
+
+func InSchedule(days []int16, startMinute, endMinute int, timezone string, now time.Time) bool {
+	loc, err := time.LoadLocation(timezone)
+
+	if err != nil {
+		loc = time.UTC
+	}
+
+	local := now.In(loc)
+
+	if len(days) > 0 && !slices.Contains(days, int16(local.Weekday())) {
+		return false
+	}
+
+	minute := local.Hour()*60 + local.Minute()
+
+	return minute >= startMinute && minute < endMinute
 }
 
 func Checkout(userID string, discounts []*stripe.CheckoutSessionDiscountParams) (*stripe.CheckoutSession, error) {

@@ -1,4 +1,4 @@
-package bgtasks
+package autovote
 
 import (
 	"testing"
@@ -29,7 +29,7 @@ func TestInSchedule(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		if got := inSchedule(c.days, c.start, c.end, c.tz, c.now); got != c.want {
+		if got := InSchedule(c.days, c.start, c.end, c.tz, c.now); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}

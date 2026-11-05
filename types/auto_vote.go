@@ -26,6 +26,8 @@ type AutoVoteTarget struct {
 	Timezone       string     `json:"timezone" description:"IANA timezone the schedule uses"`
 	LastVotedAt    *time.Time `json:"last_voted_at" description:"When an automatic vote was last cast"`
 	LastSkipReason *string    `json:"last_skip_reason" description:"Why the last automatic vote was skipped, if it was"`
+	CooldownUntil  *time.Time `json:"cooldown_until" description:"When the user's vote cooldown on this listing ends, whether their last vote was automatic or by hand. Null if they aren't on cooldown"`
+	InSchedule     bool       `json:"in_schedule" description:"Whether the listing's schedule allows a vote right now"`
 }
 
 type AutoVoteStatus struct {

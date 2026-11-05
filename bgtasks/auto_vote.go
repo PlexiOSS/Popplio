@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
-	"popplio/captcha"
+	"popplio/autovote"
 	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
@@ -31,7 +30,7 @@ func AutoVote(ctx context.Context) error {
 	var cast_, failed int
 
 	for _, t := range targets {
-		if !inSchedule(t.Days, int(t.StartMinute), int(t.EndMinute), t.Timezone, time.Now()) {
+		if !autovote.InSchedule(t.Days, int(t.StartMinute), int(t.EndMinute), t.Timezone, time.Now()) {
 			continue
 		}
 
@@ -105,16 +104,6 @@ func autoVoteOne(ctx context.Context, q *db.Queries, userID, targetType, targetI
 		return false, "The owner has turned off automatic votes for this listing.", nil
 	}
 
-	needsCaptcha, err := captcha.RequiresCaptcha(ctx, targetType, targetID)
-
-	if err != nil {
-		return false, "", err
-	}
-
-	if needsCaptcha {
-		return false, "This listing requires a captcha to vote, so it has to be voted for by hand.", nil
-	}
-
 	banned, err := q.GetUserVoteBanned(ctx, userID)
 
 	if err != nil {
@@ -166,22 +155,4 @@ func notifyAutoVoteSkipped(ctx context.Context, userID, targetType, targetID, re
 	}); err != nil {
 		state.Logger.Warn("Failed to send auto-vote skipped alert", zap.Error(err), zap.String("userId", userID))
 	}
-}
-
-func inSchedule(days []int16, startMinute, endMinute int, timezone string, now time.Time) bool {
-	loc, err := time.LoadLocation(timezone)
-
-	if err != nil {
-		loc = time.UTC
-	}
-
-	local := now.In(loc)
-
-	if len(days) > 0 && !slices.Contains(days, int16(local.Weekday())) {
-		return false
-	}
-
-	minute := local.Hour()*60 + local.Minute()
-
-	return minute >= startMinute && minute < endMinute
 }

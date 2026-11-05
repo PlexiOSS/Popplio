@@ -21,12 +21,18 @@ FROM auto_vote_subscriptions WHERE user_id = $1;
 SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at
 FROM auto_vote_targets WHERE user_id = $1 ORDER BY created_at;
 
--- name: DeleteAutoVoteTargets :exec
-DELETE FROM auto_vote_targets WHERE user_id = $1;
+-- name: DeleteAutoVoteTargetsExcept :exec
+DELETE FROM auto_vote_targets
+WHERE user_id = sqlc.arg(user_id) AND NOT (target_type || ':' || target_id = ANY(sqlc.arg(keep)::text[]));
 
--- name: InsertAutoVoteTarget :exec
+-- name: UpsertAutoVoteTarget :exec
 INSERT INTO auto_vote_targets (user_id, target_type, target_id, days, start_minute, end_minute, timezone)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (user_id, target_type, target_id) DO UPDATE SET
+    days = EXCLUDED.days,
+    start_minute = EXCLUDED.start_minute,
+    end_minute = EXCLUDED.end_minute,
+    timezone = EXCLUDED.timezone;
 
 -- name: ListDueAutoVoteTargets :many
 SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at, t.last_skip_reason
