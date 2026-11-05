@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"popplio/api/sessioncookie"
+	"popplio/audit"
 	"popplio/constants"
 	"popplio/db"
 	"popplio/perms"
@@ -421,10 +422,16 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 	return authData, uapi.HttpResponse{}, true
 }
 
+func authorizeAndCapture(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpResponse, bool) {
+	authData, httpResp, ok := Authorize(r, req)
+	audit.Capture(req, r.OpId, authData)
+	return authData, httpResp, ok
+}
+
 func Setup() {
 	uapi.SetupState(uapi.UAPIState{
 		Logger:    state.Logger,
-		Authorize: Authorize,
+		Authorize: authorizeAndCapture,
 		AuthTypeMap: func() map[string]string {
 			return map[string]string{
 				TargetTypeUser:   "User",

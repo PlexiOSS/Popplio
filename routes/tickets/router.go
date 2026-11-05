@@ -89,14 +89,6 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_staff_tickets.Docs,
 		Handler: get_staff_tickets.Route,
-		Auth: []uapi.AuthType{
-			{
-				Type: api.TargetTypeUser,
-			},
-		},
-		ExtData: map[string]any{
-			api.PERMISSION_CHECK_KEY: nil, // Staff permission is checked in-handler, same as get_ticket/patch_ticket
-		},
 	}.Route(r)
 
 	uapi.Route{

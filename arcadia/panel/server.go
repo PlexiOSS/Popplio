@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -93,27 +94,45 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, err := io.ReadAll(r.Body)
+
+	if err != nil {
+		writeText(http.StatusBadRequest, "Failed to read the request body").write(w)
+		return
+	}
+
 	var req types.PanelQuery
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		writeText(http.StatusBadRequest, "Failed to parse the request body as JSON: "+err.Error()).write(w)
 		return
 	}
 
-	resp, err := s.dispatch(withClientIP(r.Context(), r), &req)
+	ctx := withClientIP(r.Context(), r)
+	resp, err := s.dispatch(ctx, &req)
 
 	if err != nil {
 		var perr Error
 
+		status := http.StatusInternalServerError
+		message := err.Error()
+
 		if errors.As(err, &perr) {
-			writeText(perr.Status, perr.Message).write(w)
-			return
+			status, message = perr.Status, perr.Message
 		}
 
-		writeText(http.StatusInternalServerError, err.Error()).write(w)
+		recordPanel(ctx, body, status)
+		writeText(status, message).write(w)
 		return
 	}
 
+	status := resp.status
+
+	if status == 0 {
+		status = http.StatusOK
+	}
+
+	recordPanel(ctx, body, status)
 	resp.write(w)
 }
 

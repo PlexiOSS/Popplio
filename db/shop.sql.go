@@ -50,7 +50,11 @@ func (q *Queries) ApplyBotHighlight(ctx context.Context, arg ApplyBotHighlightPa
 
 const applyBotPremiumDays = `-- name: ApplyBotPremiumDays :exec
 
-UPDATE bots SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE bot_id = $2
+UPDATE bots SET
+    start_premium_period = CASE WHEN premium AND start_premium_period + premium_period_length > NOW() THEN start_premium_period ELSE NOW() END,
+    premium_period_length = CASE WHEN premium AND start_premium_period + premium_period_length > NOW() THEN premium_period_length + make_interval(hours => $1) ELSE make_interval(hours => $1) END,
+    premium = true
+WHERE bot_id = $2
 `
 
 type ApplyBotPremiumDaysParams struct {
@@ -155,7 +159,11 @@ func (q *Queries) ApplyServerHighlight(ctx context.Context, arg ApplyServerHighl
 }
 
 const applyServerPremiumDays = `-- name: ApplyServerPremiumDays :exec
-UPDATE servers SET start_premium_period = NOW(), premium_period_length = make_interval(hours => $1), premium = true WHERE server_id = $2
+UPDATE servers SET
+    start_premium_period = CASE WHEN premium AND start_premium_period + premium_period_length > NOW() THEN start_premium_period ELSE NOW() END,
+    premium_period_length = CASE WHEN premium AND start_premium_period + premium_period_length > NOW() THEN premium_period_length + make_interval(hours => $1) ELSE make_interval(hours => $1) END,
+    premium = true
+WHERE server_id = $2
 `
 
 type ApplyServerPremiumDaysParams struct {

@@ -6,6 +6,9 @@ package staff
 
 import (
 	"popplio/routes/staff/endpoints/get_app_list"
+	"popplio/routes/staff/endpoints/get_audit_events"
+	"popplio/routes/staff/endpoints/get_auto_vote_overview"
+	"popplio/routes/staff/endpoints/get_payments"
 	"popplio/routes/staff/endpoints/get_public_team"
 	"popplio/routes/staff/endpoints/get_shop_purchases"
 	"popplio/routes/staff/endpoints/get_staff_permissions"
@@ -41,6 +44,30 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_app_list.Docs,
 		Handler: get_app_list.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/audit-events",
+		OpId:    "get_audit_events",
+		Method:  uapi.GET,
+		Docs:    get_audit_events.Docs,
+		Handler: get_audit_events.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/auto-vote",
+		OpId:    "get_auto_vote_overview",
+		Method:  uapi.GET,
+		Docs:    get_auto_vote_overview.Docs,
+		Handler: get_auto_vote_overview.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/payments",
+		OpId:    "get_payments",
+		Method:  uapi.GET,
+		Docs:    get_payments.Docs,
+		Handler: get_payments.Route,
 	}.Route(r)
 
 	uapi.Route{

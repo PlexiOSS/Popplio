@@ -12,6 +12,7 @@ import (
 	"popplio/routes/payments/endpoints/get_paypal"
 	"popplio/routes/payments/endpoints/get_premium_plans"
 	"popplio/routes/payments/endpoints/get_stripe"
+	"popplio/routes/payments/endpoints/handle_paypal_webhook"
 	"popplio/routes/payments/endpoints/handle_stripe_webhook"
 	"popplio/routes/payments/endpoints/redeem_payment_offer"
 
@@ -112,6 +113,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.POST,
 		Docs:    handle_stripe_webhook.Docs,
 		Handler: handle_stripe_webhook.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/payments/paypal/webhook",
+		OpId:    "handle_paypal_webhook",
+		Method:  uapi.POST,
+		Docs:    handle_paypal_webhook.Docs,
+		Handler: handle_paypal_webhook.Route,
 	}.Route(r)
 
 	uapi.Route{

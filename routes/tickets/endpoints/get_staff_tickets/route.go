@@ -13,6 +13,7 @@ import (
 	"popplio/api/resp"
 	"popplio/db"
 	"popplio/perms"
+	staffassets "popplio/routes/staff/assets"
 	"popplio/state"
 	"popplio/types"
 
@@ -29,7 +30,7 @@ const perPage = 20
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Get Staff Tickets",
-		Description: "Gets every ticket platform-wide. Requires the 'view_tickets' staff permission.",
+		Description: "Gets every ticket platform-wide. Requires the 'view_tickets' staff permission. Called through the staff panel.",
 		Params: []docs.Parameter{
 			{
 				Name:        "open",
@@ -51,6 +52,13 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	var err error
+	d.Auth.ID, err = staffassets.EnsurePanelAuth(d.Context, r)
+
+	if err != nil {
+		return resp.Status(http.StatusFailedDependency, err.Error())
+	}
+
 	sp, err := perms.StaffPerms(d.Context, d.Auth.ID)
 
 	if err != nil {

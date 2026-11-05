@@ -133,3 +133,27 @@ func (q *Queries) MarkPaymentCreditHoldSpent(ctx context.Context, arg MarkPaymen
 	}
 	return result.RowsAffected(), nil
 }
+
+const returnSpentPaymentCreditHold = `-- name: ReturnSpentPaymentCreditHold :one
+UPDATE payment_credit_holds SET state = 'refunded', resolved_at = NOW()
+WHERE provider = $1 AND external_id = $2 AND state = 'spent'
+RETURNING target_type, target_id, credits
+`
+
+type ReturnSpentPaymentCreditHoldParams struct {
+	Provider   string `db:"provider" json:"provider"`
+	ExternalID string `db:"external_id" json:"external_id"`
+}
+
+type ReturnSpentPaymentCreditHoldRow struct {
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+	Credits    int32  `db:"credits" json:"credits"`
+}
+
+func (q *Queries) ReturnSpentPaymentCreditHold(ctx context.Context, arg ReturnSpentPaymentCreditHoldParams) (ReturnSpentPaymentCreditHoldRow, error) {
+	row := q.db.QueryRow(ctx, returnSpentPaymentCreditHold, arg.Provider, arg.ExternalID)
+	var i ReturnSpentPaymentCreditHoldRow
+	err := row.Scan(&i.TargetType, &i.TargetID, &i.Credits)
+	return i, err
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"popplio/audit"
 	"popplio/brandemoji"
 	"strconv"
 
@@ -153,7 +154,21 @@ func Fulfill(ctx context.Context, provider, externalID string, perkData PerkData
 		return false, errors.New("provider and external id are required to fulfill a payment")
 	}
 
-	return fulfill(ctx, provider, externalID, perkData)
+	fulfilled, err := fulfill(ctx, provider, externalID, perkData)
+
+	if fulfilled {
+		audit.Record(audit.Event{
+			Source:     provider,
+			ActorType:  audit.ActorUser,
+			ActorID:    perkData.UserID,
+			Action:     "payment.fulfilled",
+			TargetType: perkData.ForType,
+			TargetID:   perkData.For,
+			Data:       map[string]any{"external_id": externalID, "product": perkData.ProductID, "plan": perkData.ProductName},
+		})
+	}
+
+	return fulfilled, err
 }
 
 func fulfill(ctx context.Context, provider, externalID string, perkData PerkData) (bool, error) {
@@ -179,12 +194,13 @@ func fulfill(ctx context.Context, provider, externalID string, perkData PerkData
 
 	if provider != "" {
 		inserted, err := q.InsertPaymentFulfillment(ctx, db.InsertPaymentFulfillmentParams{
-			Provider:   provider,
-			ExternalID: externalID,
-			UserID:     perkData.UserID,
-			ProductID:  perkData.ProductID,
-			ForType:    perkData.ForType,
-			ForID:      perkData.For,
+			Provider:     provider,
+			ExternalID:   externalID,
+			UserID:       perkData.UserID,
+			ProductID:    perkData.ProductID,
+			ForType:      perkData.ForType,
+			ForID:        perkData.For,
+			PremiumHours: pgtype.Int4{Int32: int32(perk.TimePeriod), Valid: true},
 		})
 
 		if err != nil {

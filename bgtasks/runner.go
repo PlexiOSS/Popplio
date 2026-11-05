@@ -4,10 +4,12 @@ package bgtasks
 
 import (
 	"context"
+	"fmt"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"popplio/audit"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -93,6 +95,13 @@ func All() []Task {
 			Interval:    5 * time.Minute,
 			Run:         AutoVote,
 		},
+		{
+			Name:        "audit_prune",
+			Description: "Deleting activity log events older than the retention period",
+			Enabled:     true,
+			Interval:    24 * time.Hour,
+			Run:         AuditPrune,
+		},
 	}
 }
 
@@ -133,6 +142,8 @@ func runLoop(ctx context.Context, task Task) {
 func runOnce(ctx context.Context, task Task) {
 	defer func() {
 		if rec := recover(); rec != nil {
+			audit.System("task.panicked", "task", task.Name, map[string]any{"panic": fmt.Sprint(rec)})
+
 			state.Logger.Error("Task panicked",
 				zap.String("task", task.Name),
 				zap.Any("panic", rec),
@@ -146,6 +157,7 @@ func runOnce(ctx context.Context, task Task) {
 	start := time.Now()
 
 	if err := task.Run(ctx); err != nil {
+		audit.System("task.failed", "task", task.Name, map[string]any{"error": err.Error(), "took_ms": time.Since(start).Milliseconds()})
 		state.Logger.Error("Task failed", zap.String("task", task.Name), zap.Error(err), zap.Duration("took", time.Since(start)))
 		return
 	}

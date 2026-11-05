@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"popplio/audit"
 	"popplio/autovote"
 	"popplio/db"
 	"popplio/notifications"
@@ -38,12 +39,14 @@ func AutoVote(ctx context.Context) error {
 
 		if err != nil {
 			failed++
+			audit.Record(audit.Event{Source: audit.SourceSystem, ActorType: audit.ActorUser, ActorID: t.UserID, Action: "autovote.failed", TargetType: t.TargetType, TargetID: t.TargetID, Data: map[string]any{"error": err.Error()}})
 			state.Logger.Error("Auto-vote failed", zap.Error(err), zap.String("userId", t.UserID), zap.String("targetType", t.TargetType), zap.String("targetId", t.TargetID))
 			continue
 		}
 
 		if voted {
 			cast_++
+			audit.Record(audit.Event{Source: audit.SourceSystem, ActorType: audit.ActorUser, ActorID: t.UserID, Action: "autovote.voted", TargetType: t.TargetType, TargetID: t.TargetID})
 			continue
 		}
 
@@ -58,6 +61,7 @@ func AutoVote(ctx context.Context) error {
 			}
 
 			if !t.LastSkipReason.Valid || t.LastSkipReason.String != reason {
+				audit.Record(audit.Event{Source: audit.SourceSystem, ActorType: audit.ActorUser, ActorID: t.UserID, Action: "autovote.skipped", TargetType: t.TargetType, TargetID: t.TargetID, Data: map[string]any{"reason": reason}})
 				notifyAutoVoteSkipped(ctx, t.UserID, t.TargetType, t.TargetID, reason)
 			}
 		}

@@ -1,0 +1,49 @@
+name: Go Tests
+
+on:
+  push:
+    branches: [ "master", "development" ]
+  pull_request:
+    branches: [ "master", "development" ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: popplio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d popplio_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:test@localhost:5432/popplio_test?sslmode=disable
+      POPPLIO_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/popplio_test?sslmode=disable
+      ARCADIA_TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/popplio_test?sslmode=disable
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: go.sum
+
+      - name: Apply migrations
+        run: go run ./cmd/migrate up
+
+      - name: Go tests
+        run: go test -race -count=1 ./...

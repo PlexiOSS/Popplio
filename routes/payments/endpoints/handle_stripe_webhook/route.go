@@ -66,6 +66,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
+	if handled, hresp := assets.HandleStripeChargeEvent(r.Context(), event); handled {
+		return hresp
+	}
+
 	var s stripe.CheckoutSession
 	var failed bool
 
