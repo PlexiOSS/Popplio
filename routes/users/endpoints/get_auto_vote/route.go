@@ -3,6 +3,7 @@ package get_auto_vote
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/autovote"
@@ -15,6 +16,7 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 )
 
 func Docs() *docs.Doc {
@@ -76,6 +78,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			StartMinute: int(row.StartMinute),
 			EndMinute:   int(row.EndMinute),
 			Timezone:    row.Timezone,
+			InSchedule:  autovote.InSchedule(row.Days, int(row.StartMinute), int(row.EndMinute), row.Timezone, time.Now()),
 		}
 
 		for i, day := range row.Days {
@@ -95,6 +98,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		if row.LastSkipReason.Valid {
 			reason := row.LastSkipReason.String
 			target.LastSkipReason = &reason
+		}
+
+		check, err := votes.EntityVoteCheck(d.Context, state.Pool, userID, row.TargetID, row.TargetType)
+
+		if err != nil {
+			state.Logger.Warn("Failed to check auto-vote cooldown", zap.Error(err), zap.String("userId", userID), zap.String("targetId", row.TargetID))
+		} else if check.HasVoted && len(check.ValidVotes) > 0 {
+			until := check.ValidVotes[0].CreatedAt.Add(time.Duration(check.VoteInfo.VoteTime) * time.Hour)
+			target.CooldownUntil = &until
 		}
 
 		out.Targets = append(out.Targets, target)

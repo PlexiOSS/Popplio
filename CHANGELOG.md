@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-11-04
+
 ### Added
 
 - Promo codes for premium and Auto-vote. Staff with the new
@@ -30,12 +32,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   card minimum.
 - `POST /users/{id}/auto-vote/checkout` accepts an optional body with
   `promo_code`.
+- `GET /users/{id}/auto-vote` returns `cooldown_until` and `in_schedule` for
+  each target, so a client can say why a listing hasn't been voted for yet.
 - Starting a new checkout with a code expires the user's earlier unpaid
   checkout with the same code, so one code can't be held open in several
   checkouts.
 
+### Changed
+
+- Auto-vote no longer skips listings that require a captcha. A subscriber
+  has already paid by card and is limited to 3 listings and the normal
+  cooldown. Owners can still refuse automatic votes with
+  `auto_votes_opt_out`. Votes cast by hand still need the captcha.
+
 ### Fixed
 
+- Saving auto-vote targets keeps each listing's last vote time, skip reason
+  and position. It used to delete and recreate every row, which wiped them.
 - Premium checkouts that cost nothing after discounts (Stripe's
   `no_payment_required`) are fulfilled, by both the webhook and the
   reconcile task. The reconcile task skips subscription checkouts, which

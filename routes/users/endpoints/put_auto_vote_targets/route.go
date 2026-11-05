@@ -50,6 +50,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	seen := map[string]bool{}
+	keep := make([]string, 0, len(payload.Targets))
 
 	for _, t := range payload.Targets {
 		key := t.TargetType + ":" + t.TargetID
@@ -59,6 +60,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		seen[key] = true
+		keep = append(keep, key)
 
 		if _, err := time.LoadLocation(t.Timezone); err != nil {
 			return resp.BadRequest("Unknown timezone: " + t.Timezone)
@@ -81,7 +83,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	q := db.New(tx)
 
-	if err := q.DeleteAutoVoteTargets(d.Context, userID); err != nil {
+	if err := q.DeleteAutoVoteTargetsExcept(d.Context, db.DeleteAutoVoteTargetsExceptParams{UserID: userID, Keep: keep}); err != nil {
 		return resp.Err("Failed to clear auto-vote targets", err)
 	}
 
@@ -92,7 +94,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			days[i] = int16(day)
 		}
 
-		if err := q.InsertAutoVoteTarget(d.Context, db.InsertAutoVoteTargetParams{
+		if err := q.UpsertAutoVoteTarget(d.Context, db.UpsertAutoVoteTargetParams{
 			UserID:      userID,
 			TargetType:  t.TargetType,
 			TargetID:    t.TargetID,

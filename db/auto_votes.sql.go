@@ -11,12 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteAutoVoteTargets = `-- name: DeleteAutoVoteTargets :exec
-DELETE FROM auto_vote_targets WHERE user_id = $1
+const deleteAutoVoteTargetsExcept = `-- name: DeleteAutoVoteTargetsExcept :exec
+DELETE FROM auto_vote_targets
+WHERE user_id = $1 AND NOT (target_type || ':' || target_id = ANY($2::text[]))
 `
 
-func (q *Queries) DeleteAutoVoteTargets(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, deleteAutoVoteTargets, userID)
+type DeleteAutoVoteTargetsExceptParams struct {
+	UserID string   `db:"user_id" json:"user_id"`
+	Keep   []string `db:"keep" json:"keep"`
+}
+
+func (q *Queries) DeleteAutoVoteTargetsExcept(ctx context.Context, arg DeleteAutoVoteTargetsExceptParams) error {
+	_, err := q.db.Exec(ctx, deleteAutoVoteTargetsExcept, arg.UserID, arg.Keep)
 	return err
 }
 
@@ -70,34 +76,6 @@ func (q *Queries) GetServerAutoVotesOptOut(ctx context.Context, serverID string)
 	var auto_votes_opt_out bool
 	err := row.Scan(&auto_votes_opt_out)
 	return auto_votes_opt_out, err
-}
-
-const insertAutoVoteTarget = `-- name: InsertAutoVoteTarget :exec
-INSERT INTO auto_vote_targets (user_id, target_type, target_id, days, start_minute, end_minute, timezone)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-`
-
-type InsertAutoVoteTargetParams struct {
-	UserID      string  `db:"user_id" json:"user_id"`
-	TargetType  string  `db:"target_type" json:"target_type"`
-	TargetID    string  `db:"target_id" json:"target_id"`
-	Days        []int16 `db:"days" json:"days"`
-	StartMinute int16   `db:"start_minute" json:"start_minute"`
-	EndMinute   int16   `db:"end_minute" json:"end_minute"`
-	Timezone    string  `db:"timezone" json:"timezone"`
-}
-
-func (q *Queries) InsertAutoVoteTarget(ctx context.Context, arg InsertAutoVoteTargetParams) error {
-	_, err := q.db.Exec(ctx, insertAutoVoteTarget,
-		arg.UserID,
-		arg.TargetType,
-		arg.TargetID,
-		arg.Days,
-		arg.StartMinute,
-		arg.EndMinute,
-		arg.Timezone,
-	)
-	return err
 }
 
 const listAutoVoteTargets = `-- name: ListAutoVoteTargets :many
@@ -305,6 +283,39 @@ func (q *Queries) UpsertAutoVoteSubscription(ctx context.Context, arg UpsertAuto
 		arg.Status,
 		arg.CurrentPeriodEnd,
 		arg.CancelAtPeriodEnd,
+	)
+	return err
+}
+
+const upsertAutoVoteTarget = `-- name: UpsertAutoVoteTarget :exec
+INSERT INTO auto_vote_targets (user_id, target_type, target_id, days, start_minute, end_minute, timezone)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (user_id, target_type, target_id) DO UPDATE SET
+    days = EXCLUDED.days,
+    start_minute = EXCLUDED.start_minute,
+    end_minute = EXCLUDED.end_minute,
+    timezone = EXCLUDED.timezone
+`
+
+type UpsertAutoVoteTargetParams struct {
+	UserID      string  `db:"user_id" json:"user_id"`
+	TargetType  string  `db:"target_type" json:"target_type"`
+	TargetID    string  `db:"target_id" json:"target_id"`
+	Days        []int16 `db:"days" json:"days"`
+	StartMinute int16   `db:"start_minute" json:"start_minute"`
+	EndMinute   int16   `db:"end_minute" json:"end_minute"`
+	Timezone    string  `db:"timezone" json:"timezone"`
+}
+
+func (q *Queries) UpsertAutoVoteTarget(ctx context.Context, arg UpsertAutoVoteTargetParams) error {
+	_, err := q.db.Exec(ctx, upsertAutoVoteTarget,
+		arg.UserID,
+		arg.TargetType,
+		arg.TargetID,
+		arg.Days,
+		arg.StartMinute,
+		arg.EndMinute,
+		arg.Timezone,
 	)
 	return err
 }
