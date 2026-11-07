@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The OpenAPI schema reported version 1.11.0. It now reports the release
+  version, and the support link uses the current Discord invite.
 - Arcadia's staff leaderboard (and the top reviewer roles it hands out)
   counted every Approve and Deny attempt, including ones that failed, such
   as approving before testing for 5 minutes. Only reviews that went through
@@ -16,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Page styles for bots and servers, a premium perk: a preset gradient, an
+  accent colour (rejected if it's unreadable on light or dark mode), and a
+  background image with dim, blur, position and fixed options.
+  `GET /{bots,servers}/{id}/page-style` returns the approved style (nothing
+  without premium), `GET .../page-style/manage` adds what's waiting for
+  review, `PATCH .../page-style` saves settings, and `PUT .../page-style/image`
+  submits an uploaded image for review. New images only show once staff
+  approve them through the panel's `UpdatePageStyles` query (`ListPending`,
+  `Approve`, `Reject` with a reason, needs `review_entities`), and owners get
+  a notification either way. Needs the `20261108100000_entity_page_styles`
+  migration.
+- `go run ./cmd/openapi [file]` writes the OpenAPI schema without starting
+  the server or needing a database or config, for the docs site. The router
+  list and docs setup moved into `routes/all` so `main.go` and the command
+  share them.
 - `GET /list/stats/history`: all-time votes (including ones cleared by
   monthly resets), this month's votes, everyone who has ever voted, all-time
   approvals and denials, and a month-by-month history of votes, voters,

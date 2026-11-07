@@ -61,6 +61,8 @@ func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response,
 		return s.updateShopCoupons(ctx, req.UpdateShopCoupons)
 	case req.UpdatePromoCodes != nil:
 		return s.updatePromoCodes(ctx, req.UpdatePromoCodes)
+	case req.UpdatePageStyles != nil:
+		return s.updatePageStyles(ctx, req.UpdatePageStyles)
 	case req.UpdateBotWhitelist != nil:
 		return s.updateBotWhitelist(ctx, req.UpdateBotWhitelist)
 	case req.UpdateBadges != nil:
