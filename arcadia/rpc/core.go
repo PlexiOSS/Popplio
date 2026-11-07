@@ -108,6 +108,16 @@ func Execute(ctx context.Context, method types.RPCMethod, h Handle) (Success, er
 
 	q := db.New(state.Pool)
 
+	count, err := q.CountRecentRPCLogs(ctx, h.UserID)
+
+	if err != nil {
+		return Success{}, errors.New("Failed to get ratelimit count")
+	}
+
+	if count >= 30 {
+		return Success{}, errors.New("You've run a lot of actions in the last 10 minutes. Wait a few minutes and try again.")
+	}
+
 	logID, err := q.InsertRPCLog(ctx, db.InsertRPCLogParams{
 		Method: method.Name(),
 		UserID: h.UserID,
@@ -116,22 +126,6 @@ func Execute(ctx context.Context, method types.RPCMethod, h Handle) (Success, er
 
 	if err != nil {
 		return Success{}, err
-	}
-
-	count, err := q.CountRecentRPCLogs(ctx, h.UserID)
-
-	if err != nil {
-		return Success{}, errors.New("Failed to get ratelimit count")
-	}
-
-	if count > 5 {
-		err = q.DeleteAuthChainByUserID(ctx, h.UserID)
-
-		if err != nil {
-			return Success{}, errors.New("Failed to reset user token")
-		}
-
-		return Success{}, errors.New("Rate limit exceeded. Wait 5-10 minutes and try again?")
 	}
 
 	resp, handlerErr := handleMethod(ctx, method, h)

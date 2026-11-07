@@ -22,21 +22,26 @@ type Question struct {
 }
 
 type Position struct {
-	ID                  string                                                                       `json:"id" validate:"required"`
-	Tags                []string                                                                     `json:"tags" validate:"required"`
-	Info                string                                                                       `json:"info" validate:"required"`
-	Name                string                                                                       `json:"name" validate:"required"`
-	Questions           []Question                                                                   `json:"questions" validate:"gt=0,required"`
-	Hidden              bool                                                                         `json:"hidden"`
-	Closed              bool                                                                         `json:"closed"`
-	RequiresMainServer  bool                                                                         `json:"requires_main_server" description:"Whether applicants must be in the Omniplex Discord server"`
-	Cooldown            timex.Duration                                                               `json:"cooldown"`
-	Channel             func() snowflake.ID                                                          `json:"-"`
-	ExtraLogic          func(d uapi.RouteData, p Position, answers map[string]string) error          `json:"-"`
-	PositionDescription func(d uapi.RouteData, p Position) string                                    `json:"-"`
-	AllowedForBanned    bool                                                                         `json:"-"`
-	BannedOnly          bool                                                                         `json:"-"`
-	ReviewLogic         func(d uapi.RouteData, resp AppResponse, reason string, approved bool) error `json:"-"`
+	ID                  string                                                                                 `json:"id" validate:"required"`
+	Tags                []string                                                                               `json:"tags" validate:"required"`
+	Info                string                                                                                 `json:"info" validate:"required"`
+	Name                string                                                                                 `json:"name" validate:"required"`
+	Questions           []Question                                                                             `json:"questions" validate:"gt=0,required"`
+	Hidden              bool                                                                                   `json:"hidden"`
+	Closed              bool                                                                                   `json:"closed"`
+	RequiresMainServer  bool                                                                                   `json:"requires_main_server" description:"Whether applicants must be in the Omniplex Discord server"`
+	Cooldown            timex.Duration                                                                         `json:"cooldown"`
+	Channel             func() snowflake.ID                                                                    `json:"-"`
+	ExtraLogic          func(d uapi.RouteData, p Position, answers map[string]string) error                    `json:"-"`
+	PositionDescription func(d uapi.RouteData, p Position) string                                              `json:"-"`
+	AllowedForBanned    bool                                                                                   `json:"-"`
+	BannedOnly          bool                                                                                   `json:"-"`
+	ReviewLogic         func(d uapi.RouteData, resp AppResponse, reason string, approved bool) (string, error) `json:"-"`
+	ApprovalNote        string                                                                                 `json:"-"`
+}
+
+type ManageAppResponse struct {
+	StaffNote string `json:"staff_note,omitempty" description:"Something staff need to follow up on by hand, such as a Discord role that couldn't be given"`
 }
 
 type AppMeta struct {
@@ -54,6 +59,7 @@ type AppResponse struct {
 	CreatedAt      time.Time               `db:"created_at" json:"created_at"`
 	Position       string                  `db:"position" json:"position"`
 	ReviewFeedback *string                 `db:"review_feedback" json:"review_feedback"`
+	InMainServer   *bool                   `db:"-" json:"in_main_server,omitempty" description:"Whether the applicant is in the Omniplex Discord server. Only set on pending applications in the staff list, and left out when Discord couldn't be checked"`
 }
 
 type AppListResponse struct {

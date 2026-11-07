@@ -1,7 +1,7 @@
 // Package manage_app implements PATCH /staff/apps/{app_id} — "Staff: Manage
 // Application".
 //
-// Approves or denies an application. Returns a 204 on success.
+// Approves or denies an application.
 package manage_app
 
 import (
@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
@@ -45,7 +46,7 @@ var (
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Staff: Manage Application",
-		Description: "Approves or denies an application. Returns a 204 on success.",
+		Description: "Approves or denies an application. On success, `staff_note` describes anything staff need to follow up on by hand, such as a Discord role that couldn't be given.",
 		Req:         ManageApp{},
 		Params: []docs.Parameter{
 			{
@@ -56,7 +57,7 @@ func Docs() *docs.Doc {
 				Schema:      docs.IdSchema,
 			},
 		},
-		Resp: types.ApiError{},
+		Resp: types.ManageAppResponse{},
 	}
 }
 
@@ -94,6 +95,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		errors := err.(validator.ValidationErrors)
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
+
+	payload.Reason = strings.TrimPrefix(payload.Reason, "MANUALLYNOTIFIED ")
 
 	// Fetch app info such as the position from database
 	appId := chi.URLParam(r, "app_id")
@@ -149,10 +152,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	var embeds []discord.Embed
+	var staffNote string
 
 	if payload.Approved {
 		if position.ReviewLogic != nil {
-			err := position.ReviewLogic(d, app, payload.Reason, true)
+			staffNote, err = position.ReviewLogic(d, app, payload.Reason, true)
 
 			if err != nil {
 				state.Logger.Error("Error running review logic", zap.Error(err), zap.String("appId", appId))
@@ -208,7 +212,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	} else {
 		if position.ReviewLogic != nil {
-			err := position.ReviewLogic(d, app, payload.Reason, false)
+			staffNote, err = position.ReviewLogic(d, app, payload.Reason, false)
 
 			if err != nil {
 				state.Logger.Error("Error running review logic", zap.Error(err), zap.String("appId", appId))
@@ -264,6 +268,13 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
+	if staffNote != "" {
+		embeds[0].Fields = append(embeds[0].Fields, discord.EmbedField{
+			Name:  "Needs Follow-up",
+			Value: staffNote,
+		})
+	}
+
 	// Send message to apps channel
 	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.Apps, discord.MessageCreate{
 		Embeds: embeds,
@@ -274,12 +285,17 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	alertTitle := "Application Denied"
-	alertMessage := "Your application for " + app.Position + " was denied. " + payload.Reason
+	alertMessage := "Your application for " + position.Name + " was denied. " + payload.Reason
 	alertType := types.AlertTypeError
 
 	if payload.Approved {
 		alertTitle = "Application Approved"
-		alertMessage = "Your application for " + app.Position + " was approved!"
+		alertMessage = "Your application for " + position.Name + " was approved! Feedback: " + payload.Reason
+
+		if position.ApprovalNote != "" {
+			alertMessage += " " + position.ApprovalNote
+		}
+
 		alertType = types.AlertTypeSuccess
 	}
 
@@ -293,5 +309,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		state.Logger.Warn("Failed to notify applicant of application verdict", zap.Error(err), zap.String("appId", appId), zap.String("userId", app.UserID))
 	}
 
-	return uapi.DefaultResponse(http.StatusNoContent)
+	return uapi.HttpResponse{
+		Json: types.ManageAppResponse{StaffNote: staffNote},
+	}
 }

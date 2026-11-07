@@ -6,11 +6,14 @@ package tickets
 import (
 	"popplio/api"
 	"popplio/routes/tickets/endpoints/create_ticket"
+	"popplio/routes/tickets/endpoints/create_staff_ticket_message"
 	"popplio/routes/tickets/endpoints/create_ticket_message"
+	"popplio/routes/tickets/endpoints/get_staff_ticket"
 	"popplio/routes/tickets/endpoints/get_staff_tickets"
 	"popplio/routes/tickets/endpoints/get_ticket"
 	"popplio/routes/tickets/endpoints/get_ticket_topics"
 	"popplio/routes/tickets/endpoints/get_user_tickets"
+	"popplio/routes/tickets/endpoints/patch_staff_ticket"
 	"popplio/routes/tickets/endpoints/patch_ticket"
 
 	"github.com/go-chi/chi/v5"
@@ -89,6 +92,30 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_staff_tickets.Docs,
 		Handler: get_staff_tickets.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/tickets/{id}",
+		OpId:    "get_staff_ticket",
+		Method:  uapi.GET,
+		Docs:    get_staff_ticket.Docs,
+		Handler: get_staff_ticket.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/tickets/{id}/messages",
+		OpId:    "create_staff_ticket_message",
+		Method:  uapi.POST,
+		Docs:    create_staff_ticket_message.Docs,
+		Handler: create_staff_ticket_message.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/staff/tickets/{id}",
+		OpId:    "patch_staff_ticket",
+		Method:  uapi.PATCH,
+		Docs:    patch_staff_ticket.Docs,
+		Handler: patch_staff_ticket.Route,
 	}.Route(r)
 
 	uapi.Route{
