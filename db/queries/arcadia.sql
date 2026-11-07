@@ -43,7 +43,19 @@ SELECT user_id, created_at, state FROM staffpanel__authchain WHERE token = $1;
 SELECT popplio_token FROM staffpanel__authchain WHERE token = $1;
 
 -- name: InsertAuthChain :exec
-INSERT INTO staffpanel__authchain (user_id, token, popplio_token, state) VALUES ($1, $2, $3, $4);
+INSERT INTO staffpanel__authchain (user_id, token, popplio_token, state, ip, user_agent) VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: ListActiveAuthChainsByUser :many
+SELECT itag, created_at, last_seen_at, ip, user_agent, (token = sqlc.arg(current_token)::text) AS current
+FROM staffpanel__authchain
+WHERE user_id = sqlc.arg(user_id) AND state = 'active'
+ORDER BY last_seen_at DESC;
+
+-- name: DeleteAuthChainByItag :execrows
+DELETE FROM staffpanel__authchain WHERE itag = sqlc.arg(itag) AND user_id = sqlc.arg(user_id);
+
+-- name: DeleteOtherAuthChains :execrows
+DELETE FROM staffpanel__authchain WHERE user_id = sqlc.arg(user_id) AND token <> sqlc.arg(current_token)::text;
 
 -- name: ActivateAuthChain :exec
 UPDATE staffpanel__authchain SET state = 'active' WHERE token = $1;
@@ -61,18 +73,23 @@ LEFT JOIN internal_user_cache__discord iuc ON iuc.id = sm.user_id
 WHERE sm.user_id = $1;
 
 -- name: GetStaffDisciplinaries :many
-SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+SELECT d.id, d.user_id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+	d.state, d.issued_by, d.starts_at, d.decided_by, d.decided_at, d.decision_note, d.revoked_by, d.revoked_at, d.revoke_reason,
 	t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
 	EXTRACT(epoch FROM t.max_expiry) AS max_expiry, t.created_at AS type_created_at
 FROM staff_disciplinary d LEFT JOIN staff_disciplinary_types t ON t.id = d.type
-WHERE d.user_id = $1;
+WHERE d.user_id = $1
+ORDER BY d.created_at DESC;
 
 -- name: GetActiveStaffDisciplinaries :many
-SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+SELECT d.id, d.user_id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+	d.state, d.issued_by, d.starts_at, d.decided_by, d.decided_at, d.decision_note, d.revoked_by, d.revoked_at, d.revoke_reason,
 	t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
 	EXTRACT(epoch FROM t.max_expiry) AS max_expiry, t.created_at AS type_created_at
 FROM staff_disciplinary d LEFT JOIN staff_disciplinary_types t ON t.id = d.type
-WHERE d.user_id = $1 AND NOW() - d.created_at < d.expiry;
+WHERE d.user_id = $1 AND d.state = 'active'
+	AND (d.expiry IS NULL OR COALESCE(d.starts_at, d.created_at) + d.expiry > NOW())
+ORDER BY d.created_at DESC;
 
 -- name: GetStaffMemberRaw :one
 SELECT positions, perm_overrides, no_autosync, unaccounted, mfa_verified, created_at FROM staff_members WHERE user_id = $1;

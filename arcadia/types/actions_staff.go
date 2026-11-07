@@ -305,4 +305,15 @@ type StaffDisciplinary struct {
 	Title       string                `json:"title"`
 	Description string                `json:"description"`
 	Type        StaffDisciplinaryType `json:"type"`
+
+	State        string     `json:"state"`
+	IssuedBy     *string    `json:"issued_by"`
+	StartsAt     *Timestamp `json:"starts_at"`
+	EndsAt       *Timestamp `json:"ends_at"`
+	DecidedBy    *string    `json:"decided_by"`
+	DecidedAt    *Timestamp `json:"decided_at"`
+	DecisionNote *string    `json:"decision_note"`
+	RevokedBy    *string    `json:"revoked_by"`
+	RevokedAt    *Timestamp `json:"revoked_at"`
+	RevokeReason *string    `json:"revoke_reason"`
 }

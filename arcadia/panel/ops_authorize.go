@@ -179,6 +179,8 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 		Token:        token,
 		PopplioToken: impls.GenRandom(2048),
 		State:        "pending",
+		Ip:           optText(clientIPFromContext(ctx)),
+		UserAgent:    optText(truncate(userAgentFromContext(ctx), 512)),
 	})
 
 	if err != nil {
@@ -360,7 +362,10 @@ func (s *Server) authActivateSession(ctx context.Context, action *types.AuthActi
 		return response{}, newError(err)
 	}
 
-	return writeNoContent(), nil
+	resp := writeNoContent()
+	resp.cookies = []*http.Cookie{sessionCookie(action.LoginToken)}
+
+	return resp, nil
 }
 
 func (s *Server) authLogout(ctx context.Context, action *types.AuthLogout) (response, error) {
@@ -370,7 +375,10 @@ func (s *Server) authLogout(ctx context.Context, action *types.AuthLogout) (resp
 		return response{}, newError(err)
 	}
 
-	return writeText(http.StatusOK, strconv.FormatInt(rowsAffected, 10)), nil
+	resp := writeText(http.StatusOK, strconv.FormatInt(rowsAffected, 10))
+	resp.cookies = []*http.Cookie{clearSessionCookie()}
+
+	return resp, nil
 }
 
 func containsString(haystack []string, needle string) bool {

@@ -939,7 +939,15 @@ CREATE TABLE public.staff_disciplinary (
     title text NOT NULL,
     description text NOT NULL,
     type text NOT NULL,
-    state text NOT NULL
+    state text NOT NULL,
+    issued_by text,
+    starts_at timestamp with time zone,
+    decided_by text,
+    decided_at timestamp with time zone,
+    decision_note text,
+    revoked_by text,
+    revoked_at timestamp with time zone,
+    revoke_reason text
 );
 
 
@@ -1065,7 +1073,9 @@ CREATE TABLE public.staffpanel__authchain (
     popplio_token text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     state text DEFAULT 'pending'::text NOT NULL,
-    last_seen_at timestamp with time zone DEFAULT now() NOT NULL
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    ip text,
+    user_agent text
 );
 
 
@@ -2725,3 +2735,9 @@ ALTER TABLE payment_fulfillments ADD COLUMN revoked_at timestamp with time zone;
 ALTER TABLE payment_fulfillments ADD COLUMN revoke_reason text;
 
 ALTER TABLE payment_fulfillments ADD COLUMN premium_hours integer;
+
+CREATE INDEX staffpanel__authchain_user_id_idx ON public.staffpanel__authchain USING btree (user_id);
+
+CREATE INDEX staff_disciplinary_user_id_idx ON public.staff_disciplinary USING btree (user_id);
+
+CREATE INDEX staff_disciplinary_state_idx ON public.staff_disciplinary USING btree (state);

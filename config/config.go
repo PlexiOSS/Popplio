@@ -115,6 +115,7 @@ type Panel struct {
 	RedirectURL        []string `yaml:"redirect_url" comment:"Allow-list of panel login redirect URLs" validate:"required"`
 	PanelScope         string   `yaml:"panel_scope" comment:"Static handshake value the frontend sends" validate:"required"`
 	PanelResponseScope string   `yaml:"panel_response_scope" comment:"Static handshake value the frontend expects back" validate:"required"`
+	AllowedOrigins     []string `yaml:"allowed_origins" comment:"Staff panel origins allowed to use the session cookie, such as https://panel.omniplex.gg"`
 }
 
 type Infernoplex struct {

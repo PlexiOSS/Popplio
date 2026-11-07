@@ -36,6 +36,7 @@ const (
 	AlertCategoryStaffApplications AlertCategory = "staff_applications"
 	AlertCategoryReports           AlertCategory = "reports"
 	AlertCategoryAccountSecurity   AlertCategory = "account_security"
+	AlertCategoryStaff             AlertCategory = "staff"
 )
 
 var AllAlertCategories = []AlertCategory{
@@ -47,6 +48,7 @@ var AllAlertCategories = []AlertCategory{
 	AlertCategoryStaffApplications,
 	AlertCategoryReports,
 	AlertCategoryAccountSecurity,
+	AlertCategoryStaff,
 }
 
 type Alert struct {

@@ -137,7 +137,7 @@ func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]
 		}
 
 		for _, rec := range rows {
-			d, err := disciplinaryFromActiveRow(rec, userID)
+			d, err := DisciplinaryFromRow(db.GetStaffDisciplinariesRow(rec))
 
 			if err != nil {
 				return nil, err
@@ -156,7 +156,7 @@ func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]
 	}
 
 	for _, rec := range rows {
-		d, err := disciplinaryFromRow(rec, userID)
+		d, err := DisciplinaryFromRow(rec)
 
 		if err != nil {
 			return nil, err
@@ -168,7 +168,25 @@ func GetStaffDisciplinaries(ctx context.Context, userID string, active bool) ([]
 	return disciplinaries, nil
 }
 
-func disciplinaryFromRow(rec db.GetStaffDisciplinariesRow, userID string) (types.StaffDisciplinary, error) {
+func optTimestamp(t pgtype.Timestamptz) *types.Timestamp {
+	if !t.Valid {
+		return nil
+	}
+
+	ts := types.NewTimestamp(t.Time)
+
+	return &ts
+}
+
+func optString(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+
+	return &t.String
+}
+
+func DisciplinaryFromRow(rec db.GetStaffDisciplinariesRow) (types.StaffDisciplinary, error) {
 	if !rec.TypeName.Valid {
 		return types.StaffDisciplinary{}, pgx.ErrNoRows
 	}
@@ -180,13 +198,38 @@ func disciplinaryFromRow(rec db.GetStaffDisciplinariesRow, userID string) (types
 		typeCreatedAt = rec.CreatedAt.Time
 	}
 
+	expiry := epochFloatToSeconds(numericToFloat64Ptr(rec.Expiry))
+	state := rec.State
+
+	var endsAt *types.Timestamp
+
+	if expiry != nil && rec.StartsAt.Valid {
+		end := rec.StartsAt.Time.Add(time.Duration(*expiry) * time.Second)
+		ts := types.NewTimestamp(end)
+		endsAt = &ts
+
+		if state == "active" && !end.After(time.Now()) {
+			state = "expired"
+		}
+	}
+
 	return types.StaffDisciplinary{
-		ID:          UUIDString(rec.ID),
-		UserID:      userID,
-		CreatedAt:   types.NewTimestamp(rec.CreatedAt.Time),
-		ExpiresAt:   epochFloatToSeconds(numericToFloat64Ptr(rec.Expiry)),
-		Title:       rec.Title,
-		Description: rec.Description,
+		ID:           UUIDString(rec.ID),
+		UserID:       rec.UserID,
+		State:        state,
+		IssuedBy:     optString(rec.IssuedBy),
+		StartsAt:     optTimestamp(rec.StartsAt),
+		EndsAt:       endsAt,
+		DecidedBy:    optString(rec.DecidedBy),
+		DecidedAt:    optTimestamp(rec.DecidedAt),
+		DecisionNote: optString(rec.DecisionNote),
+		RevokedBy:    optString(rec.RevokedBy),
+		RevokedAt:    optTimestamp(rec.RevokedAt),
+		RevokeReason: optString(rec.RevokeReason),
+		CreatedAt:    types.NewTimestamp(rec.CreatedAt.Time),
+		ExpiresAt:    expiry,
+		Title:        rec.Title,
+		Description:  rec.Description,
 		Type: types.StaffDisciplinaryType{
 			ID:             rec.Type,
 			Name:           rec.TypeName.String,
@@ -199,13 +242,6 @@ func disciplinaryFromRow(rec db.GetStaffDisciplinariesRow, userID string) (types
 			CreatedAt:      types.NewTimestamp(typeCreatedAt),
 		},
 	}, nil
-}
-
-func disciplinaryFromActiveRow(rec db.GetActiveStaffDisciplinariesRow, userID string) (types.StaffDisciplinary, error) {
-	// Same shape as GetStaffDisciplinariesRow, just from the filtered query
-	// -- converting through GetStaffDisciplinariesRow keeps the mapping in
-	// one place.
-	return disciplinaryFromRow(db.GetStaffDisciplinariesRow(rec), userID)
 }
 
 func epochFloatToSeconds(f *float64) *int64 {
@@ -244,7 +280,7 @@ func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, erro
 	member, err := q.GetStaffMemberRaw(ctx, userID)
 
 	if err != nil {
-		return types.StaffMember{}, fmt.Errorf("Error while getting staff perms of user %s: %s", userID, err)
+		return types.StaffMember{}, fmt.Errorf("Error while getting staff perms of user %s: %w", userID, err)
 	}
 
 	positionIDs, permOverrides, noAutosync, unaccounted, mfaVerified, createdAt :=
@@ -337,29 +373,11 @@ func GetStaffMember(ctx context.Context, userID string) (types.StaffMember, erro
 }
 
 func resolveWithDisciplinaries(grants perms.StaffGrants, disciplinaries []types.StaffDisciplinary) perms.Set {
-	if grants.BotAccount {
-		return perms.Staff.NewSet()
-	}
-
-	if len(disciplinaries) == 0 || grants.ConfigOwner {
-		return grants.Resolve()
-	}
-
-	var (
-		resolved = grants.Resolve()
-		applied  = perms.Staff.NewSet()
-	)
+	limits := make([]perms.DisciplinaryLimit, 0, len(disciplinaries))
 
 	for _, disc := range disciplinaries {
-		limits := perms.ParseStrings(disc.Type.PermLimits)
-
-		if !disc.Type.Additory {
-			resolved = applied
-		}
-
-		resolved = resolved.With(limits...)
-		applied = applied.With(limits...)
+		limits = append(limits, perms.DisciplinaryLimit{PermLimits: disc.Type.PermLimits, Additory: disc.Type.Additory})
 	}
 
-	return resolved
+	return perms.ApplyDisciplinaries(grants, limits)
 }

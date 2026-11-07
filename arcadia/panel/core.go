@@ -33,8 +33,9 @@ type response struct {
 	status int
 	json   any
 	text   *string
-	stream io.ReadCloser
-	noBody bool
+	stream  io.ReadCloser
+	noBody  bool
+	cookies []*http.Cookie
 }
 
 func writeJSON(status int, v any) response {
@@ -50,6 +51,10 @@ func writeNoContent() response {
 }
 
 func (r response) write(w http.ResponseWriter) {
+	for _, c := range r.cookies {
+		http.SetCookie(w, c)
+	}
+
 	switch {
 	case r.stream != nil:
 		defer r.stream.Close()

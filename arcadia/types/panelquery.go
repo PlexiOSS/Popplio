@@ -15,6 +15,8 @@ type PanelQuery struct {
 	SearchEntitys               *QSearchEntitys
 	UpdatePartners              *QUpdatePartners
 	UpdateReports               *QUpdateReports
+	UpdateSessions              *QUpdateSessions
+	UpdateDisciplinaries        *QUpdateDisciplinaries
 	UpdateChangelog             *QUpdateChangelog
 	UpdateBlog                  *QUpdateBlog
 	UpdateStaffPositions        *QUpdateStaffPositions
@@ -197,6 +199,12 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 	case "UpdateReports":
 		q.UpdateReports = &QUpdateReports{}
 		into = q.UpdateReports
+	case "UpdateSessions":
+		q.UpdateSessions = &QUpdateSessions{}
+		into = q.UpdateSessions
+	case "UpdateDisciplinaries":
+		q.UpdateDisciplinaries = &QUpdateDisciplinaries{}
+		into = q.UpdateDisciplinaries
 	case "UpdateChangelog":
 		q.UpdateChangelog = &QUpdateChangelog{}
 		into = q.UpdateChangelog
@@ -272,6 +280,10 @@ func (q PanelQuery) MarshalJSON() ([]byte, error) {
 		return encodeVariant("UpdatePartners", q.UpdatePartners)
 	case q.UpdateReports != nil:
 		return encodeVariant("UpdateReports", q.UpdateReports)
+	case q.UpdateSessions != nil:
+		return encodeVariant("UpdateSessions", q.UpdateSessions)
+	case q.UpdateDisciplinaries != nil:
+		return encodeVariant("UpdateDisciplinaries", q.UpdateDisciplinaries)
 	case q.UpdateChangelog != nil:
 		return encodeVariant("UpdateChangelog", q.UpdateChangelog)
 	case q.UpdateBlog != nil:

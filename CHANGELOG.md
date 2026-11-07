@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A full disciplinary workflow through the new `UpdateDisciplinaries` panel
+  query. Staff with `manage_disciplinaries` can issue a disciplinary to
+  anyone they rank above, and list everyone's. Any staff member can request
+  a self-assignable type, such as a leave of absence, for themselves, see
+  their own history, and end their own self-assigned ones early. Types that
+  need approval stay pending, with no effect, until someone with
+  `manage_disciplinaries` who ranks above the member, and didn't issue it,
+  approves or denies it. Active ones can be lifted. Each disciplinary now
+  records who issued, approved, denied or lifted it, when, and why. A
+  type's maximum length is enforced, and one with no maximum can be given no
+  end date. The member gets a notification when one is issued to them,
+  approved, denied or lifted, in a new `staff` notification category. Needs
+  the `20261107110000_disciplinary_workflow` migration.
+- Staff can see and manage where they're signed in to the staff panel. Each
+  session now records the IP and browser it signed in from, and the new
+  `UpdateSessions` panel query lists your active sessions (marking the one
+  you're using), signs one out, or signs out every other one. Needs the
+  `20261107100000_staff_sessions` migration.
+- The staff panel can now use an HttpOnly session cookie instead of keeping
+  its token where scripts can read it. Activating a session with two-factor
+  sets an `arcadia_session` cookie and signing out clears it. A panel
+  request that sends an empty `login_token` uses the cookie instead, but only
+  if it's sent as JSON from an origin in the new
+  `arcadia.panel.allowed_origins` setting. Those origins also get
+  credentialed CORS responses; every other origin is treated as before.
+  Requests that send their token in the body work exactly as they did.
 - `GET /staff/tickets/{id}`, `POST /staff/tickets/{id}/messages` and
   `PATCH /staff/tickets/{id}`, so the staff panel can open, reply to, close
   and reopen any ticket with its own sign-in instead of a member session on
@@ -20,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Arcadia reads the client's real IP from the reverse proxy's headers, the
+  same way the API does, so the IPs on staff sessions and in the activity
+  log are the staff member's instead of the proxy's.
 - Every API response now sends `X-Content-Type-Options: nosniff`, so a
   browser never guesses a different type than the JSON it's labelled as.
 - Staff panel sessions last much longer. A session now ends after 12
@@ -42,6 +71,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Disciplinaries didn't apply to anything served by the API itself.
+  Staff routes such as applications, tickets, payments and the activity log
+  used the member's full permissions even while a disciplinary limited
+  them, because only the staff panel's own checks applied them. Every staff
+  permission check now does.
+- A disciplinary with no expiry, meant to last until lifted, never took
+  effect, because the active check compared against an empty length.
+- Checking whether someone is in the Omniplex Discord server failed with an
+  error for anyone who isn't, instead of answering no. Discord's "Unknown
+  Member" reply was never recognised. So applying for a position that needs
+  the server gave non-members "Failed to check server membership" instead
+  of the message telling them to join, `GET /users/{id}/main-server` errored
+  for them, and the staff panel couldn't show that an applicant wasn't in
+  the server.
+- Listing a server that the tracking bot isn't in, or that you aren't a
+  member of, returned Discord's raw error instead of the message saying to
+  add the bot or that you don't manage the server, for the same reason.
 - Approving or denying a staff application failed whenever the bot couldn't
   DM the applicant, which happens for anyone who doesn't share a server
   with it or has DMs from server members turned off. Staff had to tell the

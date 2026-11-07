@@ -49,6 +49,12 @@ type fixture struct {
 
 func seedStaff(t *testing.T, perms []string, sessionState string) fixture {
 	t.Helper()
+
+	return seedStaffAt(t, perms, sessionState, 50)
+}
+
+func seedStaffAt(t *testing.T, perms []string, sessionState string, index int) fixture {
+	t.Helper()
 	dbOrSkip(t)
 
 	ctx := context.Background()
@@ -64,6 +70,7 @@ func seedStaff(t *testing.T, perms []string, sessionState string) fixture {
 		state.Pool.Exec(ctx, "DELETE FROM staffpanel__authchain WHERE user_id = $1", f.UserID)
 		state.Pool.Exec(ctx, "DELETE FROM staff_members WHERE user_id = $1", f.UserID)
 		state.Pool.Exec(ctx, "DELETE FROM rpc_logs WHERE user_id = $1", f.UserID)
+		state.Pool.Exec(ctx, "DELETE FROM staff_disciplinary WHERE user_id = $1", f.UserID)
 		state.Pool.Exec(ctx, "DELETE FROM users WHERE user_id = $1", f.UserID)
 
 		if f.PositionID != "" {
@@ -82,7 +89,7 @@ func seedStaff(t *testing.T, perms []string, sessionState string) fixture {
 
 	err = state.Pool.QueryRow(ctx,
 		"INSERT INTO staff_positions (name, role_id, perms, index) VALUES ($1, $2, $3, $4) RETURNING id::text",
-		"test_"+impls.GenRandom(8), "0", perms, 50,
+		"test_"+impls.GenRandom(8), "test_"+impls.GenRandom(12), perms, index,
 	).Scan(&f.PositionID)
 
 	if err != nil {
