@@ -74,7 +74,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, errors)
 	}
 
-	position := apps.FindPosition(payload.Position)
+	position, err := apps.FindPosition(d.Context, payload.Position)
+
+	if err != nil {
+		return resp.Err("Failed to load the position", err)
+	}
 
 	if position == nil {
 		return resp.BadRequest("Invalid position")

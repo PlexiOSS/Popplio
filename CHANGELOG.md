@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-11-07
+
 ### Added
 
+- Application positions live in the database instead of the code, in a
+  new `app_positions` table, so staff can edit them from the panel. The
+  `20261107120000_app_positions` migration seeds the seven existing
+  positions exactly as they were. The new `UpdateAppPositions` panel query
+  lists them (for `view_apps` or `manage_app_positions`) and creates,
+  edits, reorders and deletes them (for the new `manage_app_positions`
+  permission). Positions with special behaviour (Staff Team, Ban Appeal,
+  Bot Resubmission and both certifications) keep it, and the questions it
+  reads can't be removed. Those positions can't be deleted, and no position
+  can be deleted while it has applications waiting for a decision.
+  Applications keep the questions they were sent with, so editing a form
+  doesn't change them.
+- Positions can have a help link, returned as `help_url` and `help_label`
+  in `GET /apps/meta`.
 - A full disciplinary workflow through the new `UpdateDisciplinaries` panel
   query. Staff with `manage_disciplinaries` can issue a disciplinary to
   anyone they rank above, and list everyone's. Any staff member can request

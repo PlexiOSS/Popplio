@@ -7,6 +7,7 @@ package get_apps_meta
 import (
 	"net/http"
 
+	"popplio/api/resp"
 	"popplio/apps"
 	"popplio/types"
 
@@ -23,9 +24,15 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	positions, err := apps.List(d.Context)
+
+	if err != nil {
+		return resp.Err("Failed to load application positions", err)
+	}
+
 	return uapi.HttpResponse{
 		Json: types.AppMeta{
-			Positions: apps.Apps,
+			Positions: positions,
 			Stable:    apps.Stable,
 		},
 	}
