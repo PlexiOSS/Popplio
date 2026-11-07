@@ -2741,3 +2741,23 @@ CREATE INDEX staffpanel__authchain_user_id_idx ON public.staffpanel__authchain U
 CREATE INDEX staff_disciplinary_user_id_idx ON public.staff_disciplinary USING btree (user_id);
 
 CREATE INDEX staff_disciplinary_state_idx ON public.staff_disciplinary USING btree (state);
+
+CREATE TABLE public.app_positions (
+    id text NOT NULL,
+    name text NOT NULL,
+    info text DEFAULT ''::text NOT NULL,
+    tags text[] DEFAULT '{}'::text[] NOT NULL,
+    questions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    hidden boolean DEFAULT false NOT NULL,
+    closed boolean DEFAULT false NOT NULL,
+    requires_main_server boolean DEFAULT false NOT NULL,
+    cooldown_secs bigint DEFAULT 0 NOT NULL,
+    approval_note text DEFAULT ''::text NOT NULL,
+    help_url text,
+    help_label text,
+    behaviour text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT app_positions_pkey PRIMARY KEY (id)
+);

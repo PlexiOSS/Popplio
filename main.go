@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"popplio/api"
-	poplapps "popplio/apps"
 	"popplio/arcadia"
 	"popplio/bgtasks"
 	"popplio/constants"
@@ -165,7 +164,6 @@ func main() {
 
 	docs.Setup()
 	poplhooks.Setup()
-	poplapps.Setup()
 
 	docs.AddSecuritySchema("User", "User-Auth", "Requires a user token. Should be prefixed with `User ` in `Authorization` header.")
 	docs.AddSecuritySchema("Bot", "Bot-Auth", "Requires a bot token. Should be prefixed with `Bot ` in `Authorization` header.")

@@ -41,6 +41,9 @@ sql:
           - column: "apps.questions"
             go_type:
               type: "[]byte"
+          - column: "app_positions.questions"
+            go_type:
+              type: "[]byte"
           - column: "apps.answers"
             go_type:
               type: "map[string]string"

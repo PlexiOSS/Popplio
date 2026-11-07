@@ -21,9 +21,10 @@ const (
 	StaffBanVoters       Perm = "ban_voters"
 	StaffBanUsers        Perm = "ban_users"
 
-	StaffViewApps    Perm = "view_apps"
-	StaffManageApps  Perm = "manage_apps"
-	StaffBanAppUsers Perm = "ban_app_users"
+	StaffViewApps           Perm = "view_apps"
+	StaffManageApps         Perm = "manage_apps"
+	StaffBanAppUsers        Perm = "ban_app_users"
+	StaffManageAppPositions Perm = "manage_app_positions"
 
 	StaffViewStaff            Perm = "view_staff"
 	StaffManageStaffMembers   Perm = "manage_staff_members"
@@ -194,6 +195,12 @@ var Staff = NewCatalogue("staff", StaffAdministrator, []Definition{
 		Description: "Bar a user from submitting further applications, and lift that ban.",
 		Category:    "Applications",
 		Legacy:      []string{"rpc.AppBanUser", "rpc.AppUnbanUser"},
+	},
+	{
+		ID:          StaffManageAppPositions,
+		Name:        "Manage Application Forms",
+		Description: "Create and edit the positions people can apply for, including their questions, and open, close or hide them.",
+		Category:    "Applications",
 	},
 
 	{

@@ -138,7 +138,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.BadRequest("This app is not pending approval")
 	}
 
-	position := apps.FindPosition(app.Position)
+	position, err := apps.FindPosition(d.Context, app.Position)
+
+	if err != nil {
+		return resp.Err("Failed to load the position", err, zap.String("appId", appId))
+	}
 
 	if position == nil {
 		// Delete the app from the database

@@ -51,6 +51,25 @@ type App struct {
 	State          string             `db:"state" json:"state"`
 }
 
+type AppPosition struct {
+	ID                 string             `db:"id" json:"id"`
+	Name               string             `db:"name" json:"name"`
+	Info               string             `db:"info" json:"info"`
+	Tags               []string           `db:"tags" json:"tags"`
+	Questions          []byte             `db:"questions" json:"questions"`
+	Hidden             bool               `db:"hidden" json:"hidden"`
+	Closed             bool               `db:"closed" json:"closed"`
+	RequiresMainServer bool               `db:"requires_main_server" json:"requires_main_server"`
+	CooldownSecs       int64              `db:"cooldown_secs" json:"cooldown_secs"`
+	ApprovalNote       string             `db:"approval_note" json:"approval_note"`
+	HelpUrl            pgtype.Text        `db:"help_url" json:"help_url"`
+	HelpLabel          pgtype.Text        `db:"help_label" json:"help_label"`
+	Behaviour          pgtype.Text        `db:"behaviour" json:"behaviour"`
+	SortOrder          int32              `db:"sort_order" json:"sort_order"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 // Snapshot of bots.cache_server_uninvitable taken when the column was dropped.
 type ArchiveCacheServersBotsCacheServerUninvitable struct {
 	BotID                  string             `db:"bot_id" json:"bot_id"`

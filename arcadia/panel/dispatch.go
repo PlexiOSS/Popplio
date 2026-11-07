@@ -39,6 +39,8 @@ func (s *Server) dispatch(ctx context.Context, req *types.PanelQuery) (response,
 		return s.updateSessions(ctx, req.UpdateSessions)
 	case req.UpdateDisciplinaries != nil:
 		return s.updateDisciplinaries(ctx, req.UpdateDisciplinaries)
+	case req.UpdateAppPositions != nil:
+		return s.updateAppPositions(ctx, req.UpdateAppPositions)
 	case req.UpdateChangelog != nil:
 		return s.updateChangelog(ctx, req.UpdateChangelog)
 	case req.UpdateBlog != nil:
