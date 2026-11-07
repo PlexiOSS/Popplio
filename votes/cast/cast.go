@@ -7,6 +7,7 @@ import (
 
 	"popplio/brandemoji"
 	"popplio/db"
+	"popplio/servervotes"
 	"popplio/state"
 	"popplio/votes"
 	"popplio/webhooks/core/drivers"
@@ -134,6 +135,10 @@ func Announce(userID, targetType, targetID string, res *Result, auto bool) {
 		if err != nil {
 			state.Logger.Error("Failed to fetch user info", zap.Error(err), zap.String("userId", userID), zap.String("targetId", targetID), zap.String("targetType", targetType))
 			return
+		}
+
+		if targetType == "server" {
+			servervotes.Post(state.Context, targetID, userObj.DisplayName, res.Votes, auto, res.Entity.URL, res.Entity.Name)
 		}
 
 		description := brandemoji.Popplio.Get("upvote", "❤️") + " " + userObj.DisplayName + " has voted for " + targetType + ": " + res.Entity.Name

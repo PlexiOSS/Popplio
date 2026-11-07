@@ -81,6 +81,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			StripeSubscriptionID: s.StripeSubscriptionID,
 			StripeCustomerID:     s.StripeCustomerID,
 			AutoVotes30d:         votes[s.UserID],
+			ExtraSlots:           int(s.ExtraSlots),
+			BillingInterval:      s.BillingInterval,
 			Targets:              []types.AutoVoteTarget{},
 		}
 

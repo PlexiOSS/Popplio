@@ -1,6 +1,6 @@
 // Package reviews mounts the "Reviews" group of API routes.
 //
-// These API endpoints are related to reviews on IBL
+// These API endpoints are related to reviews on Omniplex
 package reviews
 
 import (
@@ -22,7 +22,7 @@ const (
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to reviews on IBL"
+	return tagName, "These API endpoints are related to reviews on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

@@ -1,6 +1,6 @@
 // Package votes mounts the "Votes" group of API routes.
 //
-// These API endpoints are related to votes and voting on IBL
+// These API endpoints are related to votes and voting on Omniplex
 package votes
 
 import (
@@ -33,7 +33,7 @@ const tagName = "Votes"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to votes and voting on IBL"
+	return tagName, "These API endpoints are related to votes and voting on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

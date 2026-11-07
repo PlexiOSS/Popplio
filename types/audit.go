@@ -34,6 +34,8 @@ type AutoVoteStaffEntry struct {
 	StripeSubscriptionID string           `json:"stripe_subscription_id" description:"The Stripe subscription ID"`
 	StripeCustomerID     string           `json:"stripe_customer_id" description:"The Stripe customer ID"`
 	AutoVotes30d         int              `json:"auto_votes_30d" description:"Automatic votes cast for this user in the last 30 days"`
+	ExtraSlots           int              `json:"extra_slots" description:"Extra listing slots on the subscription"`
+	BillingInterval      string           `json:"billing_interval" description:"month or year, or empty without a subscription"`
 	Targets              []AutoVoteTarget `json:"targets" description:"The listings the user auto-votes for, with their current status"`
 }
 

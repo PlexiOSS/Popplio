@@ -1,6 +1,6 @@
 // Package servers mounts the "Servers" group of API routes.
 //
-// These API endpoints are related to servers on IBL
+// These API endpoints are related to servers on Omniplex
 package servers
 
 import (
@@ -10,7 +10,9 @@ import (
 	"popplio/perms"
 	"popplio/routes/entityassets/put_entity_asset"
 	"popplio/routes/servers/endpoints/add_server"
+	"popplio/routes/servers/endpoints/create_server_changelog"
 	"popplio/routes/servers/endpoints/delete_server"
+	"popplio/routes/servers/endpoints/delete_server_changelog"
 	"popplio/routes/servers/endpoints/get_all_servers"
 	"popplio/routes/servers/endpoints/get_flat_emojis"
 	"popplio/routes/servers/endpoints/get_flat_stickers"
@@ -18,13 +20,17 @@ import (
 	"popplio/routes/servers/endpoints/get_server"
 	"popplio/routes/servers/endpoints/get_server_analytics"
 	"popplio/routes/servers/endpoints/get_server_bumps"
+	"popplio/routes/servers/endpoints/get_server_changelogs"
+	"popplio/routes/servers/endpoints/get_server_changelogs_feed"
 	"popplio/routes/servers/endpoints/get_server_meta"
 	"popplio/routes/servers/endpoints/get_server_seo"
+	"popplio/routes/servers/endpoints/get_server_vote_channel"
 	"popplio/routes/servers/endpoints/get_servers_emojis"
 	"popplio/routes/servers/endpoints/get_servers_index"
 	"popplio/routes/servers/endpoints/get_similar_servers"
 	"popplio/routes/servers/endpoints/patch_server_settings"
 	"popplio/routes/servers/endpoints/post_server_stats"
+	"popplio/routes/servers/endpoints/put_server_vote_channel"
 
 	"github.com/go-chi/chi/v5"
 
@@ -36,7 +42,7 @@ const tagName = "Servers"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to servers on IBL"
+	return tagName, "These API endpoints are related to servers on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {
@@ -202,6 +208,139 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_server_analytics.Docs,
 		Handler: get_server_analytics.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeServer,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditServers),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeServer, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/@changelogs",
+		OpId:    "get_server_changelogs_feed",
+		Method:  uapi.GET,
+		Docs:    get_server_changelogs_feed.Docs,
+		Handler: get_server_changelogs_feed.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/changelogs",
+		OpId:    "get_server_changelogs",
+		Method:  uapi.GET,
+		Docs:    get_server_changelogs.Docs,
+		Handler: get_server_changelogs.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/changelogs",
+		OpId:    "create_server_changelog",
+		Method:  uapi.POST,
+		Docs:    create_server_changelog.Docs,
+		Handler: create_server_changelog.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeServer,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditServers),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeServer, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/changelogs/{changelog_id}",
+		OpId:    "delete_server_changelog",
+		Method:  uapi.DELETE,
+		Docs:    delete_server_changelog.Docs,
+		Handler: delete_server_changelog.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeServer,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditServers),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeServer, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/vote-channel",
+		OpId:    "get_server_vote_channel",
+		Method:  uapi.GET,
+		Docs:    get_server_vote_channel.Docs,
+		Handler: get_server_vote_channel.Route,
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+			{
+				Type: api.TargetTypeTeam,
+			},
+			{
+				Type: api.TargetTypeServer,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: api.PermissionCheck{
+				NeededPermission: api.Needs(perms.EntityEditServers),
+				GetTarget: func(d uapi.Route, r *http.Request, authData uapi.AuthData) (string, string) {
+					return api.TargetTypeServer, chi.URLParam(r, "id")
+				},
+			},
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/vote-channel",
+		OpId:    "put_server_vote_channel",
+		Method:  uapi.PUT,
+		Docs:    put_server_vote_channel.Docs,
+		Handler: put_server_vote_channel.Route,
 		Auth: []uapi.AuthType{
 			{
 				Type: api.TargetTypeUser,

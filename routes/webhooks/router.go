@@ -1,6 +1,6 @@
 // Package webhooks mounts the "Webhooks" group of API routes.
 //
-// These API endpoints are related to webhooks on IBL
+// These API endpoints are related to webhooks on Omniplex
 package webhooks
 
 import (
@@ -27,7 +27,7 @@ const tagName = "Webhooks"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to webhooks on IBL"
+	return tagName, "These API endpoints are related to webhooks on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

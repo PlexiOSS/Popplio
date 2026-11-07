@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"popplio/boosters"
 	"popplio/state"
 
 	"github.com/disgoorg/disgo/discord"
@@ -237,7 +238,7 @@ func discordMembers(r Rule) ([]string, error) {
 
 		switch r.Type {
 		case "server_booster":
-			if m.PremiumSince != nil {
+			if boosters.IsBooster(m) {
 				ids = append(ids, m.User.ID.String())
 			}
 		case "has_role":

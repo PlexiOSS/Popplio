@@ -1,38 +1,28 @@
 package assets
 
 import (
-	"slices"
-
-	"popplio/state"
+	"popplio/boosters"
 	"popplio/types"
 
 	"github.com/disgoorg/snowflake/v2"
 )
 
 func CheckUserBoosterStatus(id snowflake.ID) types.BoosterStatus {
-	// Check member is a booster
-	m, ok := state.Discord.Caches().Member(state.Config.Servers.Main, id)
+	member, boosting := boosters.Check(id)
 
-	if !ok {
+	if !member {
 		return types.BoosterStatus{
 			Remark:    "Member not found on server",
 			IsBooster: false,
 		}
 	}
 
-	// Check if member has booster role
-	roles := state.Config.Roles.PremiumRoles
-	for _, role := range m.RoleIDs {
-		if slices.Contains(roles, role) {
-			// Member has booster role
-			return types.BoosterStatus{
-				IsBooster: true,
-			}
+	if !boosting {
+		return types.BoosterStatus{
+			Remark:    "Member is not boosting the server",
+			IsBooster: false,
 		}
 	}
 
-	return types.BoosterStatus{
-		Remark:    "Member does not have booster role",
-		IsBooster: false,
-	}
+	return types.BoosterStatus{IsBooster: true}
 }

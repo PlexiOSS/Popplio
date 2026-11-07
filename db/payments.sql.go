@@ -94,6 +94,28 @@ func (q *Queries) GetPaymentFulfillment(ctx context.Context, arg GetPaymentFulfi
 	return i, err
 }
 
+const getPaymentGift = `-- name: GetPaymentGift :one
+SELECT gifter_id, message, anonymous FROM payment_gifts WHERE provider = $1 AND external_id = $2
+`
+
+type GetPaymentGiftParams struct {
+	Provider   string `db:"provider" json:"provider"`
+	ExternalID string `db:"external_id" json:"external_id"`
+}
+
+type GetPaymentGiftRow struct {
+	GifterID  string `db:"gifter_id" json:"gifter_id"`
+	Message   string `db:"message" json:"message"`
+	Anonymous bool   `db:"anonymous" json:"anonymous"`
+}
+
+func (q *Queries) GetPaymentGift(ctx context.Context, arg GetPaymentGiftParams) (GetPaymentGiftRow, error) {
+	row := q.db.QueryRow(ctx, getPaymentGift, arg.Provider, arg.ExternalID)
+	var i GetPaymentGiftRow
+	err := row.Scan(&i.GifterID, &i.Message, &i.Anonymous)
+	return i, err
+}
+
 const getServerTypePremium = `-- name: GetServerTypePremium :one
 SELECT type, premium FROM servers WHERE server_id = $1
 `
@@ -140,6 +162,31 @@ func (q *Queries) InsertPaymentFulfillment(ctx context.Context, arg InsertPaymen
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const insertPaymentGift = `-- name: InsertPaymentGift :exec
+INSERT INTO payment_gifts (provider, external_id, gifter_id, message, anonymous)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (provider, external_id) DO NOTHING
+`
+
+type InsertPaymentGiftParams struct {
+	Provider   string `db:"provider" json:"provider"`
+	ExternalID string `db:"external_id" json:"external_id"`
+	GifterID   string `db:"gifter_id" json:"gifter_id"`
+	Message    string `db:"message" json:"message"`
+	Anonymous  bool   `db:"anonymous" json:"anonymous"`
+}
+
+func (q *Queries) InsertPaymentGift(ctx context.Context, arg InsertPaymentGiftParams) error {
+	_, err := q.db.Exec(ctx, insertPaymentGift,
+		arg.Provider,
+		arg.ExternalID,
+		arg.GifterID,
+		arg.Message,
+		arg.Anonymous,
+	)
+	return err
 }
 
 const listRecentPaymentFulfillments = `-- name: ListRecentPaymentFulfillments :many

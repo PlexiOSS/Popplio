@@ -97,7 +97,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		Type:     types.AlertTypeSuccess,
 		Title:    "Votes Redeemed",
 		Message:  strconv.Itoa(votesInt) + " votes converted to credits for " + targetId + ".",
-		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/shop", Valid: true},
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/shop/items", Valid: true},
 		Category: types.AlertCategoryVotes,
 	}); err != nil {
 		state.Logger.Warn("Failed to send vote credit redemption alert", zap.Error(err), zap.String("user_id", d.Auth.ID), zap.String("target_id", targetId))

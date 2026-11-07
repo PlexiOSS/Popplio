@@ -236,6 +236,29 @@ func (q *Queries) CountFlatStickers(ctx context.Context) (int64, error) {
 	return column_1, err
 }
 
+const countServerChangelogsFeed = `-- name: CountServerChangelogsFeed :one
+SELECT COUNT(*)
+FROM server_changelogs sc
+JOIN servers s ON s.server_id = sc.server_id
+WHERE (s.type = 'approved' OR s.type = 'certified') AND s.state = 'public'
+  AND ($1::text IS NULL OR sc.server_id = $1::text)
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) t WHERE lower(t) = lower($2::text)))
+  AND ($3::text IS NULL OR sc.title ILIKE $3::text OR sc.content ILIKE $3::text OR s.name ILIKE $3::text)
+`
+
+type CountServerChangelogsFeedParams struct {
+	ServerID pgtype.Text `db:"server_id" json:"server_id"`
+	Tag      pgtype.Text `db:"tag" json:"tag"`
+	Pattern  pgtype.Text `db:"pattern" json:"pattern"`
+}
+
+func (q *Queries) CountServerChangelogsFeed(ctx context.Context, arg CountServerChangelogsFeedParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countServerChangelogsFeed, arg.ServerID, arg.Tag, arg.Pattern)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countServerEmojiPreviews = `-- name: CountServerEmojiPreviews :one
 SELECT COUNT(*) FROM servers WHERE show_emojis = true AND (type = 'approved' OR type = 'certified') AND state = 'public'
 `
@@ -283,6 +306,23 @@ DELETE FROM servers WHERE server_id = $1
 func (q *Queries) DeleteServerByID(ctx context.Context, serverID string) error {
 	_, err := q.db.Exec(ctx, deleteServerByID, serverID)
 	return err
+}
+
+const deleteServerChangelog = `-- name: DeleteServerChangelog :execrows
+DELETE FROM server_changelogs WHERE id = $1 AND server_id = $2
+`
+
+type DeleteServerChangelogParams struct {
+	ID       string `db:"id" json:"id"`
+	ServerID string `db:"server_id" json:"server_id"`
+}
+
+func (q *Queries) DeleteServerChangelog(ctx context.Context, arg DeleteServerChangelogParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteServerChangelog, arg.ID, arg.ServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const denyServer = `-- name: DenyServer :exec
@@ -1148,6 +1188,111 @@ func (q *Queries) GetServerCertStats(ctx context.Context, serverID string) (GetS
 	return i, err
 }
 
+const getServerChangelogs = `-- name: GetServerChangelogs :many
+SELECT id, title, content, version, created_by, created_at
+FROM server_changelogs
+WHERE server_id = $1
+ORDER BY created_at DESC
+`
+
+type GetServerChangelogsRow struct {
+	ID        string             `db:"id" json:"id"`
+	Title     string             `db:"title" json:"title"`
+	Content   string             `db:"content" json:"content"`
+	Version   string             `db:"version" json:"version"`
+	CreatedBy string             `db:"created_by" json:"created_by"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) GetServerChangelogs(ctx context.Context, serverID string) ([]GetServerChangelogsRow, error) {
+	rows, err := q.db.Query(ctx, getServerChangelogs, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetServerChangelogsRow
+	for rows.Next() {
+		var i GetServerChangelogsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.Version,
+			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getServerChangelogsFeed = `-- name: GetServerChangelogsFeed :many
+SELECT sc.id, sc.server_id, sc.title, sc.content, sc.version, sc.created_at
+FROM server_changelogs sc
+JOIN servers s ON s.server_id = sc.server_id
+WHERE (s.type = 'approved' OR s.type = 'certified') AND s.state = 'public'
+  AND ($1::text IS NULL OR sc.server_id = $1::text)
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) t WHERE lower(t) = lower($2::text)))
+  AND ($3::text IS NULL OR sc.title ILIKE $3::text OR sc.content ILIKE $3::text OR s.name ILIKE $3::text)
+ORDER BY sc.created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type GetServerChangelogsFeedParams struct {
+	ServerID pgtype.Text `db:"server_id" json:"server_id"`
+	Tag      pgtype.Text `db:"tag" json:"tag"`
+	Pattern  pgtype.Text `db:"pattern" json:"pattern"`
+	Offset   int32       `db:"offset" json:"offset"`
+	Limit    int32       `db:"limit" json:"limit"`
+}
+
+type GetServerChangelogsFeedRow struct {
+	ID        string             `db:"id" json:"id"`
+	ServerID  string             `db:"server_id" json:"server_id"`
+	Title     string             `db:"title" json:"title"`
+	Content   string             `db:"content" json:"content"`
+	Version   string             `db:"version" json:"version"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) GetServerChangelogsFeed(ctx context.Context, arg GetServerChangelogsFeedParams) ([]GetServerChangelogsFeedRow, error) {
+	rows, err := q.db.Query(ctx, getServerChangelogsFeed,
+		arg.ServerID,
+		arg.Tag,
+		arg.Pattern,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetServerChangelogsFeedRow
+	for rows.Next() {
+		var i GetServerChangelogsFeedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServerID,
+			&i.Title,
+			&i.Content,
+			&i.Version,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getServerEmojiPreviews = `-- name: GetServerEmojiPreviews :many
 SELECT server_id, name, avatar, emojis, stickers
 FROM servers
@@ -1368,6 +1513,17 @@ func (q *Queries) GetServerVanityRef(ctx context.Context, serverID string) (pgty
 	var vanity_ref pgtype.UUID
 	err := row.Scan(&vanity_ref)
 	return vanity_ref, err
+}
+
+const getServerVoteChannel = `-- name: GetServerVoteChannel :one
+SELECT vote_channel_id FROM servers WHERE server_id = $1
+`
+
+func (q *Queries) GetServerVoteChannel(ctx context.Context, serverID string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getServerVoteChannel, serverID)
+	var vote_channel_id pgtype.Text
+	err := row.Scan(&vote_channel_id)
+	return vote_channel_id, err
 }
 
 const getServersDueForModerationScan = `-- name: GetServersDueForModerationScan :many
@@ -1703,6 +1859,49 @@ func (q *Queries) InsertServer(ctx context.Context, arg InsertServerParams) erro
 	return err
 }
 
+const insertServerChangelog = `-- name: InsertServerChangelog :one
+INSERT INTO server_changelogs (server_id, title, content, version, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, title, content, version, created_by, created_at
+`
+
+type InsertServerChangelogParams struct {
+	ServerID  string `db:"server_id" json:"server_id"`
+	Title     string `db:"title" json:"title"`
+	Content   string `db:"content" json:"content"`
+	Version   string `db:"version" json:"version"`
+	CreatedBy string `db:"created_by" json:"created_by"`
+}
+
+type InsertServerChangelogRow struct {
+	ID        string             `db:"id" json:"id"`
+	Title     string             `db:"title" json:"title"`
+	Content   string             `db:"content" json:"content"`
+	Version   string             `db:"version" json:"version"`
+	CreatedBy string             `db:"created_by" json:"created_by"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) InsertServerChangelog(ctx context.Context, arg InsertServerChangelogParams) (InsertServerChangelogRow, error) {
+	row := q.db.QueryRow(ctx, insertServerChangelog,
+		arg.ServerID,
+		arg.Title,
+		arg.Content,
+		arg.Version,
+		arg.CreatedBy,
+	)
+	var i InsertServerChangelogRow
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Content,
+		&i.Version,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const recordServerModerationScan = `-- name: RecordServerModerationScan :exec
 UPDATE servers SET moderation_flagged = $2, moderation_categories = $3, moderation_checked_at = NOW() WHERE server_id = $1
 `
@@ -2032,6 +2231,20 @@ type SetServerVoteBannedParams struct {
 
 func (q *Queries) SetServerVoteBanned(ctx context.Context, arg SetServerVoteBannedParams) error {
 	_, err := q.db.Exec(ctx, setServerVoteBanned, arg.ServerID, arg.VoteBanned)
+	return err
+}
+
+const setServerVoteChannel = `-- name: SetServerVoteChannel :exec
+UPDATE servers SET vote_channel_id = $1 WHERE server_id = $2
+`
+
+type SetServerVoteChannelParams struct {
+	ChannelID pgtype.Text `db:"channel_id" json:"channel_id"`
+	ServerID  string      `db:"server_id" json:"server_id"`
+}
+
+func (q *Queries) SetServerVoteChannel(ctx context.Context, arg SetServerVoteChannelParams) error {
+	_, err := q.db.Exec(ctx, setServerVoteChannel, arg.ChannelID, arg.ServerID)
 	return err
 }
 

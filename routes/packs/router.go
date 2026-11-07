@@ -23,7 +23,7 @@ const (
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to IBL packs"
+	return tagName, "These API endpoints are related to Omniplex packs"
 }
 
 func (b Router) Routes(r *chi.Mux) {

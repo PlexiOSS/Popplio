@@ -35,6 +35,42 @@ func (s *Server) updatePromoCodes(ctx context.Context, q *types.QUpdatePromoCode
 	}
 
 	switch {
+	case q.Action.ListRedemptions != nil:
+		if !userPerms.Has(perms.StaffViewShop) {
+			return writeText(http.StatusForbidden, "You do not have permission to view promo code redemptions [view_shop]"), nil
+		}
+
+		var codeID pgtype.UUID
+
+		if err := codeID.Scan(q.Action.ListRedemptions.ID); err != nil {
+			return writeText(http.StatusNotFound, "Promo code not found"), nil
+		}
+
+		rows, err := db.New(state.Pool).ListPromoCodeRedemptions(ctx, codeID)
+
+		if err != nil {
+			return response{}, newError(err)
+		}
+
+		out := make([]types.PromoCodeRedemption, 0, len(rows))
+
+		for _, r := range rows {
+			item := types.PromoCodeRedemption{
+				UserID:    r.UserID,
+				Product:   r.Product,
+				Status:    r.Status,
+				CreatedAt: types.NewTimestamp(r.CreatedAt.Time),
+			}
+
+			if r.CompletedAt.Valid {
+				ts := types.NewTimestamp(r.CompletedAt.Time)
+				item.CompletedAt = &ts
+			}
+
+			out = append(out, item)
+		}
+
+		return writeJSON(http.StatusOK, out), nil
 	case q.Action.List != nil:
 		if !userPerms.Has(perms.StaffViewShop) {
 			return writeText(http.StatusForbidden, "You do not have permission to list promo codes [view_shop]"), nil

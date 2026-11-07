@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"popplio/audit"
@@ -47,6 +48,11 @@ func AutoVote(ctx context.Context) error {
 		if voted {
 			cast_++
 			audit.Record(audit.Event{Source: audit.SourceSystem, ActorType: audit.ActorUser, ActorID: t.UserID, Action: "autovote.voted", TargetType: t.TargetType, TargetID: t.TargetID})
+
+			if t.Notify == "each" {
+				notifyAutoVoted(ctx, t.UserID, t.TargetType, t.TargetID)
+			}
+
 			continue
 		}
 
@@ -143,12 +149,91 @@ func autoVoteOne(ctx context.Context, q *db.Queries, userID, targetType, targetI
 	return true, "", nil
 }
 
-func notifyAutoVoteSkipped(ctx context.Context, userID, targetType, targetID, reason string) {
-	name := "a listing"
-
+func listingName(ctx context.Context, targetType, targetID string) string {
 	if info, err := votes.GetEntityInfo(ctx, state.Pool, targetID, targetType); err == nil {
-		name = info.Name
+		return info.Name
 	}
+
+	return "a listing"
+}
+
+func notifyAutoVoted(ctx context.Context, userID, targetType, targetID string) {
+	name := listingName(ctx, targetType, targetID)
+
+	if err := notifications.PushNotification(userID, types.Alert{
+		Type:     types.AlertTypeSuccess,
+		Title:    "Auto-voted for " + name,
+		Message:  "Auto-vote cast your vote for " + name + ".",
+		URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/dashboard?tab=auto-vote", Valid: true},
+		Category: types.AlertCategoryVotes,
+	}); err != nil {
+		state.Logger.Warn("Failed to send auto-vote alert", zap.Error(err), zap.String("userId", userID))
+	}
+}
+
+func AutoVoteSummary(ctx context.Context) error {
+	q := db.New(state.Pool)
+
+	due, err := q.ListDueAutoVoteSummaries(ctx)
+
+	if err != nil {
+		return fmt.Errorf("listing auto-vote summaries: %w", err)
+	}
+
+	for _, u := range due {
+		since := time.Now().Add(-24 * time.Hour)
+
+		if u.LastSummaryAt.Valid {
+			since = u.LastSummaryAt.Time
+		}
+
+		counts, err := q.CountUserAutoVotesSince(ctx, db.CountUserAutoVotesSinceParams{
+			Author: u.UserID,
+			Since:  pgtype.Timestamp{Time: since.UTC(), Valid: true},
+		})
+
+		if err != nil {
+			state.Logger.Warn("Failed to count auto-votes for a summary", zap.Error(err), zap.String("userId", u.UserID))
+			continue
+		}
+
+		if len(counts) > 0 {
+			total := 0
+			parts := make([]string, 0, len(counts))
+
+			for _, c := range counts {
+				total += int(c.Votes)
+				parts = append(parts, fmt.Sprintf("%s (%d)", listingName(ctx, c.TargetType, c.TargetID), c.Votes))
+			}
+
+			plural := "s"
+
+			if total == 1 {
+				plural = ""
+			}
+
+			if err := notifications.PushNotification(u.UserID, types.Alert{
+				Type:     types.AlertTypeInfo,
+				Title:    fmt.Sprintf("Auto-vote cast %d vote%s today", total, plural),
+				Message:  "In the last day: " + strings.Join(parts, ", ") + ".",
+				URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/dashboard?tab=auto-vote", Valid: true},
+				Category: types.AlertCategoryVotes,
+			}); err != nil {
+				state.Logger.Warn("Failed to send auto-vote summary", zap.Error(err), zap.String("userId", u.UserID))
+				continue
+			}
+		}
+
+		if err := q.MarkAutoVoteSummarySent(ctx, u.UserID); err != nil {
+			state.Logger.Warn("Failed to record an auto-vote summary", zap.Error(err), zap.String("userId", u.UserID))
+		}
+	}
+
+	return nil
+}
+
+func notifyAutoVoteSkipped(ctx context.Context, userID, targetType, targetID, reason string) {
+	name := listingName(ctx, targetType, targetID)
 
 	if err := notifications.PushNotification(userID, types.Alert{
 		Type:     types.AlertTypeWarning,

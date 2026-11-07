@@ -96,6 +96,20 @@ func All() []Task {
 			Run:         AutoVote,
 		},
 		{
+			Name:        "auto_vote_summary",
+			Description: "Sending the daily summary to Auto-vote subscribers who asked for one",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         AutoVoteSummary,
+		},
+		{
+			Name:        "booster_sync",
+			Description: "Recording who boosts the main Discord server and applying their monthly booster premium",
+			Enabled:     true,
+			Interval:    10 * time.Minute,
+			Run:         BoosterSync,
+		},
+		{
 			Name:        "audit_prune",
 			Description: "Deleting activity log events older than the retention period",
 			Enabled:     true,

@@ -1,6 +1,6 @@
 // Package tickets mounts the "Tickets" group of API routes.
 //
-// These API endpoints are related to tickets on IBL
+// These API endpoints are related to tickets on Omniplex
 package tickets
 
 import (
@@ -26,7 +26,7 @@ const tagName = "Tickets"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to tickets on IBL"
+	return tagName, "These API endpoints are related to tickets on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

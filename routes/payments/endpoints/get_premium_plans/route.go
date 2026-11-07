@@ -7,6 +7,7 @@ package get_premium_plans
 import (
 	"net/http"
 
+	"popplio/autovote"
 	"popplio/routes/payments/assets"
 	"popplio/types"
 
@@ -28,6 +29,14 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			Plans:          assets.Plans,
 			CreditsPerCent: assets.CreditsPerCent,
 			MaxCreditShare: assets.MaxCreditShare,
+			AutoVote: types.AutoVotePricing{
+				PriceCents:           autovote.PriceCents,
+				YearlyPriceCents:     autovote.YearlyPriceCents,
+				SlotPriceCents:       autovote.SlotPriceCents,
+				YearlySlotPriceCents: autovote.YearlySlotCents,
+				IncludedSlots:        autovote.MaxTargets,
+				MaxExtraSlots:        autovote.MaxExtraSlots,
+			},
 		},
 	}
 }

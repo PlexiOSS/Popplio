@@ -1,6 +1,6 @@
 // Package tasks mounts the "Tasks" group of API routes.
 //
-// These API endpoints are related to tasks on IBL
+// These API endpoints are related to tasks on Omniplex
 package tasks
 
 import (
@@ -17,7 +17,7 @@ const tagName = "Tasks"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to tasks on IBL"
+	return tagName, "These API endpoints are related to tasks on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

@@ -1,6 +1,6 @@
 // Package staff mounts the "Staff" group of API routes.
 //
-// Staff-only IBL endpoints. Only usable from staff panel using panelapi
+// Staff-only Omniplex endpoints. Only usable from staff panel using panelapi
 // credentials
 package staff
 
@@ -26,7 +26,7 @@ const (
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "Staff-only IBL endpoints. Only usable from staff panel using panelapi credentials"
+	return tagName, "Staff-only Omniplex endpoints. Only usable from staff panel using panelapi credentials"
 }
 
 func (b Router) Routes(r *chi.Mux) {
