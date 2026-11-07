@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Every API response now sends `X-Content-Type-Options: nosniff`, so a
+  browser never guesses a different type than the JSON it's labelled as.
 - Staff panel sessions last much longer. A session now ends after 12
   hours without activity instead of 1 hour. Signing in on one device no
   longer signs that staff member out everywhere else, so the panel can stay

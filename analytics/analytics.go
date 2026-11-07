@@ -85,7 +85,7 @@ func Get(ctx context.Context, targetType, targetID string, days int) (*types.Ent
 		voteByDay[dayKey(v.Day.Time)] = v
 	}
 
-	out := &types.EntityAnalytics{Days: make([]types.EntityAnalyticsDay, 0, days)}
+	out := &types.EntityAnalytics{Days: make([]types.EntityAnalyticsDay, 0, MaxDays)}
 
 	for _, s := range snaps {
 		if !s.Day.Time.Before(start) {
