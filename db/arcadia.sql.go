@@ -87,6 +87,23 @@ func (q *Queries) CountStaffPositionByNameOrRoleID(ctx context.Context, arg Coun
 	return exists, err
 }
 
+const deleteAuthChainByItag = `-- name: DeleteAuthChainByItag :execrows
+DELETE FROM staffpanel__authchain WHERE itag = $1 AND user_id = $2
+`
+
+type DeleteAuthChainByItagParams struct {
+	Itag   pgtype.UUID `db:"itag" json:"itag"`
+	UserID string      `db:"user_id" json:"user_id"`
+}
+
+func (q *Queries) DeleteAuthChainByItag(ctx context.Context, arg DeleteAuthChainByItagParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuthChainByItag, arg.Itag, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteAuthChainByToken = `-- name: DeleteAuthChainByToken :execrows
 DELETE FROM staffpanel__authchain WHERE token = $1
 `
@@ -132,6 +149,23 @@ func (q *Queries) DeleteExpiredPendingAuthChainEntries(ctx context.Context) erro
 	return err
 }
 
+const deleteOtherAuthChains = `-- name: DeleteOtherAuthChains :execrows
+DELETE FROM staffpanel__authchain WHERE user_id = $1 AND token <> $2::text
+`
+
+type DeleteOtherAuthChainsParams struct {
+	UserID       string `db:"user_id" json:"user_id"`
+	CurrentToken string `db:"current_token" json:"current_token"`
+}
+
+func (q *Queries) DeleteOtherAuthChains(ctx context.Context, arg DeleteOtherAuthChainsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOtherAuthChains, arg.UserID, arg.CurrentToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteStaffMember = `-- name: DeleteStaffMember :exec
 DELETE FROM staff_members WHERE user_id = $1
 `
@@ -160,20 +194,33 @@ func (q *Queries) DeleteStaleAuthChainEntries(ctx context.Context) error {
 }
 
 const getActiveStaffDisciplinaries = `-- name: GetActiveStaffDisciplinaries :many
-SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+SELECT d.id, d.user_id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+	d.state, d.issued_by, d.starts_at, d.decided_by, d.decided_at, d.decision_note, d.revoked_by, d.revoked_at, d.revoke_reason,
 	t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
 	EXTRACT(epoch FROM t.max_expiry) AS max_expiry, t.created_at AS type_created_at
 FROM staff_disciplinary d LEFT JOIN staff_disciplinary_types t ON t.id = d.type
-WHERE d.user_id = $1 AND NOW() - d.created_at < d.expiry
+WHERE d.user_id = $1 AND d.state = 'active'
+	AND (d.expiry IS NULL OR COALESCE(d.starts_at, d.created_at) + d.expiry > NOW())
+ORDER BY d.created_at DESC
 `
 
 type GetActiveStaffDisciplinariesRow struct {
 	ID              pgtype.UUID        `db:"id" json:"id"`
+	UserID          string             `db:"user_id" json:"user_id"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	Expiry          pgtype.Numeric     `db:"expiry" json:"expiry"`
 	Title           string             `db:"title" json:"title"`
 	Description     string             `db:"description" json:"description"`
 	Type            string             `db:"type" json:"type"`
+	State           string             `db:"state" json:"state"`
+	IssuedBy        pgtype.Text        `db:"issued_by" json:"issued_by"`
+	StartsAt        pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	DecidedBy       pgtype.Text        `db:"decided_by" json:"decided_by"`
+	DecidedAt       pgtype.Timestamptz `db:"decided_at" json:"decided_at"`
+	DecisionNote    pgtype.Text        `db:"decision_note" json:"decision_note"`
+	RevokedBy       pgtype.Text        `db:"revoked_by" json:"revoked_by"`
+	RevokedAt       pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	RevokeReason    pgtype.Text        `db:"revoke_reason" json:"revoke_reason"`
 	TypeName        pgtype.Text        `db:"type_name" json:"type_name"`
 	TypeDescription pgtype.Text        `db:"type_description" json:"type_description"`
 	SelfAssignable  pgtype.Bool        `db:"self_assignable" json:"self_assignable"`
@@ -195,11 +242,21 @@ func (q *Queries) GetActiveStaffDisciplinaries(ctx context.Context, userID strin
 		var i GetActiveStaffDisciplinariesRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
 			&i.CreatedAt,
 			&i.Expiry,
 			&i.Title,
 			&i.Description,
 			&i.Type,
+			&i.State,
+			&i.IssuedBy,
+			&i.StartsAt,
+			&i.DecidedBy,
+			&i.DecidedAt,
+			&i.DecisionNote,
+			&i.RevokedBy,
+			&i.RevokedAt,
+			&i.RevokeReason,
 			&i.TypeName,
 			&i.TypeDescription,
 			&i.SelfAssignable,
@@ -550,20 +607,32 @@ func (q *Queries) GetServersTeamOwnersByIDs(ctx context.Context, serverIds []str
 }
 
 const getStaffDisciplinaries = `-- name: GetStaffDisciplinaries :many
-SELECT d.id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+SELECT d.id, d.user_id, d.created_at, EXTRACT(epoch FROM d.expiry) AS expiry, d.title, d.description, d.type,
+	d.state, d.issued_by, d.starts_at, d.decided_by, d.decided_at, d.decision_note, d.revoked_by, d.revoked_at, d.revoke_reason,
 	t.name AS type_name, t.description AS type_description, t.self_assignable, t.perm_limits, t.additory, t.needs_approval,
 	EXTRACT(epoch FROM t.max_expiry) AS max_expiry, t.created_at AS type_created_at
 FROM staff_disciplinary d LEFT JOIN staff_disciplinary_types t ON t.id = d.type
 WHERE d.user_id = $1
+ORDER BY d.created_at DESC
 `
 
 type GetStaffDisciplinariesRow struct {
 	ID              pgtype.UUID        `db:"id" json:"id"`
+	UserID          string             `db:"user_id" json:"user_id"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	Expiry          pgtype.Numeric     `db:"expiry" json:"expiry"`
 	Title           string             `db:"title" json:"title"`
 	Description     string             `db:"description" json:"description"`
 	Type            string             `db:"type" json:"type"`
+	State           string             `db:"state" json:"state"`
+	IssuedBy        pgtype.Text        `db:"issued_by" json:"issued_by"`
+	StartsAt        pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	DecidedBy       pgtype.Text        `db:"decided_by" json:"decided_by"`
+	DecidedAt       pgtype.Timestamptz `db:"decided_at" json:"decided_at"`
+	DecisionNote    pgtype.Text        `db:"decision_note" json:"decision_note"`
+	RevokedBy       pgtype.Text        `db:"revoked_by" json:"revoked_by"`
+	RevokedAt       pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	RevokeReason    pgtype.Text        `db:"revoke_reason" json:"revoke_reason"`
 	TypeName        pgtype.Text        `db:"type_name" json:"type_name"`
 	TypeDescription pgtype.Text        `db:"type_description" json:"type_description"`
 	SelfAssignable  pgtype.Bool        `db:"self_assignable" json:"self_assignable"`
@@ -585,11 +654,21 @@ func (q *Queries) GetStaffDisciplinaries(ctx context.Context, userID string) ([]
 		var i GetStaffDisciplinariesRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
 			&i.CreatedAt,
 			&i.Expiry,
 			&i.Title,
 			&i.Description,
 			&i.Type,
+			&i.State,
+			&i.IssuedBy,
+			&i.StartsAt,
+			&i.DecidedBy,
+			&i.DecidedAt,
+			&i.DecisionNote,
+			&i.RevokedBy,
+			&i.RevokedAt,
+			&i.RevokeReason,
 			&i.TypeName,
 			&i.TypeDescription,
 			&i.SelfAssignable,
@@ -884,14 +963,16 @@ func (q *Queries) GetUserOwnedEntities(ctx context.Context, userID string) ([]Ge
 }
 
 const insertAuthChain = `-- name: InsertAuthChain :exec
-INSERT INTO staffpanel__authchain (user_id, token, popplio_token, state) VALUES ($1, $2, $3, $4)
+INSERT INTO staffpanel__authchain (user_id, token, popplio_token, state, ip, user_agent) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type InsertAuthChainParams struct {
-	UserID       string `db:"user_id" json:"user_id"`
-	Token        string `db:"token" json:"token"`
-	PopplioToken string `db:"popplio_token" json:"popplio_token"`
-	State        string `db:"state" json:"state"`
+	UserID       string      `db:"user_id" json:"user_id"`
+	Token        string      `db:"token" json:"token"`
+	PopplioToken string      `db:"popplio_token" json:"popplio_token"`
+	State        string      `db:"state" json:"state"`
+	Ip           pgtype.Text `db:"ip" json:"ip"`
+	UserAgent    pgtype.Text `db:"user_agent" json:"user_agent"`
 }
 
 func (q *Queries) InsertAuthChain(ctx context.Context, arg InsertAuthChainParams) error {
@@ -900,6 +981,8 @@ func (q *Queries) InsertAuthChain(ctx context.Context, arg InsertAuthChainParams
 		arg.Token,
 		arg.PopplioToken,
 		arg.State,
+		arg.Ip,
+		arg.UserAgent,
 	)
 	return err
 }
@@ -1000,6 +1083,54 @@ type InsertUserWithTokenParams struct {
 func (q *Queries) InsertUserWithToken(ctx context.Context, arg InsertUserWithTokenParams) error {
 	_, err := q.db.Exec(ctx, insertUserWithToken, arg.UserID, arg.ApiToken)
 	return err
+}
+
+const listActiveAuthChainsByUser = `-- name: ListActiveAuthChainsByUser :many
+SELECT itag, created_at, last_seen_at, ip, user_agent, (token = $1::text) AS current
+FROM staffpanel__authchain
+WHERE user_id = $2 AND state = 'active'
+ORDER BY last_seen_at DESC
+`
+
+type ListActiveAuthChainsByUserParams struct {
+	CurrentToken string `db:"current_token" json:"current_token"`
+	UserID       string `db:"user_id" json:"user_id"`
+}
+
+type ListActiveAuthChainsByUserRow struct {
+	Itag       pgtype.UUID        `db:"itag" json:"itag"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	LastSeenAt pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	Ip         pgtype.Text        `db:"ip" json:"ip"`
+	UserAgent  pgtype.Text        `db:"user_agent" json:"user_agent"`
+	Current    bool               `db:"current" json:"current"`
+}
+
+func (q *Queries) ListActiveAuthChainsByUser(ctx context.Context, arg ListActiveAuthChainsByUserParams) ([]ListActiveAuthChainsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAuthChainsByUser, arg.CurrentToken, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveAuthChainsByUserRow
+	for rows.Next() {
+		var i ListActiveAuthChainsByUserRow
+		if err := rows.Scan(
+			&i.Itag,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.Ip,
+			&i.UserAgent,
+			&i.Current,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRPCLogs = `-- name: ListRPCLogs :many

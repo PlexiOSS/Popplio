@@ -16,6 +16,8 @@ import (
 	"popplio/arcadia/types"
 	"popplio/state"
 
+	"github.com/go-chi/chi/v5/middleware"
+
 	"go.uber.org/zap"
 )
 
@@ -35,7 +37,9 @@ func New() *Server {
 	handler := recoverMiddleware(
 		loggingMiddleware(
 			corsMiddleware(
-				maxBodyMiddleware(mux),
+				middleware.RealIP(
+					maxBodyMiddleware(mux),
+				),
 			),
 		),
 	)
@@ -98,6 +102,13 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		writeText(http.StatusBadRequest, "Failed to read the request body").write(w)
+		return
+	}
+
+	body, err = injectCookieToken(r, body)
+
+	if err != nil {
+		writeText(http.StatusForbidden, err.Error()).write(w)
 		return
 	}
 
@@ -182,9 +193,18 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
+		if origin := r.Header.Get("Origin"); allowedOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+		}
+
+		w.Header().Add("Vary", "Origin")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

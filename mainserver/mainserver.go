@@ -29,13 +29,27 @@ func IsMember(userID string) (bool, error) {
 		return true, nil
 	}
 
-	var restErr *rest.Error
-
-	if errors.As(err, &restErr) && restErr.Response != nil && restErr.Response.StatusCode == http.StatusNotFound {
+	if isNotFound(err) {
 		return false, nil
 	}
 
 	return false, err
+}
+
+func isNotFound(err error) bool {
+	var value rest.Error
+
+	if errors.As(err, &value) {
+		return value.Response != nil && value.Response.StatusCode == http.StatusNotFound
+	}
+
+	var ptr *rest.Error
+
+	if errors.As(err, &ptr) && ptr != nil {
+		return ptr.Response != nil && ptr.Response.StatusCode == http.StatusNotFound
+	}
+
+	return false
 }
 
 func CachedMember(userID string) bool {

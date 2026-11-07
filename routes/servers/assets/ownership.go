@@ -33,16 +33,23 @@ func trackingBotRest() rest.Rest {
 }
 
 func isMissingAccess(err error) bool {
-	var restErr *rest.Error
+	var resp *http.Response
 
-	if errors.As(err, &restErr) && restErr.Response != nil {
-		switch restErr.Response.StatusCode {
-		case http.StatusForbidden, http.StatusNotFound:
-			return true
-		}
+	var value rest.Error
+	var ptr *rest.Error
+
+	switch {
+	case errors.As(err, &value):
+		resp = value.Response
+	case errors.As(err, &ptr) && ptr != nil:
+		resp = ptr.Response
 	}
 
-	return false
+	if resp == nil {
+		return false
+	}
+
+	return resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound
 }
 
 func VerifyServerManager(guildID, userID string) error {

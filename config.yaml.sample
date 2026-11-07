@@ -93,6 +93,7 @@ arcadia:
       - 
     panel_scope:  # Static handshake value the frontend sends
     panel_response_scope:  # Static handshake value the frontend expects back
+    allowed_origins: [] # Staff panel origins allowed to use the session cookie, such as https://panel.omniplex.gg
 
 
 infernoplex:

@@ -142,7 +142,13 @@ func StaffPerms(ctx context.Context, userID string) (Set, error) {
 		return Set{}, err
 	}
 
-	return g.Resolve(), nil
+	limits, err := LoadDisciplinaryLimits(ctx, userID)
+
+	if err != nil {
+		return Set{}, err
+	}
+
+	return ApplyDisciplinaries(g, limits), nil
 }
 
 type InternalUserCacheDiscordRow struct {

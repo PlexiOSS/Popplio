@@ -23,7 +23,16 @@ func withClientIP(ctx context.Context, r *http.Request) context.Context {
 		host = r.RemoteAddr
 	}
 
+	ctx = context.WithValue(ctx, userAgentKey{}, r.UserAgent())
+
 	return context.WithValue(ctx, clientIPKey{}, host)
+}
+
+type userAgentKey struct{}
+
+func userAgentFromContext(ctx context.Context) string {
+	ua, _ := ctx.Value(userAgentKey{}).(string)
+	return ua
 }
 
 func clientIPFromContext(ctx context.Context) string {

@@ -691,14 +691,22 @@ type ShopPurchase struct {
 }
 
 type StaffDisciplinary struct {
-	ID          pgtype.UUID        `db:"id" json:"id"`
-	UserID      string             `db:"user_id" json:"user_id"`
-	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	Expiry      pgtype.Interval    `db:"expiry" json:"expiry"`
-	Title       string             `db:"title" json:"title"`
-	Description string             `db:"description" json:"description"`
-	Type        string             `db:"type" json:"type"`
-	State       string             `db:"state" json:"state"`
+	ID           pgtype.UUID        `db:"id" json:"id"`
+	UserID       string             `db:"user_id" json:"user_id"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Expiry       pgtype.Interval    `db:"expiry" json:"expiry"`
+	Title        string             `db:"title" json:"title"`
+	Description  string             `db:"description" json:"description"`
+	Type         string             `db:"type" json:"type"`
+	State        string             `db:"state" json:"state"`
+	IssuedBy     pgtype.Text        `db:"issued_by" json:"issued_by"`
+	StartsAt     pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	DecidedBy    pgtype.Text        `db:"decided_by" json:"decided_by"`
+	DecidedAt    pgtype.Timestamptz `db:"decided_at" json:"decided_at"`
+	DecisionNote pgtype.Text        `db:"decision_note" json:"decision_note"`
+	RevokedBy    pgtype.Text        `db:"revoked_by" json:"revoked_by"`
+	RevokedAt    pgtype.Timestamptz `db:"revoked_at" json:"revoked_at"`
+	RevokeReason pgtype.Text        `db:"revoke_reason" json:"revoke_reason"`
 }
 
 type StaffDisciplinaryType struct {
@@ -783,6 +791,8 @@ type StaffpanelAuthchain struct {
 	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	State        string             `db:"state" json:"state"`
 	LastSeenAt   pgtype.Timestamptz `db:"last_seen_at" json:"last_seen_at"`
+	Ip           pgtype.Text        `db:"ip" json:"ip"`
+	UserAgent    pgtype.Text        `db:"user_agent" json:"user_agent"`
 }
 
 type Task struct {
