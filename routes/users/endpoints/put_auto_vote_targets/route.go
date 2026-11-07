@@ -2,9 +2,11 @@ package put_auto_vote_targets
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"popplio/api/resp"
+	"popplio/autovote"
 	"popplio/db"
 	"popplio/listing"
 	"popplio/state"
@@ -21,7 +23,7 @@ var compiledMessages = uapi.CompileValidationErrors(types.AutoVoteTargetsUpdate{
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Update Auto-vote Targets",
-		Description: "Replaces the listings the user auto-votes for (up to 3), each with an optional weekday and time-of-day schedule. Returns 204 on success.",
+		Description: "Replaces the listings the user auto-votes for (3, plus any extra slots they've bought), each with an optional weekday and time-of-day schedule and a pause switch, and optionally sets how the user hears about automatic votes. Returns 204 on success.",
 		Params: []docs.Parameter{
 			{
 				Name:        "id",
@@ -47,6 +49,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err := state.Validator.Struct(payload); err != nil {
 		return uapi.ValidatorErrorResponse(compiledMessages, err.(validator.ValidationErrors))
+	}
+
+	extra, err := db.New(state.Pool).GetAutoVoteExtraSlots(d.Context, userID)
+
+	if err != nil {
+		return resp.Err("Failed to check auto-vote slots", err)
+	}
+
+	if limit := autovote.Limit(int(extra)) + autovote.BoosterBonus(d.Context, userID); len(payload.Targets) > limit {
+		return resp.BadRequest("You can auto-vote for up to " + strconv.Itoa(limit) + " listings. Add more slots to auto-vote for more.")
 	}
 
 	seen := map[string]bool{}
@@ -102,8 +114,15 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			StartMinute: int16(t.StartMinute),
 			EndMinute:   int16(t.EndMinute),
 			Timezone:    t.Timezone,
+			Paused:      t.Paused,
 		}); err != nil {
 			return resp.Err("Failed to save auto-vote target", err)
+		}
+	}
+
+	if payload.Notify != nil {
+		if err := q.SetAutoVoteNotify(d.Context, db.SetAutoVoteNotifyParams{UserID: userID, Notify: *payload.Notify}); err != nil {
+			return resp.Err("Failed to save auto-vote notifications", err)
 		}
 	}
 

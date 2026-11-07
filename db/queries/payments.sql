@@ -62,3 +62,11 @@ WHERE (sqlc.narg(user_id)::text IS NULL OR f.user_id = sqlc.narg(user_id)::text 
   AND (NOT sqlc.arg(revoked_only)::bool OR f.revoked_at IS NOT NULL)
 ORDER BY f.fulfilled_at DESC
 LIMIT sqlc.arg(lim)::int;
+
+-- name: InsertPaymentGift :exec
+INSERT INTO payment_gifts (provider, external_id, gifter_id, message, anonymous)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (provider, external_id) DO NOTHING;
+
+-- name: GetPaymentGift :one
+SELECT gifter_id, message, anonymous FROM payment_gifts WHERE provider = $1 AND external_id = $2;

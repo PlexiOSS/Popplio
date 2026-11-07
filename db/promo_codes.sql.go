@@ -183,6 +183,48 @@ func (q *Queries) InsertPromoCodeRedemption(ctx context.Context, arg InsertPromo
 	return err
 }
 
+const listPromoCodeRedemptions = `-- name: ListPromoCodeRedemptions :many
+SELECT user_id, product, status, created_at, completed_at
+FROM promo_code_redemptions
+WHERE promo_code_id = $1
+ORDER BY created_at DESC
+LIMIT 500
+`
+
+type ListPromoCodeRedemptionsRow struct {
+	UserID      string             `db:"user_id" json:"user_id"`
+	Product     string             `db:"product" json:"product"`
+	Status      string             `db:"status" json:"status"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	CompletedAt pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
+}
+
+func (q *Queries) ListPromoCodeRedemptions(ctx context.Context, promoCodeID pgtype.UUID) ([]ListPromoCodeRedemptionsRow, error) {
+	rows, err := q.db.Query(ctx, listPromoCodeRedemptions, promoCodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPromoCodeRedemptionsRow
+	for rows.Next() {
+		var i ListPromoCodeRedemptionsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Product,
+			&i.Status,
+			&i.CreatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPromoCodes = `-- name: ListPromoCodes :many
 SELECT p.id, p.code, p.description, p.products, p.percent_off, p.amount_off_cents, p.duration, p.duration_months, p.max_redemptions, p.expires_at, p.once_per_user, p.new_customers_only, p.active, p.stripe_coupon_id, p.stripe_promotion_code_id, p.created_by, p.created_at, p.updated_at,
     (SELECT count(*) FROM promo_code_redemptions r WHERE r.promo_code_id = p.id AND r.status = 'completed')::int AS redemptions

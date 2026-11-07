@@ -1,6 +1,6 @@
 // Package notifications mounts the "Notifications" group of API routes.
 //
-// These API endpoints are related to user notifications on IBL
+// These API endpoints are related to user notifications on Omniplex
 package notifications
 
 import (
@@ -22,7 +22,7 @@ const tagName = "Notifications"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to user notifications on IBL"
+	return tagName, "These API endpoints are related to user notifications on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

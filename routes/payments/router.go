@@ -1,6 +1,6 @@
 // Package payments mounts the "Payments" group of API routes.
 //
-// These API endpoints are related to payments on IBL
+// These API endpoints are related to payments on Omniplex
 package payments
 
 import (
@@ -28,7 +28,7 @@ const (
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to payments on IBL"
+	return tagName, "These API endpoints are related to payments on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

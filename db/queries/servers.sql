@@ -372,3 +372,43 @@ UPDATE servers SET total_members = $1 WHERE server_id = $2;
 
 -- name: UpdateServerOnlineMembers :exec
 UPDATE servers SET online_members = $1 WHERE server_id = $2;
+
+-- name: GetServerChangelogs :many
+SELECT id, title, content, version, created_by, created_at
+FROM server_changelogs
+WHERE server_id = $1
+ORDER BY created_at DESC;
+
+-- name: InsertServerChangelog :one
+INSERT INTO server_changelogs (server_id, title, content, version, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, title, content, version, created_by, created_at;
+
+-- name: DeleteServerChangelog :execrows
+DELETE FROM server_changelogs WHERE id = $1 AND server_id = $2;
+
+-- name: GetServerChangelogsFeed :many
+SELECT sc.id, sc.server_id, sc.title, sc.content, sc.version, sc.created_at
+FROM server_changelogs sc
+JOIN servers s ON s.server_id = sc.server_id
+WHERE (s.type = 'approved' OR s.type = 'certified') AND s.state = 'public'
+  AND (sqlc.narg('server_id')::text IS NULL OR sc.server_id = sqlc.narg('server_id')::text)
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) t WHERE lower(t) = lower(sqlc.narg('tag')::text)))
+  AND (sqlc.narg('pattern')::text IS NULL OR sc.title ILIKE sqlc.narg('pattern')::text OR sc.content ILIKE sqlc.narg('pattern')::text OR s.name ILIKE sqlc.narg('pattern')::text)
+ORDER BY sc.created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountServerChangelogsFeed :one
+SELECT COUNT(*)
+FROM server_changelogs sc
+JOIN servers s ON s.server_id = sc.server_id
+WHERE (s.type = 'approved' OR s.type = 'certified') AND s.state = 'public'
+  AND (sqlc.narg('server_id')::text IS NULL OR sc.server_id = sqlc.narg('server_id')::text)
+  AND (sqlc.narg('tag')::text IS NULL OR EXISTS (SELECT 1 FROM unnest(s.tags) t WHERE lower(t) = lower(sqlc.narg('tag')::text)))
+  AND (sqlc.narg('pattern')::text IS NULL OR sc.title ILIKE sqlc.narg('pattern')::text OR sc.content ILIKE sqlc.narg('pattern')::text OR s.name ILIKE sqlc.narg('pattern')::text);
+
+-- name: GetServerVoteChannel :one
+SELECT vote_channel_id FROM servers WHERE server_id = $1;
+
+-- name: SetServerVoteChannel :exec
+UPDATE servers SET vote_channel_id = sqlc.narg(channel_id) WHERE server_id = sqlc.arg(server_id);

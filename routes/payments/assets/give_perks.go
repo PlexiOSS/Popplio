@@ -7,28 +7,132 @@ import (
 	"popplio/audit"
 	"popplio/brandemoji"
 	"strconv"
+	"strings"
 
+	"popplio/arcadia/impls"
+	arcadiatypes "popplio/arcadia/types"
 	"popplio/db"
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
+	"popplio/votes"
 
+	"github.com/PlexiOSS/Keel/dovewing"
 	"github.com/disgoorg/disgo/discord"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
 type CreatePerkData struct {
-	ProductName string `json:"name" validate:"required" msg:"Product name is required."`
-	ProductID   string `json:"id" validate:"required" msg:"Product ID is required."`
-	For         string `json:"for" validate:"required" msg:"For is required."`
-	ForType     string `json:"for_type" validate:"omitempty,oneof=bot server" msg:"for_type must be 'bot' or 'server' if sent."`
-	Credits     int    `json:"credits" validate:"omitempty,min=0" msg:"credits can't be negative."`
-	PromoCode   string `json:"promo_code" validate:"omitempty,max=40" msg:"promo_code is too long."`
+	ProductName   string `json:"name" validate:"required" msg:"Product name is required."`
+	ProductID     string `json:"id" validate:"required" msg:"Product ID is required."`
+	For           string `json:"for" validate:"required" msg:"For is required."`
+	ForType       string `json:"for_type" validate:"omitempty,oneof=bot server" msg:"for_type must be 'bot' or 'server' if sent."`
+	Credits       int    `json:"credits" validate:"omitempty,min=0" msg:"credits can't be negative."`
+	PromoCode     string `json:"promo_code" validate:"omitempty,max=40" msg:"promo_code is too long."`
+	Gift          bool   `json:"gift" description:"Whether this is a gift for a listing the buyer doesn't own"`
+	GiftMessage   string `json:"gift_message" validate:"omitempty,max=300" msg:"The gift message can be at most 300 characters."`
+	GiftAnonymous bool   `json:"gift_anonymous" description:"Hide the buyer's name from the listing's owners"`
 }
 
 type RedirectUser struct {
 	URL string `json:"url"`
+}
+
+func RecordGift(ctx context.Context, provider, externalID, gifterID string, c CreatePerkData) {
+	if !c.Gift {
+		return
+	}
+
+	if err := db.New(state.Pool).InsertPaymentGift(ctx, db.InsertPaymentGiftParams{
+		Provider:   provider,
+		ExternalID: externalID,
+		GifterID:   gifterID,
+		Message:    strings.TrimSpace(c.GiftMessage),
+		Anonymous:  c.GiftAnonymous,
+	}); err != nil {
+		state.Logger.Error("Failed to record a premium gift", zap.Error(err), zap.String("provider", provider), zap.String("external_id", externalID))
+	}
+}
+
+func notifyGift(ctx context.Context, provider, externalID string, perkData PerkData, hours int) {
+	gift, err := db.New(state.Pool).GetPaymentGift(ctx, db.GetPaymentGiftParams{Provider: provider, ExternalID: externalID})
+
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			state.Logger.Warn("Failed to look up a premium gift", zap.Error(err), zap.String("external_id", externalID))
+		}
+
+		return
+	}
+
+	listing := "your " + perkData.ForType
+
+	if info, err := votes.GetEntityInfo(ctx, state.Pool, perkData.For, perkData.ForType); err == nil {
+		listing = info.Name
+	}
+
+	from := "Someone"
+
+	if !gift.Anonymous {
+		if user, err := dovewing.GetUser(ctx, gift.GifterID, state.DovewingPlatformDiscord); err == nil {
+			from = user.Username
+
+			if user.DisplayName != "" {
+				from = user.DisplayName
+			}
+		}
+	}
+
+	message := fmt.Sprintf("%s gifted %s %s of premium.", from, listing, premiumLength(hours))
+
+	if gift.Message != "" {
+		message += " Their message: \"" + gift.Message + "\""
+	}
+
+	targetType := arcadiatypes.TargetTypeBot
+
+	if perkData.ForType == "server" {
+		targetType = arcadiatypes.TargetTypeServer
+	}
+
+	managers, err := impls.GetEntityManagers(ctx, targetType, perkData.For)
+
+	if err != nil {
+		state.Logger.Warn("Failed to find owners for a premium gift", zap.Error(err), zap.String("for", perkData.For))
+		return
+	}
+
+	for _, owner := range managers.All() {
+		if owner == gift.GifterID {
+			continue
+		}
+
+		if err := notifications.PushNotification(owner, types.Alert{
+			Type:     types.AlertTypeSuccess,
+			Title:    listing + " was gifted premium",
+			Message:  message,
+			URL:      pgtype.Text{String: state.Config.Sites.Frontend + "/" + perkData.ForType + "s/" + perkData.For, Valid: true},
+			Category: types.AlertCategoryPayments,
+		}); err != nil {
+			state.Logger.Warn("Failed to notify an owner about a premium gift", zap.Error(err), zap.String("owner", owner))
+		}
+	}
+}
+
+func premiumLength(hours int) string {
+	if hours%24 == 0 {
+		days := hours / 24
+
+		if days == 1 {
+			return "1 day"
+		}
+
+		return strconv.Itoa(days) + " days"
+	}
+
+	return strconv.Itoa(hours) + " hours"
 }
 
 func (c CreatePerkData) Parse(userID string) PerkData {
@@ -172,6 +276,18 @@ func Fulfill(ctx context.Context, provider, externalID string, perkData PerkData
 }
 
 func fulfill(ctx context.Context, provider, externalID string, perkData PerkData) (bool, error) {
+	if provider != "" {
+		done, err := db.New(state.Pool).PaymentFulfillmentExists(ctx, db.PaymentFulfillmentExistsParams{Provider: provider, ExternalID: externalID})
+
+		if err != nil {
+			return false, fmt.Errorf("checking fulfillment: %w", err)
+		}
+
+		if done {
+			return false, nil
+		}
+	}
+
 	perk, err := FindPerks(ctx, perkData)
 
 	if err != nil {
@@ -236,9 +352,17 @@ func fulfill(ctx context.Context, provider, externalID string, perkData PerkData
 		return false, fmt.Errorf("committing fulfillment: %w", err)
 	}
 
-	announcePremium(perkData, perk.TimePeriod)
+	afterFulfill(ctx, provider, externalID, perkData, perk.TimePeriod)
 
 	return true, nil
+}
+
+var afterFulfill = func(ctx context.Context, provider, externalID string, perkData PerkData, hours int) {
+	announcePremium(perkData, hours)
+
+	if provider != "" {
+		notifyGift(ctx, provider, externalID, perkData, hours)
+	}
 }
 
 func announcePremium(perkData PerkData, hours int) {

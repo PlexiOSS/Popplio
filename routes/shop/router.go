@@ -1,6 +1,6 @@
 // Package shop mounts the "Shop" group of API routes.
 //
-// These API endpoints are related to the IBL shop.
+// These API endpoints are related to the Omniplex shop.
 package shop
 
 import (
@@ -25,7 +25,7 @@ const tagName = "Shop"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to the IBL shop."
+	return tagName, "These API endpoints are related to the Omniplex shop."
 }
 
 func (b Router) Routes(r *chi.Mux) {

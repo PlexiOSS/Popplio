@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-11-07
+
+### Fixed
+
+- A repeated Stripe webhook for a premium purchase that was already applied
+  sent the buyer a "Perk Delivery Failed" alert, because the listing was
+  checked for premium before the duplicate was noticed. Already-fulfilled
+  payments are now skipped first.
+- The Gold plan's leap-year check treated 1900-style century years as leap
+  years and 2000-style ones as not. (No effect until 2100.)
+
+### Changed
+
+- Booster status is worked out the same way everywhere: boosting (Discord's
+  "boosting since") or holding one of the configured premium roles. The
+  Server Booster badge used only the first, and the booster offer only the
+  second.
+- Notification links point at the new shop pages (`/shop/booster`,
+  `/shop/items`).
+- The Auto-vote target limit is checked against the user's slots instead of
+  a fixed 3, and the background task only votes for as many listings as the
+  subscription has slots (oldest first), so a lowered slot count can't be
+  worked around.
+- Tests for premium fulfilment (one grant per payment, invalid purchases,
+  credit holds), credit discounts, gifts and the Auto-vote monthly and
+  yearly checkouts.
+- API tag descriptions say Omniplex instead of IBL.
+
+### Added
+
+- Booster perks. A new `booster_sync` task (every 10 minutes) records who
+  boosts the main Discord server in a `booster_perks` table and sends a
+  notification when a boost starts or ends. Boosters pick a listing with
+  `PUT /users/{id}/booster-perks` and get 30 days of Bronze premium applied
+  to it every 30 days while they boost (added on top if it's already
+  premium). Each month is recorded as a `booster` payment fulfilment, so it
+  shows on the staff Payments page and can be revoked like a purchase.
+  `GET /users/{id}/booster-perks` returns the boost, the listing and the next
+  renewal. Boosters also get one free Auto-vote slot (`booster_slots` on
+  `GET /users/{id}/auto-vote`). Needs the `20261107180000_booster_perks`
+  migration.
+- `GET /payments/premium/plans` returns Auto-vote prices under `auto_vote`,
+  so they can be shown before signing in.
+- Extra Auto-vote slots: subscribers can add up to 7 listings on top of the 3
+  included, at $0.99 a month or $9.99 a year each (matching their plan).
+  `PUT /users/{id}/auto-vote/slots` takes `extra_slots`. Adding slots
+  charges the prorated difference straight away and fails cleanly if the card
+  is declined; removing them credits the next invoice. Slots are a separate
+  item on the Stripe subscription and are synced from subscription webhooks.
+  `GET /users/{id}/auto-vote` returns `extra_slots`, `max_extra_slots`,
+  `slot_price_cents` and `billing_interval`, and `max_targets` now includes
+  extra slots. The staff Auto-vote overview shows both. Needs the
+  `20261107170000_auto_vote_extra_slots` migration.
+- Vote messages for servers: the Infernoplex bot can post in a channel of
+  the server each time someone votes for it. `GET /servers/{id}/vote-channel`
+  returns the chosen channel and the server's text and announcement
+  channels, and `PUT /servers/{id}/vote-channel` sets it (or turns it off with
+  a null `channel_id`) after posting a test message. Both need
+  `edit_servers`. Needs the `20261107160000_server_vote_channel` migration.
+- Server changelogs, matching bots: a `server_changelogs` table,
+  `GET /servers/{id}/changelogs`, `POST /servers/{id}/changelogs` and
+  `DELETE /servers/{id}/changelogs/{changelog_id}` (the last two need
+  `edit_servers`), and a sitewide feed at `GET /servers/@changelogs` with
+  search, tag and server filters. Needs the `20261107140000_server_changelogs`
+  migration.
+- A yearly Auto-vote plan at $29.99. `POST /users/{id}/auto-vote/checkout`
+  and the promo code check take `plan` (`monthly`, the default, or
+  `yearly`), and `GET /users/{id}/auto-vote` returns `yearly_price_cents`.
+- Auto-vote listings can be paused instead of removed (`paused` on each
+  target), and subscribers can choose how they hear about automatic votes:
+  `notify` is `off`, `each` (a notification for every vote) or `daily` (one
+  summary a day, sent by the new hourly `auto_vote_summary` task). Needs the
+  `20261107130000_auto_vote_notify_pause` migration.
+- Premium can be bought as a gift for a listing you don't own. The checkout
+  body takes `gift`, an optional `gift_message` (up to 300 characters) and
+  `gift_anonymous`. When the payment completes, the listing's owners get a
+  notification saying who gifted it, unless the buyer chose to stay
+  anonymous, with the message. Needs the `20261107150000_payment_gifts`
+  migration.
+- The staff panel's promo code query has `ListRedemptions`, listing who used
+  a code, for what and when (`view_shop`).
+
 ## [1.21.0] - 2026-11-07
 
 ### Added

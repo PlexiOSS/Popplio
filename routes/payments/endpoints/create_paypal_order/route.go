@@ -147,6 +147,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while creating paypal order", err, zap.Any("payload", payload), zap.String("user_id", d.Auth.ID))
 	}
 
+	assets.RecordGift(d.Context, "paypal", order.ID, d.Auth.ID, create)
+
 	if creditsUsed > 0 {
 		if err := assets.HoldCredits(d.Context, "paypal", order.ID, d.Auth.ID, payload.ForType, payload.For, creditsUsed, discountCents); err != nil {
 			if errors.Is(err, assets.ErrNotEnoughCredits) {

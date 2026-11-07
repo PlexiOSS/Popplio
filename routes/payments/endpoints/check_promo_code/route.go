@@ -25,7 +25,7 @@ import (
 type CheckPromoCode struct {
 	Code    string `json:"code" validate:"required,max=40" msg:"Enter a promo code."`
 	Product string `json:"product" validate:"required,oneof=premium autovote" msg:"product must be 'premium' or 'autovote'."`
-	Plan    string `json:"plan" validate:"required_if=Product premium" msg:"plan is required for premium."`
+	Plan    string `json:"plan" validate:"required_if=Product premium" msg:"plan is required for premium. For Auto-vote it's monthly (the default) or yearly."`
 	Credits int    `json:"credits" validate:"omitempty,min=0" msg:"credits can't be negative."`
 }
 
@@ -76,7 +76,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.ValidatorErrorResponse(compiledMessages, err.(validator.ValidationErrors))
 	}
 
-	subtotal := autovote.PriceCents
+	subtotal := autovote.PlanPriceCents(body.Plan)
 
 	if body.Product == promo.ProductPremium {
 		subtotal = 0

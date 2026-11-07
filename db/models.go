@@ -136,6 +136,13 @@ type AuditEvent struct {
 	Data       map[string]any     `db:"data" json:"data"`
 }
 
+type AutoVoteSetting struct {
+	UserID        string             `db:"user_id" json:"user_id"`
+	Notify        string             `db:"notify" json:"notify"`
+	LastSummaryAt pgtype.Timestamptz `db:"last_summary_at" json:"last_summary_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type AutoVoteSubscription struct {
 	UserID               string             `db:"user_id" json:"user_id"`
 	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
@@ -145,6 +152,8 @@ type AutoVoteSubscription struct {
 	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
 	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ExtraSlots           int32              `db:"extra_slots" json:"extra_slots"`
+	BillingInterval      string             `db:"billing_interval" json:"billing_interval"`
 }
 
 type AutoVoteTarget struct {
@@ -158,6 +167,7 @@ type AutoVoteTarget struct {
 	LastVotedAt    pgtype.Timestamptz `db:"last_voted_at" json:"last_voted_at"`
 	LastSkipReason pgtype.Text        `db:"last_skip_reason" json:"last_skip_reason"`
 	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Paused         bool               `db:"paused" json:"paused"`
 }
 
 type AutomatedVoteReset struct {
@@ -197,6 +207,16 @@ type Blog struct {
 	Content     string             `db:"content" json:"content"`
 	Draft       bool               `db:"draft" json:"draft"`
 	Tags        []string           `db:"tags" json:"tags"`
+}
+
+type BoosterPerk struct {
+	UserID        string             `db:"user_id" json:"user_id"`
+	Boosting      bool               `db:"boosting" json:"boosting"`
+	BoostingSince pgtype.Timestamptz `db:"boosting_since" json:"boosting_since"`
+	TargetType    pgtype.Text        `db:"target_type" json:"target_type"`
+	TargetID      pgtype.Text        `db:"target_id" json:"target_id"`
+	LastError     pgtype.Text        `db:"last_error" json:"last_error"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Bot struct {
@@ -485,6 +505,15 @@ type PaymentFulfillment struct {
 	PremiumHours pgtype.Int4        `db:"premium_hours" json:"premium_hours"`
 }
 
+type PaymentGift struct {
+	Provider   string             `db:"provider" json:"provider"`
+	ExternalID string             `db:"external_id" json:"external_id"`
+	GifterID   string             `db:"gifter_id" json:"gifter_id"`
+	Message    string             `db:"message" json:"message"`
+	Anonymous  bool               `db:"anonymous" json:"anonymous"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type PromoCode struct {
 	ID                    pgtype.UUID        `db:"id" json:"id"`
 	Code                  string             `db:"code" json:"code"`
@@ -607,12 +636,23 @@ type Server struct {
 	CardTheme              bool               `db:"card_theme" json:"card_theme"`
 	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
 	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at"`
+	VoteChannelID          pgtype.Text        `db:"vote_channel_id" json:"vote_channel_id"`
 }
 
 type ServerBump struct {
 	ID        pgtype.UUID        `db:"id" json:"id"`
 	ServerID  string             `db:"server_id" json:"server_id"`
 	UserID    string             `db:"user_id" json:"user_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type ServerChangelog struct {
+	ID        string             `db:"id" json:"id"`
+	ServerID  string             `db:"server_id" json:"server_id"`
+	Title     string             `db:"title" json:"title"`
+	Content   string             `db:"content" json:"content"`
+	Version   string             `db:"version" json:"version"`
+	CreatedBy string             `db:"created_by" json:"created_by"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 

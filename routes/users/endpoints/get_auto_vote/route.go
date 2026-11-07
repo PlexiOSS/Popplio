@@ -38,9 +38,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	q := db.New(state.Pool)
 
 	out := types.AutoVoteStatus{
-		PriceCents: autovote.PriceCents,
-		MaxTargets: autovote.MaxTargets,
-		Targets:    []types.AutoVoteTarget{},
+		PriceCents:       autovote.PriceCents,
+		YearlyPriceCents: autovote.YearlyPriceCents,
+		MaxTargets:       autovote.MaxTargets,
+		MaxExtraSlots:    autovote.MaxExtraSlots,
+		SlotPriceCents:   autovote.SlotPrice("month"),
+		BillingInterval:  "month",
+		Targets:          []types.AutoVoteTarget{},
+		Notify:           "off",
+	}
+
+	if notify, err := q.GetAutoVoteNotify(d.Context, userID); err == nil {
+		out.Notify = notify
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return resp.Err("Failed to load auto-vote notifications", err)
 	}
 
 	sub, err := q.GetAutoVoteSubscription(d.Context, userID)
@@ -53,12 +64,19 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		out.Status = sub.Status
 		out.Subscribed = autovote.Active(sub.Status, sub.CurrentPeriodEnd)
 		out.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+		out.ExtraSlots = int(sub.ExtraSlots)
+		out.MaxTargets = autovote.Limit(int(sub.ExtraSlots))
+		out.BillingInterval = sub.BillingInterval
+		out.SlotPriceCents = autovote.SlotPrice(sub.BillingInterval)
 
 		if sub.CurrentPeriodEnd.Valid {
 			end := sub.CurrentPeriodEnd.Time
 			out.CurrentPeriodEnd = &end
 		}
 	}
+
+	out.BoosterSlots = autovote.BoosterBonus(d.Context, userID)
+	out.MaxTargets += out.BoosterSlots
 
 	rows, err := q.ListAutoVoteTargets(d.Context, userID)
 

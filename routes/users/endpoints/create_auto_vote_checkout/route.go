@@ -25,6 +25,7 @@ import (
 
 type CreateAutoVoteCheckout struct {
 	PromoCode string `json:"promo_code" validate:"omitempty,max=40" msg:"promo_code is too long."`
+	Plan      string `json:"plan" validate:"omitempty,oneof=monthly yearly" msg:"plan must be monthly or yearly."`
 }
 
 var compiledMessages = uapi.CompileValidationErrors(CreateAutoVoteCheckout{})
@@ -32,7 +33,7 @@ var compiledMessages = uapi.CompileValidationErrors(CreateAutoVoteCheckout{})
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Start Auto-vote Subscription",
-		Description: "Creates a Stripe Checkout session for the monthly auto-vote subscription and returns its URL. The body is optional and can carry a promo code.",
+		Description: "Creates a Stripe Checkout session for the auto-vote subscription and returns its URL. The body is optional and can choose the monthly (default) or yearly plan and carry a promo code.",
 		Req:         CreateAutoVoteCheckout{},
 		Params: []docs.Parameter{
 			{
@@ -90,7 +91,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var discounts []*stripe.CheckoutSessionDiscountParams
 
 	if body.PromoCode != "" {
-		c, _, err := promo.Validate(d.Context, userID, body.PromoCode, promo.ProductAutoVote, autovote.PriceCents)
+		c, _, err := promo.Validate(d.Context, userID, body.PromoCode, promo.ProductAutoVote, autovote.PlanPriceCents(body.Plan))
 
 		if err != nil {
 			return promo.ErrResponse("Error while checking promo code", err)
@@ -104,7 +105,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		discounts = promo.SessionDiscount(c)
 	}
 
-	s, err := autovote.Checkout(userID, discounts)
+	s, err := autovote.Checkout(userID, body.Plan, discounts)
 
 	if err != nil {
 		state.Logger.Error("Failed to create auto-vote checkout", zap.Error(err), zap.String("userId", userID))

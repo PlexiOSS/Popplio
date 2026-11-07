@@ -822,7 +822,8 @@ CREATE TABLE public.servers (
     highlighted_until timestamp with time zone,
     card_theme boolean DEFAULT false NOT NULL,
     card_color text,
-    bumped_at timestamp with time zone
+    bumped_at timestamp with time zone,
+    vote_channel_id text
 );
 
 
@@ -2616,7 +2617,11 @@ CREATE TABLE public.auto_vote_subscriptions (
     current_period_end timestamp with time zone,
     cancel_at_period_end boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    extra_slots integer DEFAULT 0 NOT NULL,
+    billing_interval text DEFAULT 'month' NOT NULL,
+    CONSTRAINT auto_vote_subscriptions_extra_slots_check CHECK ((extra_slots >= 0)),
+    CONSTRAINT auto_vote_subscriptions_billing_interval_check CHECK ((billing_interval = ANY (ARRAY['month'::text, 'year'::text])))
 );
 
 CREATE TABLE public.auto_vote_targets (
@@ -2629,7 +2634,17 @@ CREATE TABLE public.auto_vote_targets (
     timezone text DEFAULT 'UTC'::text NOT NULL,
     last_voted_at timestamp with time zone,
     last_skip_reason text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    paused boolean DEFAULT false NOT NULL
+);
+
+CREATE TABLE public.auto_vote_settings (
+    user_id text NOT NULL,
+    notify text DEFAULT 'off'::text NOT NULL,
+    last_summary_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auto_vote_settings_pkey PRIMARY KEY (user_id),
+    CONSTRAINT auto_vote_settings_notify_check CHECK (notify IN ('off', 'each', 'daily'))
 );
 
 CREATE TABLE public.server_bumps (
@@ -2761,3 +2776,44 @@ CREATE TABLE public.app_positions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT app_positions_pkey PRIMARY KEY (id)
 );
+
+CREATE TABLE public.server_changelogs (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    server_id text NOT NULL REFERENCES public.servers (server_id) ON DELETE CASCADE,
+    title text NOT NULL,
+    content text DEFAULT ''::text NOT NULL,
+    version text DEFAULT ''::text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT server_changelogs_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX server_changelogs_server_idx ON public.server_changelogs USING btree (server_id, created_at DESC);
+
+CREATE INDEX server_changelogs_created_idx ON public.server_changelogs USING btree (created_at DESC);
+
+CREATE TABLE public.payment_gifts (
+    provider text NOT NULL,
+    external_id text NOT NULL,
+    gifter_id text NOT NULL,
+    message text DEFAULT ''::text NOT NULL,
+    anonymous boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT payment_gifts_pkey PRIMARY KEY (provider, external_id)
+);
+
+CREATE TABLE public.booster_perks (
+    user_id text NOT NULL,
+    boosting boolean DEFAULT false NOT NULL,
+    boosting_since timestamp with time zone,
+    target_type text,
+    target_id text,
+    last_error text,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT booster_perks_pkey PRIMARY KEY (user_id),
+    CONSTRAINT booster_perks_target_type_check CHECK (target_type IS NULL OR target_type IN ('bot', 'server')),
+    CONSTRAINT booster_perks_target_check CHECK ((target_type IS NULL) = (target_id IS NULL))
+);
+
+ALTER TABLE payment_fulfillments DROP CONSTRAINT payment_fulfillments_provider_check;
+ALTER TABLE payment_fulfillments ADD CONSTRAINT payment_fulfillments_provider_check CHECK (provider = ANY (ARRAY['stripe'::text, 'paypal'::text, 'booster'::text]));

@@ -27,10 +27,15 @@ import (
 )
 
 const (
-	PriceCents  = 299
-	MaxTargets  = 3
-	metadataKey = "kind"
-	metadataVal = "auto_vote"
+	PriceCents       = 299
+	YearlyPriceCents = 2999
+	MaxTargets       = 3
+	MaxExtraSlots    = 7
+	SlotPriceCents   = 99
+	YearlySlotCents  = 999
+	slotMetadataVal  = "auto_vote_slot"
+	metadataKey      = "kind"
+	metadataVal      = "auto_vote"
 )
 
 var ErrNoSubscription = errors.New("no auto-vote subscription")
@@ -71,6 +76,7 @@ func Target(ctx context.Context, row db.AutoVoteTarget) types.AutoVoteTarget {
 		EndMinute:   int(row.EndMinute),
 		Timezone:    row.Timezone,
 		InSchedule:  InSchedule(row.Days, int(row.StartMinute), int(row.EndMinute), row.Timezone, time.Now()),
+		Paused:      row.Paused,
 	}
 
 	for i, day := range row.Days {
@@ -104,22 +110,40 @@ func Target(ctx context.Context, row db.AutoVoteTarget) types.AutoVoteTarget {
 	return target
 }
 
-func Checkout(userID string, discounts []*stripe.CheckoutSessionDiscountParams) (*stripe.CheckoutSession, error) {
+func PlanPriceCents(plan string) int {
+	if plan == "yearly" {
+		return YearlyPriceCents
+	}
+
+	return PriceCents
+}
+
+func Checkout(userID, plan string, discounts []*stripe.CheckoutSessionDiscountParams) (*stripe.CheckoutSession, error) {
 	if state.Config.Meta.StripeSecretKey == "" {
 		return nil, errors.New("stripe is not configured")
 	}
 
+	return session.New(checkoutParams(userID, plan, state.Config.Sites.Frontend, discounts))
+}
+
+func checkoutParams(userID, plan, frontend string, discounts []*stripe.CheckoutSessionDiscountParams) *stripe.CheckoutSessionParams {
 	metadata := map[string]string{metadataKey: metadataVal, "user_id": userID}
 
-	params := &stripe.CheckoutSessionParams{
+	interval := stripe.PriceRecurringIntervalMonth
+
+	if plan == "yearly" {
+		interval = stripe.PriceRecurringIntervalYear
+	}
+
+	return &stripe.CheckoutSessionParams{
 		Mode: stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 					Currency:   stripe.String(string(stripe.CurrencyUSD)),
-					UnitAmount: stripe.Int64(PriceCents),
+					UnitAmount: stripe.Int64(int64(PlanPriceCents(plan))),
 					Recurring: &stripe.CheckoutSessionLineItemPriceDataRecurringParams{
-						Interval: stripe.String(string(stripe.PriceRecurringIntervalMonth)),
+						Interval: stripe.String(string(interval)),
 					},
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
 						Name:        stripe.String("Omniplex Auto-vote"),
@@ -134,12 +158,10 @@ func Checkout(userID string, discounts []*stripe.CheckoutSessionDiscountParams) 
 		SubscriptionData: &stripe.CheckoutSessionSubscriptionDataParams{
 			Metadata: metadata,
 		},
-		SuccessURL: stripe.String(state.Config.Sites.Frontend + "/dashboard?tab=auto-vote&subscribed=1"),
-		CancelURL:  stripe.String(state.Config.Sites.Frontend + "/dashboard?tab=auto-vote"),
+		SuccessURL: stripe.String(frontend + "/dashboard?tab=auto-vote&subscribed=1"),
+		CancelURL:  stripe.String(frontend + "/dashboard?tab=auto-vote"),
 		Discounts:  discounts,
 	}
-
-	return session.New(params)
 }
 
 func PortalURL(customerID string) (string, error) {
@@ -178,6 +200,8 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 			return true, failed("fetching subscription", err)
 		}
 
+		interval, extra := slotsOf(sub)
+
 		if err := db.New(state.Pool).UpsertAutoVoteSubscription(ctx, db.UpsertAutoVoteSubscriptionParams{
 			UserID:               s.Metadata["user_id"],
 			StripeCustomerID:     s.Customer.ID,
@@ -185,6 +209,8 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 			Status:               string(sub.Status),
 			CurrentPeriodEnd:     periodEnd(sub.CurrentPeriodEnd),
 			CancelAtPeriodEnd:    sub.CancelAtPeriodEnd,
+			ExtraSlots:           int32(extra),
+			BillingInterval:      interval,
 		}); err != nil {
 			return true, failed("saving subscription", err)
 		}
@@ -213,11 +239,15 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 			return true, ok("not an auto-vote subscription")
 		}
 
+		interval, extra := slotsOf(&sub)
+
 		if _, err := db.New(state.Pool).UpdateAutoVoteSubscriptionByStripeID(ctx, db.UpdateAutoVoteSubscriptionByStripeIDParams{
 			StripeSubscriptionID: sub.ID,
 			Status:               string(sub.Status),
 			CurrentPeriodEnd:     periodEnd(sub.CurrentPeriodEnd),
 			CancelAtPeriodEnd:    sub.CancelAtPeriodEnd,
+			ExtraSlots:           int32(extra),
+			BillingInterval:      interval,
 		}); err != nil {
 			return true, failed("updating subscription", err)
 		}

@@ -1,6 +1,6 @@
 // Package users mounts the "Users" group of API routes.
 //
-// These API endpoints are related to users on IBL
+// These API endpoints are related to users on Omniplex
 package users
 
 import (
@@ -10,13 +10,16 @@ import (
 	"popplio/routes/users/endpoints/create_auto_vote_portal"
 	"popplio/routes/users/endpoints/create_data_task"
 	"popplio/routes/users/endpoints/get_auto_vote"
+	"popplio/routes/users/endpoints/get_booster_perks"
 	"popplio/routes/users/endpoints/get_main_server_status"
 	"popplio/routes/users/endpoints/get_user"
 	"popplio/routes/users/endpoints/get_user_activity"
 	"popplio/routes/users/endpoints/get_user_perms"
 	"popplio/routes/users/endpoints/get_user_seo"
 	"popplio/routes/users/endpoints/patch_user_profile"
+	"popplio/routes/users/endpoints/put_auto_vote_slots"
 	"popplio/routes/users/endpoints/put_auto_vote_targets"
+	"popplio/routes/users/endpoints/put_booster_perks"
 
 	"github.com/go-chi/chi/v5"
 
@@ -28,7 +31,7 @@ const tagName = "Users"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to users on IBL"
+	return tagName, "These API endpoints are related to users on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {
@@ -38,6 +41,40 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    check_booster_status.Docs,
 		Handler: check_booster_status.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/booster-perks",
+		OpId:    "get_booster_perks",
+		Method:  uapi.GET,
+		Docs:    get_booster_perks.Docs,
+		Handler: get_booster_perks.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/booster-perks",
+		OpId:    "put_booster_perks",
+		Method:  uapi.PUT,
+		Docs:    put_booster_perks.Docs,
+		Handler: put_booster_perks.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{
@@ -80,6 +117,23 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.PUT,
 		Docs:    put_auto_vote_targets.Docs,
 		Handler: put_auto_vote_targets.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/auto-vote/slots",
+		OpId:    "put_auto_vote_slots",
+		Method:  uapi.PUT,
+		Docs:    put_auto_vote_slots.Docs,
+		Handler: put_auto_vote_slots.Route,
 		Auth: []uapi.AuthType{
 			{
 				URLVar: "id",

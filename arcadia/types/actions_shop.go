@@ -384,9 +384,22 @@ type BotWhitelist struct {
 
 // PromoCodeAction is the union of Stripe promo code operations.
 type PromoCodeAction struct {
-	List      *Unit
-	Create    *PromoCodeCreate
-	SetActive *PromoCodeSetActive
+	List            *Unit
+	Create          *PromoCodeCreate
+	SetActive       *PromoCodeSetActive
+	ListRedemptions *PromoCodeRef
+}
+
+type PromoCodeRef struct {
+	ID string `json:"id"`
+}
+
+type PromoCodeRedemption struct {
+	UserID      string     `json:"user_id"`
+	Product     string     `json:"product"`
+	Status      string     `json:"status"`
+	CreatedAt   Timestamp  `json:"created_at"`
+	CompletedAt *Timestamp `json:"completed_at"`
 }
 
 type PromoCodeCreate struct {
@@ -426,6 +439,9 @@ func (a *PromoCodeAction) UnmarshalJSON(data []byte) error {
 	case "SetActive":
 		a.SetActive = &PromoCodeSetActive{}
 		return decodeVariant("PromoCodeAction", name, payload, a.SetActive)
+	case "ListRedemptions":
+		a.ListRedemptions = &PromoCodeRef{}
+		return decodeVariant("PromoCodeAction", name, payload, a.ListRedemptions)
 	default:
 		return errUnknownVariant("PromoCodeAction", name)
 	}
@@ -441,6 +457,8 @@ func (a PromoCodeAction) MarshalJSON() ([]byte, error) {
 		return encodeVariant("Create", a.Create)
 	case a.SetActive != nil:
 		return encodeVariant("SetActive", a.SetActive)
+	case a.ListRedemptions != nil:
+		return encodeVariant("ListRedemptions", a.ListRedemptions)
 	default:
 		return nil, fmt.Errorf("PromoCodeAction: no variant set")
 	}

@@ -9,7 +9,8 @@ type PaymentPlan struct {
 }
 
 type PlanList struct {
-	Plans          []PaymentPlan `json:"plans"`
-	CreditsPerCent int           `json:"credits_per_cent" description:"How many vote credits take one cent off a plan"`
-	MaxCreditShare float64       `json:"max_credit_share" description:"The largest share of a plan's price credits can cover, from 0 to 1"`
+	Plans          []PaymentPlan   `json:"plans"`
+	CreditsPerCent int             `json:"credits_per_cent" description:"How many vote credits take one cent off a plan"`
+	MaxCreditShare float64         `json:"max_credit_share" description:"The largest share of a plan's price credits can cover, from 0 to 1"`
+	AutoVote       AutoVotePricing `json:"auto_vote" description:"Auto-vote subscription prices"`
 }

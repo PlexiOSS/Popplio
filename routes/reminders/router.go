@@ -1,6 +1,6 @@
 // Package reminders mounts the "Reminders" group of API routes.
 //
-// These API endpoints are related to reminders on IBL
+// These API endpoints are related to reminders on Omniplex
 package reminders
 
 import (
@@ -19,7 +19,7 @@ const tagName = "Reminders"
 type Router struct{}
 
 func (b Router) Tag() (string, string) {
-	return tagName, "These API endpoints are related to reminders on IBL"
+	return tagName, "These API endpoints are related to reminders on Omniplex"
 }
 
 func (b Router) Routes(r *chi.Mux) {

@@ -1,0 +1,46 @@
+-- name: StartBoosting :many
+INSERT INTO booster_perks (user_id, boosting, boosting_since)
+SELECT id, true, NOW() FROM unnest(sqlc.arg(user_ids)::text[]) AS id
+ON CONFLICT (user_id) DO UPDATE SET boosting = true, boosting_since = NOW(), updated_at = NOW()
+WHERE NOT booster_perks.boosting
+RETURNING user_id;
+
+-- name: StopBoosting :many
+UPDATE booster_perks SET boosting = false, updated_at = NOW()
+WHERE boosting AND NOT (user_id = ANY(sqlc.arg(user_ids)::text[]))
+RETURNING user_id;
+
+-- name: GetBoosterPerks :one
+SELECT bp.user_id, bp.boosting, bp.boosting_since, bp.target_type, bp.target_id, bp.last_error, u.last_booster_claim
+FROM booster_perks bp
+LEFT JOIN users u ON u.user_id = bp.user_id
+WHERE bp.user_id = $1;
+
+-- name: SetBoosterTarget :exec
+INSERT INTO booster_perks (user_id, boosting, boosting_since, target_type, target_id)
+VALUES (sqlc.arg(user_id), sqlc.arg(boosting), CASE WHEN sqlc.arg(boosting)::boolean THEN NOW() END, sqlc.narg(target_type), sqlc.narg(target_id))
+ON CONFLICT (user_id) DO UPDATE SET
+    target_type = EXCLUDED.target_type,
+    target_id = EXCLUDED.target_id,
+    boosting = booster_perks.boosting OR EXCLUDED.boosting,
+    boosting_since = CASE WHEN booster_perks.boosting THEN booster_perks.boosting_since ELSE EXCLUDED.boosting_since END,
+    last_error = NULL,
+    updated_at = NOW();
+
+-- name: SetBoosterError :one
+UPDATE booster_perks SET last_error = sqlc.narg(last_error), updated_at = NOW()
+WHERE user_id = sqlc.arg(user_id) AND last_error IS DISTINCT FROM sqlc.narg(last_error)
+RETURNING user_id;
+
+-- name: ListDueBoosterRenewals :many
+SELECT bp.user_id, bp.target_type::text AS target_type, bp.target_id::text AS target_id
+FROM booster_perks bp
+INNER JOIN users u ON u.user_id = bp.user_id
+WHERE bp.boosting AND bp.target_id IS NOT NULL
+    AND (u.last_booster_claim IS NULL OR u.last_booster_claim <= NOW() - INTERVAL '30 days');
+
+-- name: IsBoosting :one
+SELECT EXISTS(SELECT 1 FROM booster_perks WHERE user_id = $1 AND boosting);
+
+-- name: ListExistingUsers :many
+SELECT user_id FROM users WHERE user_id = ANY(sqlc.arg(user_ids)::text[]);

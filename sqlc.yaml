@@ -127,6 +127,9 @@ sql:
           - column: "bot_changelogs.id"
             go_type:
               type: "string"
+          - column: "server_changelogs.id"
+            go_type:
+              type: "string"
           - column: "bot_commands.id"
             go_type:
               type: "string"

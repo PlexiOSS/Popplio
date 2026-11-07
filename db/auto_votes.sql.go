@@ -42,6 +42,45 @@ func (q *Queries) CountAutoVotesSince(ctx context.Context, since pgtype.Timestam
 	return items, nil
 }
 
+const countUserAutoVotesSince = `-- name: CountUserAutoVotesSince :many
+SELECT target_type, target_id, count(*)::int AS votes
+FROM entity_votes
+WHERE author = $1 AND auto AND NOT void AND created_at > $2::timestamp
+GROUP BY target_type, target_id
+ORDER BY votes DESC
+`
+
+type CountUserAutoVotesSinceParams struct {
+	Author string           `db:"author" json:"author"`
+	Since  pgtype.Timestamp `db:"since" json:"since"`
+}
+
+type CountUserAutoVotesSinceRow struct {
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+	Votes      int32  `db:"votes" json:"votes"`
+}
+
+func (q *Queries) CountUserAutoVotesSince(ctx context.Context, arg CountUserAutoVotesSinceParams) ([]CountUserAutoVotesSinceRow, error) {
+	rows, err := q.db.Query(ctx, countUserAutoVotesSince, arg.Author, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountUserAutoVotesSinceRow
+	for rows.Next() {
+		var i CountUserAutoVotesSinceRow
+		if err := rows.Scan(&i.TargetType, &i.TargetID, &i.Votes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteAutoVoteTargetsExcept = `-- name: DeleteAutoVoteTargetsExcept :exec
 DELETE FROM auto_vote_targets
 WHERE user_id = $1 AND NOT (target_type || ':' || target_id = ANY($2::text[]))
@@ -57,8 +96,30 @@ func (q *Queries) DeleteAutoVoteTargetsExcept(ctx context.Context, arg DeleteAut
 	return err
 }
 
+const getAutoVoteExtraSlots = `-- name: GetAutoVoteExtraSlots :one
+SELECT COALESCE((SELECT extra_slots FROM auto_vote_subscriptions WHERE user_id = $1), 0)::int
+`
+
+func (q *Queries) GetAutoVoteExtraSlots(ctx context.Context, userID string) (int32, error) {
+	row := q.db.QueryRow(ctx, getAutoVoteExtraSlots, userID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const getAutoVoteNotify = `-- name: GetAutoVoteNotify :one
+SELECT notify FROM auto_vote_settings WHERE user_id = $1
+`
+
+func (q *Queries) GetAutoVoteNotify(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRow(ctx, getAutoVoteNotify, userID)
+	var notify string
+	err := row.Scan(&notify)
+	return notify, err
+}
+
 const getAutoVoteSubscription = `-- name: GetAutoVoteSubscription :one
-SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at
+SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, extra_slots, billing_interval
 FROM auto_vote_subscriptions WHERE user_id = $1
 `
 
@@ -70,6 +131,8 @@ type GetAutoVoteSubscriptionRow struct {
 	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
 	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
 	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ExtraSlots           int32              `db:"extra_slots" json:"extra_slots"`
+	BillingInterval      string             `db:"billing_interval" json:"billing_interval"`
 }
 
 func (q *Queries) GetAutoVoteSubscription(ctx context.Context, userID string) (GetAutoVoteSubscriptionRow, error) {
@@ -83,6 +146,8 @@ func (q *Queries) GetAutoVoteSubscription(ctx context.Context, userID string) (G
 		&i.CurrentPeriodEnd,
 		&i.CancelAtPeriodEnd,
 		&i.CreatedAt,
+		&i.ExtraSlots,
+		&i.BillingInterval,
 	)
 	return i, err
 }
@@ -110,7 +175,7 @@ func (q *Queries) GetServerAutoVotesOptOut(ctx context.Context, serverID string)
 }
 
 const listAllAutoVoteSubscriptions = `-- name: ListAllAutoVoteSubscriptions :many
-SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at
+SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at, extra_slots, billing_interval
 FROM auto_vote_subscriptions ORDER BY created_at DESC
 `
 
@@ -132,6 +197,8 @@ func (q *Queries) ListAllAutoVoteSubscriptions(ctx context.Context) ([]AutoVoteS
 			&i.CancelAtPeriodEnd,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ExtraSlots,
+			&i.BillingInterval,
 		); err != nil {
 			return nil, err
 		}
@@ -144,7 +211,7 @@ func (q *Queries) ListAllAutoVoteSubscriptions(ctx context.Context) ([]AutoVoteS
 }
 
 const listAllAutoVoteTargets = `-- name: ListAllAutoVoteTargets :many
-SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at
+SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at, paused
 FROM auto_vote_targets ORDER BY user_id, created_at
 `
 
@@ -168,6 +235,7 @@ func (q *Queries) ListAllAutoVoteTargets(ctx context.Context) ([]AutoVoteTarget,
 			&i.LastVotedAt,
 			&i.LastSkipReason,
 			&i.CreatedAt,
+			&i.Paused,
 		); err != nil {
 			return nil, err
 		}
@@ -180,7 +248,7 @@ func (q *Queries) ListAllAutoVoteTargets(ctx context.Context) ([]AutoVoteTarget,
 }
 
 const listAutoVoteTargets = `-- name: ListAutoVoteTargets :many
-SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at
+SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at, paused
 FROM auto_vote_targets WHERE user_id = $1 ORDER BY created_at
 `
 
@@ -204,6 +272,7 @@ func (q *Queries) ListAutoVoteTargets(ctx context.Context, userID string) ([]Aut
 			&i.LastVotedAt,
 			&i.LastSkipReason,
 			&i.CreatedAt,
+			&i.Paused,
 		); err != nil {
 			return nil, err
 		}
@@ -215,11 +284,50 @@ func (q *Queries) ListAutoVoteTargets(ctx context.Context, userID string) ([]Aut
 	return items, nil
 }
 
+const listDueAutoVoteSummaries = `-- name: ListDueAutoVoteSummaries :many
+SELECT st.user_id, st.last_summary_at
+FROM auto_vote_settings st
+INNER JOIN auto_vote_subscriptions s ON s.user_id = st.user_id
+WHERE st.notify = 'daily' AND s.status IN ('active', 'trialing')
+    AND (st.last_summary_at IS NULL OR st.last_summary_at < NOW() - INTERVAL '24 hours')
+`
+
+type ListDueAutoVoteSummariesRow struct {
+	UserID        string             `db:"user_id" json:"user_id"`
+	LastSummaryAt pgtype.Timestamptz `db:"last_summary_at" json:"last_summary_at"`
+}
+
+func (q *Queries) ListDueAutoVoteSummaries(ctx context.Context) ([]ListDueAutoVoteSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listDueAutoVoteSummaries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueAutoVoteSummariesRow
+	for rows.Next() {
+		var i ListDueAutoVoteSummariesRow
+		if err := rows.Scan(&i.UserID, &i.LastSummaryAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueAutoVoteTargets = `-- name: ListDueAutoVoteTargets :many
-SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at, t.last_skip_reason
-FROM auto_vote_targets t
+SELECT t.user_id, t.target_type, t.target_id, t.days, t.start_minute, t.end_minute, t.timezone, t.last_voted_at, t.last_skip_reason,
+    COALESCE(st.notify, 'off')::text AS notify
+FROM (
+    SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at, paused, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at, target_type, target_id) AS slot
+    FROM auto_vote_targets
+) t
 INNER JOIN auto_vote_subscriptions s ON s.user_id = t.user_id
-WHERE s.status IN ('active', 'trialing') AND (s.current_period_end IS NULL OR s.current_period_end > NOW())
+LEFT JOIN auto_vote_settings st ON st.user_id = t.user_id
+LEFT JOIN booster_perks b ON b.user_id = t.user_id
+WHERE NOT t.paused AND t.slot <= 3 + s.extra_slots + CASE WHEN COALESCE(b.boosting, false) THEN 1 ELSE 0 END AND s.status IN ('active', 'trialing') AND (s.current_period_end IS NULL OR s.current_period_end > NOW())
 `
 
 type ListDueAutoVoteTargetsRow struct {
@@ -232,6 +340,7 @@ type ListDueAutoVoteTargetsRow struct {
 	Timezone       string             `db:"timezone" json:"timezone"`
 	LastVotedAt    pgtype.Timestamptz `db:"last_voted_at" json:"last_voted_at"`
 	LastSkipReason pgtype.Text        `db:"last_skip_reason" json:"last_skip_reason"`
+	Notify         string             `db:"notify" json:"notify"`
 }
 
 func (q *Queries) ListDueAutoVoteTargets(ctx context.Context) ([]ListDueAutoVoteTargetsRow, error) {
@@ -253,6 +362,7 @@ func (q *Queries) ListDueAutoVoteTargets(ctx context.Context) ([]ListDueAutoVote
 			&i.Timezone,
 			&i.LastVotedAt,
 			&i.LastSkipReason,
+			&i.Notify,
 		); err != nil {
 			return nil, err
 		}
@@ -262,6 +372,15 @@ func (q *Queries) ListDueAutoVoteTargets(ctx context.Context) ([]ListDueAutoVote
 		return nil, err
 	}
 	return items, nil
+}
+
+const markAutoVoteSummarySent = `-- name: MarkAutoVoteSummarySent :exec
+UPDATE auto_vote_settings SET last_summary_at = NOW() WHERE user_id = $1
+`
+
+func (q *Queries) MarkAutoVoteSummarySent(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, markAutoVoteSummarySent, userID)
+	return err
 }
 
 const markAutoVoteTargetSkipped = `-- name: MarkAutoVoteTargetSkipped :exec
@@ -302,6 +421,42 @@ func (q *Queries) MarkAutoVoteTargetVoted(ctx context.Context, arg MarkAutoVoteT
 	return err
 }
 
+const setAutoVoteExtraSlots = `-- name: SetAutoVoteExtraSlots :exec
+UPDATE auto_vote_subscriptions SET extra_slots = $2, updated_at = NOW() WHERE user_id = $1
+`
+
+type SetAutoVoteExtraSlotsParams struct {
+	UserID     string `db:"user_id" json:"user_id"`
+	ExtraSlots int32  `db:"extra_slots" json:"extra_slots"`
+}
+
+func (q *Queries) SetAutoVoteExtraSlots(ctx context.Context, arg SetAutoVoteExtraSlotsParams) error {
+	_, err := q.db.Exec(ctx, setAutoVoteExtraSlots, arg.UserID, arg.ExtraSlots)
+	return err
+}
+
+const setAutoVoteNotify = `-- name: SetAutoVoteNotify :exec
+INSERT INTO auto_vote_settings (user_id, notify, last_summary_at)
+VALUES ($1, $2, CASE WHEN $2::text = 'daily' THEN NOW() END)
+ON CONFLICT (user_id) DO UPDATE SET
+    notify = EXCLUDED.notify,
+    last_summary_at = CASE
+        WHEN EXCLUDED.notify = 'daily' AND auto_vote_settings.notify <> 'daily' THEN NOW()
+        ELSE auto_vote_settings.last_summary_at
+    END,
+    updated_at = NOW()
+`
+
+type SetAutoVoteNotifyParams struct {
+	UserID string `db:"user_id" json:"user_id"`
+	Notify string `db:"notify" json:"notify"`
+}
+
+func (q *Queries) SetAutoVoteNotify(ctx context.Context, arg SetAutoVoteNotifyParams) error {
+	_, err := q.db.Exec(ctx, setAutoVoteNotify, arg.UserID, arg.Notify)
+	return err
+}
+
 const setBotAutoVotesOptOut = `-- name: SetBotAutoVotesOptOut :exec
 UPDATE bots SET auto_votes_opt_out = $2 WHERE bot_id = $1
 `
@@ -331,7 +486,7 @@ func (q *Queries) SetServerAutoVotesOptOut(ctx context.Context, arg SetServerAut
 }
 
 const updateAutoVoteSubscriptionByStripeID = `-- name: UpdateAutoVoteSubscriptionByStripeID :execrows
-UPDATE auto_vote_subscriptions SET status = $2, current_period_end = $3, cancel_at_period_end = $4, updated_at = NOW()
+UPDATE auto_vote_subscriptions SET status = $2, current_period_end = $3, cancel_at_period_end = $4, extra_slots = $5, billing_interval = $6, updated_at = NOW()
 WHERE stripe_subscription_id = $1
 `
 
@@ -340,6 +495,8 @@ type UpdateAutoVoteSubscriptionByStripeIDParams struct {
 	Status               string             `db:"status" json:"status"`
 	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
 	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	ExtraSlots           int32              `db:"extra_slots" json:"extra_slots"`
+	BillingInterval      string             `db:"billing_interval" json:"billing_interval"`
 }
 
 func (q *Queries) UpdateAutoVoteSubscriptionByStripeID(ctx context.Context, arg UpdateAutoVoteSubscriptionByStripeIDParams) (int64, error) {
@@ -348,6 +505,8 @@ func (q *Queries) UpdateAutoVoteSubscriptionByStripeID(ctx context.Context, arg 
 		arg.Status,
 		arg.CurrentPeriodEnd,
 		arg.CancelAtPeriodEnd,
+		arg.ExtraSlots,
+		arg.BillingInterval,
 	)
 	if err != nil {
 		return 0, err
@@ -356,14 +515,16 @@ func (q *Queries) UpdateAutoVoteSubscriptionByStripeID(ctx context.Context, arg 
 }
 
 const upsertAutoVoteSubscription = `-- name: UpsertAutoVoteSubscription :exec
-INSERT INTO auto_vote_subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO auto_vote_subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, extra_slots, billing_interval)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (user_id) DO UPDATE SET
     stripe_customer_id = EXCLUDED.stripe_customer_id,
     stripe_subscription_id = EXCLUDED.stripe_subscription_id,
     status = EXCLUDED.status,
     current_period_end = EXCLUDED.current_period_end,
     cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+    extra_slots = EXCLUDED.extra_slots,
+    billing_interval = EXCLUDED.billing_interval,
     updated_at = NOW()
 `
 
@@ -374,6 +535,8 @@ type UpsertAutoVoteSubscriptionParams struct {
 	Status               string             `db:"status" json:"status"`
 	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
 	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	ExtraSlots           int32              `db:"extra_slots" json:"extra_slots"`
+	BillingInterval      string             `db:"billing_interval" json:"billing_interval"`
 }
 
 func (q *Queries) UpsertAutoVoteSubscription(ctx context.Context, arg UpsertAutoVoteSubscriptionParams) error {
@@ -384,18 +547,21 @@ func (q *Queries) UpsertAutoVoteSubscription(ctx context.Context, arg UpsertAuto
 		arg.Status,
 		arg.CurrentPeriodEnd,
 		arg.CancelAtPeriodEnd,
+		arg.ExtraSlots,
+		arg.BillingInterval,
 	)
 	return err
 }
 
 const upsertAutoVoteTarget = `-- name: UpsertAutoVoteTarget :exec
-INSERT INTO auto_vote_targets (user_id, target_type, target_id, days, start_minute, end_minute, timezone)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO auto_vote_targets (user_id, target_type, target_id, days, start_minute, end_minute, timezone, paused)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (user_id, target_type, target_id) DO UPDATE SET
     days = EXCLUDED.days,
     start_minute = EXCLUDED.start_minute,
     end_minute = EXCLUDED.end_minute,
-    timezone = EXCLUDED.timezone
+    timezone = EXCLUDED.timezone,
+    paused = EXCLUDED.paused
 `
 
 type UpsertAutoVoteTargetParams struct {
@@ -406,6 +572,7 @@ type UpsertAutoVoteTargetParams struct {
 	StartMinute int16   `db:"start_minute" json:"start_minute"`
 	EndMinute   int16   `db:"end_minute" json:"end_minute"`
 	Timezone    string  `db:"timezone" json:"timezone"`
+	Paused      bool    `db:"paused" json:"paused"`
 }
 
 func (q *Queries) UpsertAutoVoteTarget(ctx context.Context, arg UpsertAutoVoteTargetParams) error {
@@ -417,6 +584,7 @@ func (q *Queries) UpsertAutoVoteTarget(ctx context.Context, arg UpsertAutoVoteTa
 		arg.StartMinute,
 		arg.EndMinute,
 		arg.Timezone,
+		arg.Paused,
 	)
 	return err
 }

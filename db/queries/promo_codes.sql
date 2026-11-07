@@ -44,3 +44,10 @@ WHERE stripe_session_id = $1 AND status = 'pending';
 -- name: UserHasPaidBefore :one
 SELECT (EXISTS (SELECT 1 FROM payment_fulfillments pf WHERE pf.user_id = sqlc.arg(user_id)::text)
     OR EXISTS (SELECT 1 FROM auto_vote_subscriptions avs WHERE avs.user_id = sqlc.arg(user_id)::text))::bool AS paid;
+
+-- name: ListPromoCodeRedemptions :many
+SELECT user_id, product, status, created_at, completed_at
+FROM promo_code_redemptions
+WHERE promo_code_id = $1
+ORDER BY created_at DESC
+LIMIT 500;

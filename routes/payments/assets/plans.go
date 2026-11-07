@@ -31,9 +31,8 @@ var Plans = []types.PaymentPlan{
 		Name:    "Gold Plan",
 		Benefit: "1 year of premium",
 		TimePeriod: func() int {
-			currentYear := time.Now().Year()
 			days := 365
-			if currentYear%4 == 0 && (currentYear%100 != 0 || currentYear%400 != 0) {
+			if leapYear(time.Now().Year()) {
 				days = 366
 			}
 
@@ -44,4 +43,8 @@ var Plans = []types.PaymentPlan{
 		}(),
 		Price: 7.99,
 	},
+}
+
+func leapYear(year int) bool {
+	return year%4 == 0 && (year%100 != 0 || year%400 == 0)
 }
