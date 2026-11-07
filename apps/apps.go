@@ -18,10 +18,11 @@ var Apps = []types.Position{
 		Info: `Join the Omniplex Staff Team and help us Approve, Deny and Certify Discord Bots.
 
 We are a welcoming and laid back team who is always willing to give new people an opportunity!`,
-		Name:        "Staff Team",
-		Tags:        []string{"Staff", "Bot Reviewing"},
-		ReviewLogic: reviewLogicStaff,
-		Cooldown:    48 * timex.Hour,
+		Name:         "Staff Team",
+		Tags:         []string{"Staff", "Bot Reviewing"},
+		ReviewLogic:  reviewLogicStaff,
+		ApprovalNote: "Next, join our Discord server at https://discord.gg/AxrR4RNSFT if you haven't already, then ping a manager in #staff-only to start onboarding. If you can't see that channel yet, ask any staff member.",
+		Cooldown:     48 * timex.Hour,
 		Questions: []types.Question{
 			{
 				ID:          "experience",

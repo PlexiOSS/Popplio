@@ -6,6 +6,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/mainserver"
 	"popplio/perms"
 	"popplio/routes/staff/assets"
 	"popplio/state"
@@ -100,6 +101,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 
 		app[i].User = user
+
+		if app[i].State == "pending" {
+			member, err := mainserver.IsMember(app[i].UserID)
+
+			if err != nil {
+				state.Logger.Warn("Failed to check applicant server membership", zap.Error(err), zap.String("userId", app[i].UserID))
+			} else {
+				app[i].InMainServer = &member
+			}
+		}
 	}
 
 	return uapi.HttpResponse{

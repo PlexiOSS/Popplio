@@ -118,9 +118,8 @@ func TestGoldenRPCStrings(t *testing.T) {
 		// Pipeline.
 		"This method does not support this target type yet",
 		"You need the %s permission to use %s",
-		"Rate limit exceeded. Wait 5-10 minutes and try again?",
+		"You've run a lot of actions in the last 10 minutes. Wait a few minutes and try again.",
 		"Failed to get ratelimit count",
-		"Failed to reset user token",
 		"Reason must be lower than/equal to %d characters",
 
 		// Handler errors.

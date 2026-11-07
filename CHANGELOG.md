@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /staff/tickets/{id}`, `POST /staff/tickets/{id}/messages` and
+  `PATCH /staff/tickets/{id}`, so the staff panel can open, reply to, close
+  and reopen any ticket with its own sign-in instead of a member session on
+  the website. They need the same `view_tickets` and `manage_tickets`
+  permissions as the member routes.
+- `GET /staff/apps` includes `in_main_server` on pending applications:
+  whether the applicant is in the Omniplex Discord server. It's left out
+  when Discord couldn't be checked.
+
+### Changed
+
+- Staff panel sessions last much longer. A session now ends after 12
+  hours without activity instead of 1 hour. Signing in on one device no
+  longer signs that staff member out everywhere else, so the panel can stay
+  open on several devices at once. Signing out still only ends that
+  device's session, and resetting two-factor still ends all of them.
+- The staff panel's limit on actions (claiming, approving, denying and the
+  other RPC actions) is now 30 per 10 minutes instead of 5 per 7 minutes.
+  Going over it refuses the action with a message instead of signing the
+  staff member out on every device, and refused actions no longer count
+  towards the limit or appear in the RPC log.
+- Staff applications no longer DM the applicant. The approval or denial
+  reaches them as an Omniplex notification, which every applicant already
+  got, and which now also includes the reviewer's feedback on approvals.
+  Staff Team approvals add the next onboarding step: join the Discord
+  server and ping a manager in #staff-only.
+- Notifications about an application now name the position (such as
+  "Staff Team") instead of its ID (`staff`).
+
+### Fixed
+
+- Approving or denying a staff application failed whenever the bot couldn't
+  DM the applicant, which happens for anyone who doesn't share a server
+  with it or has DMs from server members turned off. Staff had to tell the
+  applicant themselves and deny with a `MANUALLYNOTIFIED` reason. The
+  review now always goes through, and a `MANUALLYNOTIFIED ` prefix typed
+  out of habit is removed from the reason.
+- Approving a staff applicant who isn't in the Discord server no longer
+  fails because the Awaiting Staff role can't be given. The application is
+  approved, and a manager gives the role by hand once they join.
+  `PATCH /staff/apps/{app_id}` now answers with a 200 and a `staff_note`
+  saying so, which the staff panel shows, and the apps channel post gets a
+  **Needs Follow-up** field. It used to answer with a 204 and no body.
+
 ## [1.20.0] - 2026-11-05
 
 ### Added

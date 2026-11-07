@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"popplio/db"
@@ -268,17 +267,17 @@ func extraLogicCertServer(d uapi.RouteData, p types.Position, answers map[string
 	return checkCertStats(memberCount, uniqueClicks, approxVotes, "members", certMinServerMembers)
 }
 
-func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
+func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) (string, error) {
 	if approve {
 
 		if len(reason) > 384 {
-			return errors.New("reason must be less than 384 characters")
+			return "", errors.New("reason must be less than 384 characters")
 		}
 
 		userId, err := snowflake.Parse(resp.UserID)
 
 		if err != nil {
-			return fmt.Errorf("error parsing user ID: %w", err)
+			return "", fmt.Errorf("error parsing user ID: %w", err)
 		}
 
 		err = state.Discord.Rest().DeleteBan(
@@ -288,47 +287,47 @@ func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason strin
 		)
 
 		if err != nil {
-			return err
+			return "", err
 		}
 	} else {
-		return nil
+		return "", nil
 	}
 
-	return nil
+	return "", nil
 }
 
-func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
+func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) (string, error) {
 	if approve {
 		botID, ok := resp.Answers["id"]
 
 		if !ok {
-			return errors.New("bot ID not found")
+			return "", errors.New("bot ID not found")
 		}
 
 		botIdSnow, err := snowflake.Parse(botID)
 
 		if err != nil {
-			return fmt.Errorf("error parsing bot ID: %w", err)
+			return "", fmt.Errorf("error parsing bot ID: %w", err)
 		}
 
 		botType, err := db.New(state.Pool).GetBotType(d.Context, botID)
 
 		if err != nil {
-			return fmt.Errorf("error getting bot type, does the bot exist?: %w", err)
+			return "", fmt.Errorf("error getting bot type, does the bot exist?: %w", err)
 		}
 
 		if botType == "certified" {
-			return nil
+			return "", nil
 		}
 
 		if botType != "approved" {
-			return errors.New("bot is not approved | state=" + botType + ". Please deny the certification until approved")
+			return "", errors.New("bot is not approved | state=" + botType + ". Please deny the certification until approved")
 		}
 
 		err = db.New(state.Pool).CertifyBot(d.Context, botID)
 
 		if err != nil {
-			return fmt.Errorf("error setting bot type to certified: %w", err)
+			return "", fmt.Errorf("error setting bot type to certified: %w", err)
 		}
 
 		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, botIdSnow, state.Config.Roles.CertBot); err != nil {
@@ -366,41 +365,41 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 		})
 
 		if err != nil {
-			return fmt.Errorf("error sending embed to bot logs channel, but successfully certified bot: %w", err)
+			return "", fmt.Errorf("error sending embed to bot logs channel, but successfully certified bot: %w", err)
 		}
 	} else {
-		return nil
+		return "", nil
 	}
 
-	return nil
+	return "", nil
 }
 
-func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
+func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) (string, error) {
 	if approve {
 		serverID, ok := resp.Answers["id"]
 
 		if !ok {
-			return errors.New("server ID not found")
+			return "", errors.New("server ID not found")
 		}
 
 		serverType, err := db.New(state.Pool).GetServerType(d.Context, serverID)
 
 		if err != nil {
-			return fmt.Errorf("error getting server type, does the server exist?: %w", err)
+			return "", fmt.Errorf("error getting server type, does the server exist?: %w", err)
 		}
 
 		if serverType == "certified" {
-			return nil
+			return "", nil
 		}
 
 		if serverType != "approved" {
-			return errors.New("server is not approved | state=" + serverType + ". Please deny the certification until approved")
+			return "", errors.New("server is not approved | state=" + serverType + ". Please deny the certification until approved")
 		}
 
 		err = db.New(state.Pool).CertifyServer(d.Context, serverID)
 
 		if err != nil {
-			return fmt.Errorf("error setting server type to certified: %w", err)
+			return "", fmt.Errorf("error setting server type to certified: %w", err)
 		}
 
 		if ownerIDs, err := certServerOwnerIDs(d.Context, serverID); err != nil {
@@ -434,98 +433,30 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 		})
 
 		if err != nil {
-			return fmt.Errorf("error sending embed to bot logs channel, but successfully certified server: %w", err)
+			return "", fmt.Errorf("error sending embed to bot logs channel, but successfully certified server: %w", err)
 		}
 	} else {
-		return nil
+		return "", nil
 	}
 
-	return nil
+	return "", nil
 }
 
-func reviewLogicStaff(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) error {
+func reviewLogicStaff(d uapi.RouteData, resp types.AppResponse, reason string, approve bool) (string, error) {
+	if !approve {
+		return "", nil
+	}
+
 	userId, err := snowflake.Parse(resp.UserID)
 
 	if err != nil {
-		return fmt.Errorf("error parsing user ID: %w", err)
+		return "", fmt.Errorf("error parsing user ID: %w", err)
 	}
 
-	if approve {
-		err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, userId, state.Config.Roles.AwaitingStaff)
-
-		if err != nil {
-			return err
-		}
-
-		dmchan, err := state.Discord.Rest().CreateDMChannel(userId)
-
-		if err != nil {
-			return errors.New("could not send DM, please ask the user to accept DMs from server members")
-		}
-
-		if len(reason) > 1024 {
-			return errors.New("reason must be 1024 characters or less")
-		}
-
-		_, err = state.Discord.Rest().CreateMessage(dmchan.ID(), discord.MessageCreate{
-			Embeds: []discord.Embed{
-				{
-					Title:       "Staff Application Whitelisted",
-					Description: "Your staff application has been whitelisted for onboarding! Please ping any manager at #staff-only in our discord server to get started.",
-					Color:       0x00ff00,
-					Fields: []discord.EmbedField{
-						{
-							Name:  "Feedback",
-							Value: reason,
-						},
-					},
-					Footer: &discord.EmbedFooter{
-						Text: "Congratulations!",
-					},
-				},
-			},
-		})
-
-		if err != nil {
-			return errors.New("could not send DM, please ask the user to accept DMs from server members")
-		}
-
-		return nil
-	} else {
-		if strings.HasPrefix(reason, "MANUALLYNOTIFIED ") {
-			state.Logger.Info("forcing denial of staff application that was manually notified by a manager", zap.String("userID", resp.UserID))
-			return nil
-		}
-
-		dmchan, err := state.Discord.Rest().CreateDMChannel(userId)
-
-		if err != nil {
-			return fmt.Errorf("could not create DM channel with user, please inform them manually, then deny with reason of 'MANUALLYNOTIFIED <your reason here>': %w", err)
-		}
-
-		_, err = state.Discord.Rest().CreateMessage(dmchan.ID(), discord.MessageCreate{
-			Embeds: []discord.Embed{
-				{
-					Title:       "Staff Application Denied",
-					Description: "Unfortunately, we have denied your staff application for Omniplex. You may reapply later if you wish to",
-					Color:       0x00ff00,
-					Fields: []discord.EmbedField{
-						{
-							Name:  "Reason",
-							Value: reason,
-						},
-					},
-					Footer: &discord.EmbedFooter{
-						Text: "Better luck next time?",
-					},
-				},
-			},
-		})
-
-		if err != nil {
-			return fmt.Errorf("could not send DM, please inform them manually, then deny with reason of 'MANUALLYNOTIFIED <your reason here>': %w", err)
-		}
-
-		return nil
+	if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, userId, state.Config.Roles.AwaitingStaff); err != nil {
+		state.Logger.Warn("Could not give the approved staff applicant the awaiting staff role, a manager needs to give it by hand", zap.Error(err), zap.String("userID", resp.UserID))
+		return "Couldn't give them the Awaiting Staff role, most likely because they aren't in the Discord server yet. Give it to them by hand once they join.", nil
 	}
+
+	return "", nil
 }

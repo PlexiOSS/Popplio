@@ -61,7 +61,7 @@ func (q *Queries) CountBotsByType(ctx context.Context) ([]CountBotsByTypeRow, er
 }
 
 const countRecentRPCLogs = `-- name: CountRecentRPCLogs :one
-SELECT COUNT(*) FROM rpc_logs WHERE user_id = $1 AND NOW() - created_at < INTERVAL '7 minutes'
+SELECT COUNT(*) FROM rpc_logs WHERE user_id = $1 AND NOW() - created_at < INTERVAL '10 minutes'
 `
 
 func (q *Queries) CountRecentRPCLogs(ctx context.Context, userID string) (int64, error) {
@@ -151,7 +151,7 @@ func (q *Queries) DeleteStaffPosition(ctx context.Context, id pgtype.UUID) error
 }
 
 const deleteStaleAuthChainEntries = `-- name: DeleteStaleAuthChainEntries :exec
-DELETE FROM staffpanel__authchain WHERE last_seen_at < NOW() - INTERVAL '1 hour'
+DELETE FROM staffpanel__authchain WHERE last_seen_at < NOW() - INTERVAL '12 hours'
 `
 
 func (q *Queries) DeleteStaleAuthChainEntries(ctx context.Context) error {

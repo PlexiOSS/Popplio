@@ -8,7 +8,7 @@ SELECT method, COUNT(*) FROM rpc_logs WHERE user_id = $1 GROUP BY method;
 INSERT INTO rpc_logs (method, user_id, data) VALUES ($1, $2, $3) RETURNING id;
 
 -- name: CountRecentRPCLogs :one
-SELECT COUNT(*) FROM rpc_logs WHERE user_id = $1 AND NOW() - created_at < INTERVAL '7 minutes';
+SELECT COUNT(*) FROM rpc_logs WHERE user_id = $1 AND NOW() - created_at < INTERVAL '10 minutes';
 
 -- name: UpdateRPCLogState :exec
 UPDATE rpc_logs SET state = $1 WHERE id = $2;
@@ -28,7 +28,7 @@ ON CONFLICT (target_type, target_id, badge_id) DO UPDATE SET reason = $4, awarde
 DELETE FROM entity_badges WHERE target_type = $1 AND target_id = $2 AND badge_id = $3;
 
 -- name: DeleteStaleAuthChainEntries :exec
-DELETE FROM staffpanel__authchain WHERE last_seen_at < NOW() - INTERVAL '1 hour';
+DELETE FROM staffpanel__authchain WHERE last_seen_at < NOW() - INTERVAL '12 hours';
 
 -- name: DeleteExpiredPendingAuthChainEntries :exec
 DELETE FROM staffpanel__authchain WHERE state = 'pending' AND created_at < NOW() - INTERVAL '5 minutes';

@@ -172,10 +172,6 @@ func (s *Server) authCreateSession(ctx context.Context, action *types.AuthCreate
 
 	queries := db.New(tx)
 
-	if err := queries.DeleteAuthChainByUserID(ctx, user.ID); err != nil {
-		return response{}, newError(err)
-	}
-
 	token := impls.GenRandom(impls.RandRange(4196, 6000))
 
 	err = queries.InsertAuthChain(ctx, db.InsertAuthChainParams{
