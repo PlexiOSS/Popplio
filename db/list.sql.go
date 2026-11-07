@@ -161,6 +161,90 @@ func (q *Queries) GetListTags(ctx context.Context) ([]GetListTagsRow, error) {
 	return items, nil
 }
 
+const getMonthlyStatsHistory = `-- name: GetMonthlyStatsHistory :many
+WITH months AS (
+    SELECT generate_series(
+        date_trunc('month', LEAST(
+            COALESCE((SELECT MIN(created_at) FROM bots), NOW()),
+            COALESCE((SELECT MIN(created_at)::timestamptz FROM entity_votes), NOW())
+        )),
+        date_trunc('month', NOW()),
+        INTERVAL '1 month'
+    ) AS month
+),
+v AS (
+    SELECT date_trunc('month', created_at::timestamptz) AS month,
+        COUNT(*) FILTER (WHERE upvote) AS votes,
+        COUNT(DISTINCT author) FILTER (WHERE upvote) AS voters
+    FROM entity_votes GROUP BY 1
+),
+r AS (
+    SELECT date_trunc('month', created_at) AS month,
+        COUNT(*) FILTER (WHERE method = 'Approve') AS approved,
+        COUNT(*) FILTER (WHERE method = 'Deny') AS denied
+    FROM rpc_logs WHERE method IN ('Approve', 'Deny') AND state = 'success' GROUP BY 1
+),
+b AS (SELECT date_trunc('month', created_at) AS month, COUNT(*) AS n FROM bots GROUP BY 1),
+s AS (SELECT date_trunc('month', created_at) AS month, COUNT(*) AS n FROM servers GROUP BY 1),
+u AS (SELECT date_trunc('month', created_at) AS month, COUNT(*) AS n FROM users GROUP BY 1)
+SELECT
+    to_char(m.month, 'YYYY-MM')::text AS month,
+    COALESCE(v.votes, 0)::bigint AS votes,
+    COALESCE(v.voters, 0)::bigint AS voters,
+    COALESCE(r.approved, 0)::bigint AS approved,
+    COALESCE(r.denied, 0)::bigint AS denied,
+    COALESCE(b.n, 0)::bigint AS new_bots,
+    COALESCE(s.n, 0)::bigint AS new_servers,
+    COALESCE(u.n, 0)::bigint AS new_users
+FROM months m
+LEFT JOIN v ON v.month = m.month
+LEFT JOIN r ON r.month = m.month
+LEFT JOIN b ON b.month = m.month
+LEFT JOIN s ON s.month = m.month
+LEFT JOIN u ON u.month = m.month
+ORDER BY m.month
+`
+
+type GetMonthlyStatsHistoryRow struct {
+	Month      string `db:"month" json:"month"`
+	Votes      int64  `db:"votes" json:"votes"`
+	Voters     int64  `db:"voters" json:"voters"`
+	Approved   int64  `db:"approved" json:"approved"`
+	Denied     int64  `db:"denied" json:"denied"`
+	NewBots    int64  `db:"new_bots" json:"new_bots"`
+	NewServers int64  `db:"new_servers" json:"new_servers"`
+	NewUsers   int64  `db:"new_users" json:"new_users"`
+}
+
+func (q *Queries) GetMonthlyStatsHistory(ctx context.Context) ([]GetMonthlyStatsHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getMonthlyStatsHistory)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMonthlyStatsHistoryRow
+	for rows.Next() {
+		var i GetMonthlyStatsHistoryRow
+		if err := rows.Scan(
+			&i.Month,
+			&i.Votes,
+			&i.Voters,
+			&i.Approved,
+			&i.Denied,
+			&i.NewBots,
+			&i.NewServers,
+			&i.NewUsers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getNewBotIDs = `-- name: GetNewBotIDs :many
 
 SELECT bot_id FROM bots WHERE (type = 'approved' OR type = 'certified') ORDER BY created_at DESC LIMIT $1 OFFSET $2
@@ -376,4 +460,43 @@ func (q *Queries) GetStaffTemplates(ctx context.Context, entityType pgtype.Text)
 		return nil, err
 	}
 	return items, nil
+}
+
+const getStatsHistoryTotals = `-- name: GetStatsHistoryTotals :one
+SELECT
+    (SELECT COUNT(*) FROM entity_votes WHERE upvote)::bigint AS votes_all_time,
+    (SELECT COUNT(*) FROM entity_votes WHERE upvote AND NOT void)::bigint AS votes_this_month,
+    (SELECT COUNT(DISTINCT author) FROM entity_votes WHERE upvote)::bigint AS voters_all_time,
+    (SELECT MIN(created_at) FROM entity_votes)::timestamptz AS votes_since,
+    (SELECT COUNT(*) FROM rpc_logs WHERE method = 'Approve' AND state = 'success')::bigint AS approvals,
+    (SELECT COUNT(*) FROM rpc_logs WHERE method = 'Deny' AND state = 'success')::bigint AS denials,
+    (SELECT MIN(created_at) FROM rpc_logs WHERE method IN ('Approve', 'Deny') AND state = 'success')::timestamptz AS reviews_since,
+    (SELECT MIN(created_at) FROM users)::timestamptz AS users_since
+`
+
+type GetStatsHistoryTotalsRow struct {
+	VotesAllTime   int64              `db:"votes_all_time" json:"votes_all_time"`
+	VotesThisMonth int64              `db:"votes_this_month" json:"votes_this_month"`
+	VotersAllTime  int64              `db:"voters_all_time" json:"voters_all_time"`
+	VotesSince     pgtype.Timestamptz `db:"votes_since" json:"votes_since"`
+	Approvals      int64              `db:"approvals" json:"approvals"`
+	Denials        int64              `db:"denials" json:"denials"`
+	ReviewsSince   pgtype.Timestamptz `db:"reviews_since" json:"reviews_since"`
+	UsersSince     pgtype.Timestamptz `db:"users_since" json:"users_since"`
+}
+
+func (q *Queries) GetStatsHistoryTotals(ctx context.Context) (GetStatsHistoryTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getStatsHistoryTotals)
+	var i GetStatsHistoryTotalsRow
+	err := row.Scan(
+		&i.VotesAllTime,
+		&i.VotesThisMonth,
+		&i.VotersAllTime,
+		&i.VotesSince,
+		&i.Approvals,
+		&i.Denials,
+		&i.ReviewsSince,
+		&i.UsersSince,
+	)
+	return i, err
 }

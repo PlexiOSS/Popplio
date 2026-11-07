@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Arcadia's staff leaderboard (and the top reviewer roles it hands out)
+  counted every Approve and Deny attempt, including ones that failed, such
+  as approving before testing for 5 minutes. Only reviews that went through
+  are counted now.
+
+### Added
+
+- `GET /list/stats/history`: all-time votes (including ones cleared by
+  monthly resets), this month's votes, everyone who has ever voted, all-time
+  approvals and denials, and a month-by-month history of votes, voters,
+  reviews, submitted bots, added servers and sign-ups. Months before a
+  series has records come back as null rather than 0. Cached for 10
+  minutes.
+
 ## [1.22.0] - 2026-11-07
 
 ### Fixed

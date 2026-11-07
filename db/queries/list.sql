@@ -69,3 +69,57 @@ FROM t
 WHERE key <> ''
 GROUP BY key
 ORDER BY COUNT(*) DESC, key;
+
+-- name: GetStatsHistoryTotals :one
+SELECT
+    (SELECT COUNT(*) FROM entity_votes WHERE upvote)::bigint AS votes_all_time,
+    (SELECT COUNT(*) FROM entity_votes WHERE upvote AND NOT void)::bigint AS votes_this_month,
+    (SELECT COUNT(DISTINCT author) FROM entity_votes WHERE upvote)::bigint AS voters_all_time,
+    (SELECT MIN(created_at) FROM entity_votes)::timestamptz AS votes_since,
+    (SELECT COUNT(*) FROM rpc_logs WHERE method = 'Approve' AND state = 'success')::bigint AS approvals,
+    (SELECT COUNT(*) FROM rpc_logs WHERE method = 'Deny' AND state = 'success')::bigint AS denials,
+    (SELECT MIN(created_at) FROM rpc_logs WHERE method IN ('Approve', 'Deny') AND state = 'success')::timestamptz AS reviews_since,
+    (SELECT MIN(created_at) FROM users)::timestamptz AS users_since;
+
+-- name: GetMonthlyStatsHistory :many
+WITH months AS (
+    SELECT generate_series(
+        date_trunc('month', LEAST(
+            COALESCE((SELECT MIN(created_at) FROM bots), NOW()),
+            COALESCE((SELECT MIN(created_at)::timestamptz FROM entity_votes), NOW())
+        )),
+        date_trunc('month', NOW()),
+        INTERVAL '1 month'
+    ) AS month
+),
+v AS (
+    SELECT date_trunc('month', created_at::timestamptz) AS month,
+        COUNT(*) FILTER (WHERE upvote) AS votes,
+        COUNT(DISTINCT author) FILTER (WHERE upvote) AS voters
+    FROM entity_votes GROUP BY 1
+),
+r AS (
+    SELECT date_trunc('month', created_at) AS month,
+        COUNT(*) FILTER (WHERE method = 'Approve') AS approved,
+        COUNT(*) FILTER (WHERE method = 'Deny') AS denied
+    FROM rpc_logs WHERE method IN ('Approve', 'Deny') AND state = 'success' GROUP BY 1
+),
+b AS (SELECT date_trunc('month', created_at) AS month, COUNT(*) AS n FROM bots GROUP BY 1),
+s AS (SELECT date_trunc('month', created_at) AS month, COUNT(*) AS n FROM servers GROUP BY 1),
+u AS (SELECT date_trunc('month', created_at) AS month, COUNT(*) AS n FROM users GROUP BY 1)
+SELECT
+    to_char(m.month, 'YYYY-MM')::text AS month,
+    COALESCE(v.votes, 0)::bigint AS votes,
+    COALESCE(v.voters, 0)::bigint AS voters,
+    COALESCE(r.approved, 0)::bigint AS approved,
+    COALESCE(r.denied, 0)::bigint AS denied,
+    COALESCE(b.n, 0)::bigint AS new_bots,
+    COALESCE(s.n, 0)::bigint AS new_servers,
+    COALESCE(u.n, 0)::bigint AS new_users
+FROM months m
+LEFT JOIN v ON v.month = m.month
+LEFT JOIN r ON r.month = m.month
+LEFT JOIN b ON b.month = m.month
+LEFT JOIN s ON s.month = m.month
+LEFT JOIN u ON u.month = m.month
+ORDER BY m.month;
