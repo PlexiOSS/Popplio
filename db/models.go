@@ -347,6 +347,24 @@ type EntityBadge struct {
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type EntityPageStyle struct {
+	TargetType          string             `db:"target_type" json:"target_type"`
+	TargetID            string             `db:"target_id" json:"target_id"`
+	Gradient            pgtype.Text        `db:"gradient" json:"gradient"`
+	Accent              pgtype.Text        `db:"accent" json:"accent"`
+	ImageVersion        pgtype.Text        `db:"image_version" json:"image_version"`
+	PendingImageVersion pgtype.Text        `db:"pending_image_version" json:"pending_image_version"`
+	PendingSince        pgtype.Timestamptz `db:"pending_since" json:"pending_since"`
+	RejectedReason      pgtype.Text        `db:"rejected_reason" json:"rejected_reason"`
+	ReviewedBy          pgtype.Text        `db:"reviewed_by" json:"reviewed_by"`
+	ReviewedAt          pgtype.Timestamptz `db:"reviewed_at" json:"reviewed_at"`
+	Dim                 int16              `db:"dim" json:"dim"`
+	Blur                int16              `db:"blur" json:"blur"`
+	ImagePosition       string             `db:"image_position" json:"image_position"`
+	Fixed               bool               `db:"fixed" json:"fixed"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type EntityStatsDaily struct {
 	TargetType    string             `db:"target_type" json:"target_type"`
 	TargetID      string             `db:"target_id" json:"target_id"`

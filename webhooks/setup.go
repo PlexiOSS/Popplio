@@ -11,12 +11,15 @@ import (
 	docs "github.com/PlexiOSS/Keel/doclib"
 )
 
-func Setup() {
+func RegisterDocs() {
 	docs.AddTag(
 		"Webhooks",
 		"Webhooks are a way to receive events from Omniplex in real time. You can use webhooks to receive events such as new votes, new reviews, and more.",
 	)
 
 	events.RegisterAddedEvents()
+}
+
+func Setup() {
 	go drivers.PullPendingForAll()
 }

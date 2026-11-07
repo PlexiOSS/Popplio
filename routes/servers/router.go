@@ -9,6 +9,7 @@ import (
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/entityassets/put_entity_asset"
+	"popplio/routes/pagestyle"
 	"popplio/routes/servers/endpoints/add_server"
 	"popplio/routes/servers/endpoints/create_server_changelog"
 	"popplio/routes/servers/endpoints/delete_server"
@@ -47,6 +48,7 @@ func (b Router) Tag() (string, string) {
 
 func (b Router) Routes(r *chi.Mux) {
 	put_entity_asset.Mount(r, api.TargetTypeServer, "/servers", "id", perms.EntityEditServers)
+	pagestyle.Mount(r, api.TargetTypeServer, "/servers", perms.EntityEditServers)
 
 	uapi.Route{
 		Pattern: "/servers/@all",

@@ -28,6 +28,7 @@ type PanelQuery struct {
 	UpdateShopItemBenefits      *QUpdateShopItemBenefits
 	UpdateShopCoupons           *QUpdateShopCoupons
 	UpdatePromoCodes            *QUpdatePromoCodes
+	UpdatePageStyles            *QUpdatePageStyles
 	UpdateBotWhitelist          *QUpdateBotWhitelist
 	UpdateBadges                *QUpdateBadges
 	UpdateStaffTemplates        *QUpdateStaffTemplates
@@ -128,6 +129,11 @@ type QUpdateShopCoupons struct {
 type QUpdatePromoCodes struct {
 	LoginToken string          `json:"login_token"`
 	Action     PromoCodeAction `json:"action"`
+}
+
+type QUpdatePageStyles struct {
+	LoginToken string          `json:"login_token"`
+	Action     PageStyleAction `json:"action"`
 }
 
 type QUpdateBotWhitelist struct {
@@ -239,6 +245,9 @@ func (q *PanelQuery) UnmarshalJSON(data []byte) error {
 	case "UpdatePromoCodes":
 		q.UpdatePromoCodes = &QUpdatePromoCodes{}
 		into = q.UpdatePromoCodes
+	case "UpdatePageStyles":
+		q.UpdatePageStyles = &QUpdatePageStyles{}
+		into = q.UpdatePageStyles
 	case "UpdateBotWhitelist":
 		q.UpdateBotWhitelist = &QUpdateBotWhitelist{}
 		into = q.UpdateBotWhitelist
@@ -310,6 +319,8 @@ func (q PanelQuery) MarshalJSON() ([]byte, error) {
 		return encodeVariant("UpdateShopCoupons", q.UpdateShopCoupons)
 	case q.UpdatePromoCodes != nil:
 		return encodeVariant("UpdatePromoCodes", q.UpdatePromoCodes)
+	case q.UpdatePageStyles != nil:
+		return encodeVariant("UpdatePageStyles", q.UpdatePageStyles)
 	case q.UpdateBotWhitelist != nil:
 		return encodeVariant("UpdateBotWhitelist", q.UpdateBotWhitelist)
 	case q.UpdateBadges != nil:

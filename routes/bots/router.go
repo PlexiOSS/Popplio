@@ -31,6 +31,7 @@ import (
 	"popplio/routes/bots/endpoints/put_bot_commands"
 	"popplio/routes/bots/endpoints/search_bot_commands"
 	"popplio/routes/entityassets/put_entity_asset"
+	"popplio/routes/pagestyle"
 
 	"github.com/go-chi/chi/v5"
 
@@ -49,6 +50,7 @@ func (b Router) Tag() (string, string) {
 
 func (b Router) Routes(r *chi.Mux) {
 	put_entity_asset.Mount(r, api.TargetTypeBot, "/bots", "id", perms.EntityEditBots)
+	pagestyle.Mount(r, api.TargetTypeBot, "/bots", perms.EntityEditBots)
 
 	uapi.Route{
 		Pattern: "/bots/@all",
