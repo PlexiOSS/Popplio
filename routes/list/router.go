@@ -5,6 +5,7 @@ package list
 
 import (
 	"popplio/routes/list/endpoints/get_list_stats"
+	"popplio/routes/list/endpoints/get_stats_history"
 	"popplio/routes/list/endpoints/get_list_tags"
 	"popplio/routes/list/endpoints/get_partners"
 	"popplio/routes/list/endpoints/get_rss_feed"
@@ -56,6 +57,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.GET,
 		Docs:    get_list_tags.Docs,
 		Handler: get_list_tags.Route,
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/list/stats/history",
+		OpId:    "get_stats_history",
+		Method:  uapi.GET,
+		Docs:    get_stats_history.Docs,
+		Handler: get_stats_history.Route,
 	}.Route(r)
 
 	uapi.Route{

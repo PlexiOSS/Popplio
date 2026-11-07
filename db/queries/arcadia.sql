@@ -170,7 +170,7 @@ SELECT user_id, approved_count, denied_count, total_count FROM (
 		SUM(CASE WHEN rpc.method IN ('Approve', 'Deny') THEN 1 ELSE 0 END) AS total_count
 	FROM rpc_logs rpc
 	LEFT JOIN staff_members sm ON rpc.user_id = sm.user_id
-	WHERE rpc.method IN ('Approve', 'Deny') AND sm.user_id IS NOT NULL
+	WHERE rpc.method IN ('Approve', 'Deny') AND rpc.state = 'success' AND sm.user_id IS NOT NULL
 	GROUP BY rpc.user_id
 ) AS subquery
 WHERE total_count > 0
