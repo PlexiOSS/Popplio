@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	"kitehelper/common"
+	"kitehelper/seedci"
 	"os"
 	"os/exec"
 	"strconv"
@@ -203,5 +204,10 @@ func (ts testset) Run() {
 }
 
 func Tester(progname string, args []string) {
+	if _, _, err := seedci.Write(); err != nil {
+		fmt.Println("ERROR: building the schema list for the tests:", err)
+		os.Exit(1)
+	}
+
 	testList.Run()
 }

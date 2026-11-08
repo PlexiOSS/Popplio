@@ -60,7 +60,7 @@ var cmds = map[string]command{
 	},
 	"seed-ci": {
 		Func: seedci.SeedCI,
-		Help: "Regenerate data/seed-ci.json from db/schema.sql [--check to fail if it's out of date instead of writing]",
+		Help: "Write data/seed-ci.json from db/schema.sql. kitehelper test does this itself, so you only need it to look at the file",
 	},
 }
 

@@ -1,7 +1,6 @@
 package seedci
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"kitehelper/common"
@@ -29,87 +28,49 @@ var (
 	defaultPattern = regexp.MustCompile(`DEFAULT (.+?)(?: NOT NULL)?$`)
 	typeSplit      = regexp.MustCompile(` DEFAULT | NOT NULL`)
 	skipTables     = []string{"goose_db_version"}
+	secretColumns  = []string{"bots.api_token", "servers.invite", "users.api_token"}
 )
 
-func SeedCI(progname string, args []string) {
-	check := slices.Contains(args, "--check")
+func Write() (string, int, error) {
 	root := common.GetRepoRoot()
-	schemaPath := filepath.Join(root, "db", "schema.sql")
+	schema, err := os.ReadFile(filepath.Join(root, "db", "schema.sql"))
+
+	if err != nil {
+		return "", 0, fmt.Errorf("reading db/schema.sql: %w", err)
+	}
+
+	cols := build(string(schema))
+	encoded, err := json.Marshal(cols)
+
+	if err != nil {
+		return "", 0, fmt.Errorf("encoding seed: %w", err)
+	}
+
 	seedPath := filepath.Join(root, "data", "seed-ci.json")
 
-	schema, err := os.ReadFile(schemaPath)
-
-	if err != nil {
-		fmt.Println("ERROR: reading", schemaPath+":", err)
-		os.Exit(1)
-	}
-
-	current, err := os.ReadFile(seedPath)
-
-	if err != nil {
-		fmt.Println("ERROR: reading", seedPath+":", err)
-		os.Exit(1)
-	}
-
-	var existing []column
-
-	if err := json.Unmarshal(current, &existing); err != nil {
-		fmt.Println("ERROR: parsing", seedPath+":", err)
-		os.Exit(1)
-	}
-
-	next, added, removed := build(string(schema), existing)
-
-	encoded, err := json.Marshal(next)
-
-	if err != nil {
-		fmt.Println("ERROR: encoding seed:", err)
-		os.Exit(1)
-	}
-
-	encoded = bytes.ReplaceAll(encoded, []byte(`<`), []byte("<"))
-	encoded = bytes.ReplaceAll(encoded, []byte(`>`), []byte(">"))
-	encoded = bytes.ReplaceAll(encoded, []byte(`&`), []byte("&"))
-
-	for _, c := range added {
-		fmt.Println("+", c)
-	}
-
-	for _, c := range removed {
-		fmt.Println("-", c)
-	}
-
-	if bytes.Equal(bytes.TrimSpace(current), encoded) {
-		fmt.Println("data/seed-ci.json is up to date with db/schema.sql")
-		return
-	}
-
-	if check {
-		fmt.Println("data/seed-ci.json is out of date with db/schema.sql. Run: kitehelper seed-ci")
-		os.Exit(1)
-	}
-
 	if err := os.WriteFile(seedPath, encoded, 0o644); err != nil {
-		fmt.Println("ERROR: writing", seedPath+":", err)
-		os.Exit(1)
+		return "", 0, fmt.Errorf("writing %s: %w", seedPath, err)
 	}
 
-	fmt.Printf("Updated data/seed-ci.json: %d columns (%d added, %d removed)\n", len(next), len(added), len(removed))
+	return seedPath, len(cols), nil
 }
 
-func build(schema string, existing []column) (next []column, added, removed []string) {
-	known := make(map[string]column, len(existing))
+func SeedCI(progname string, args []string) {
+	path, n, err := Write()
 
-	for _, c := range existing {
-		known[c.TableName+"."+c.ColumnName] = c
+	if err != nil {
+		fmt.Println("ERROR:", err)
+		os.Exit(1)
 	}
 
-	schemaTables := map[string]bool{}
-	seen := map[string]bool{}
+	fmt.Printf("Wrote %s from db/schema.sql: %d columns\n", path, n)
+}
+
+func build(schema string) []column {
+	var next []column
 
 	for _, m := range tablePattern.FindAllStringSubmatch(schema, -1) {
 		table := m[1]
-		schemaTables[table] = true
 
 		if slices.Contains(skipTables, table) {
 			continue
@@ -129,14 +90,6 @@ func build(schema string, existing []column) (next []column, added, removed []st
 			}
 
 			name, rest := cm[1], cm[2]
-			key := table + "." + name
-			seen[key] = true
-
-			if c, ok := known[key]; ok {
-				next = append(next, c)
-				continue
-			}
-
 			typ := strings.TrimSpace(typeSplit.Split(rest, 2)[0])
 			c := column{
 				DefaultVal: json.RawMessage("null"),
@@ -145,6 +98,7 @@ func build(schema string, existing []column) (next []column, added, removed []st
 				Type:       strings.ReplaceAll(typ, "[]", ""),
 				Nullable:   !strings.Contains(rest, "NOT NULL"),
 				Array:      strings.Contains(typ, "[]"),
+				Secret:     slices.Contains(secretColumns, table+"."+name),
 			}
 
 			if dm := defaultPattern.FindStringSubmatch(rest); dm != nil {
@@ -153,22 +107,8 @@ func build(schema string, existing []column) (next []column, added, removed []st
 			}
 
 			next = append(next, c)
-			added = append(added, key)
 		}
 	}
 
-	for _, c := range existing {
-		key := c.TableName + "." + c.ColumnName
-
-		if !schemaTables[c.TableName] {
-			next = append(next, c)
-			continue
-		}
-
-		if !seen[key] && !slices.Contains(skipTables, c.TableName) {
-			removed = append(removed, key)
-		}
-	}
-
-	return next, added, removed
+	return next
 }
