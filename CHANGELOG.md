@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET` and `PUT /users/{id}/site-prefs` keep a user's website customization
+  settings (a JSON object of up to 8 KB) so they follow them across devices.
+  Only the user can read or change them, and they're deleted with the
+  account. Needs the `20261108140000_user_site_prefs` migration.
+- A bot's `user.extra_data.presence_unknown` is true when Popplio has no
+  presence for it (no Discord cache, no presence data and no recent stats
+  post). `status` still falls back to `offline` in that case, so clients can
+  now tell a bot that was seen offline from one nobody has seen.
 - A Page Style pass in the Credit shop (`page-style-30d`, the new
   `page_style` benefit): 30 days of page styles for a bot or server
   without premium. Buying it again adds another 30 days. When the pass

@@ -12,6 +12,7 @@ import (
 	"popplio/routes/users/endpoints/get_auto_vote"
 	"popplio/routes/users/endpoints/get_booster_perks"
 	"popplio/routes/users/endpoints/get_main_server_status"
+	"popplio/routes/users/endpoints/get_site_prefs"
 	"popplio/routes/users/endpoints/get_user"
 	"popplio/routes/users/endpoints/get_user_activity"
 	"popplio/routes/users/endpoints/get_user_perms"
@@ -20,6 +21,7 @@ import (
 	"popplio/routes/users/endpoints/put_auto_vote_slots"
 	"popplio/routes/users/endpoints/put_auto_vote_targets"
 	"popplio/routes/users/endpoints/put_booster_perks"
+	"popplio/routes/users/endpoints/put_site_prefs"
 
 	"github.com/go-chi/chi/v5"
 
@@ -66,6 +68,40 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.PUT,
 		Docs:    put_booster_perks.Docs,
 		Handler: put_booster_perks.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/site-prefs",
+		OpId:    "get_site_prefs",
+		Method:  uapi.GET,
+		Docs:    get_site_prefs.Docs,
+		Handler: get_site_prefs.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{id}/site-prefs",
+		OpId:    "put_site_prefs",
+		Method:  uapi.PUT,
+		Docs:    put_site_prefs.Docs,
+		Handler: put_site_prefs.Route,
 		Auth: []uapi.AuthType{
 			{
 				URLVar: "id",

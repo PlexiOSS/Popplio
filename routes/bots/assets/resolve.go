@@ -3,6 +3,7 @@ package assets
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -48,6 +49,14 @@ func ApplySelfStatus(user *dovetypes.PlatformUser, selfStatus string, servers in
 	}
 
 	user.Status = dovetypes.PlatformStatusOffline
+	extra := maps.Clone(user.ExtraData)
+
+	if extra == nil {
+		extra = map[string]any{}
+	}
+
+	extra["presence_unknown"] = true
+	user.ExtraData = extra
 }
 
 func japiPresenceStatus(status string) (dovetypes.PlatformStatus, bool) {
