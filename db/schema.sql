@@ -2851,3 +2851,12 @@ CREATE TABLE public.credit_reminders (
     sent_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT credit_reminders_pkey PRIMARY KEY (user_id, period)
 );
+
+CREATE TABLE public.user_site_prefs (
+    user_id text NOT NULL,
+    prefs jsonb DEFAULT '{}'::jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_site_prefs_pkey PRIMARY KEY (user_id),
+    CONSTRAINT user_site_prefs_user_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT user_site_prefs_object_check CHECK (jsonb_typeof(prefs) = 'object')
+);

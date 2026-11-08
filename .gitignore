@@ -9,3 +9,4 @@ cmd/kitehelper/kitehelper
 __pycache__
 .claude
 data/seed.iblseed
+data/seed-ci.json

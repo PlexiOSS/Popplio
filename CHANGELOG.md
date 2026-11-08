@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `data/seed-ci.json` is no longer kept in git. `kitehelper test` builds it
+  from `db/schema.sql` each time it runs, so a migration no longer needs a
+  `kitehelper seed-ci` run or a snapshot commit. The Kitescratch workflow
+  drops its `seed-ci --check` step and its auto-commit, and only needs
+  read access. `kitehelper seed-ci` still writes the file if you want to
+  look at it. Tables that were only in the old snapshot (the
+  `cache_server_*` tables, gone from the schema) are no longer listed.
 - Popplio, Arcadia and Infernoplex build with Go 1.27.3 (was 1.25.5), in
   `go.mod`, `go.work`, `cmd/kitehelper` and the Dockerfile. `bytedance/sonic`
   is updated to 1.15.5, the first release that supports Go 1.27; older
@@ -25,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Server` didn't list the `servers.vote_channel_id` column added for
+  vote messages, which would have failed the Kitescratch field check.
 - The OpenAPI schema reported version 1.11.0. It now reports the release
   version, and the support link uses the current Discord invite.
 - Arcadia's staff leaderboard (and the top reviewer roles it hands out)
@@ -34,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET` and `PUT /users/{id}/site-prefs` keep a user's website customization
+  settings (a JSON object of up to 8 KB) so they follow them across devices.
+  Only the user can read or change them, and they're deleted with the
+  account. Needs the `20261108140000_user_site_prefs` migration.
+- A bot's `user.extra_data.presence_unknown` is true when Popplio has no
+  presence for it (no Discord cache, no presence data and no recent stats
+  post). `status` still falls back to `offline` in that case, so clients can
+  now tell a bot that was seen offline from one nobody has seen.
 - A Page Style pass in the Credit shop (`page-style-30d`, the new
   `page_style` benefit): 30 days of page styles for a bot or server
   without premium. Buying it again adds another 30 days. When the pass

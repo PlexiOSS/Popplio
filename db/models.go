@@ -1001,6 +1001,12 @@ type UserRoleConnection struct {
 	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type UserSitePref struct {
+	UserID    string             `db:"user_id" json:"user_id"`
+	Prefs     map[string]any     `db:"prefs" json:"prefs"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type Vanity struct {
 	TargetID   string             `db:"target_id" json:"target_id"`
 	TargetType string             `db:"target_type" json:"target_type"`

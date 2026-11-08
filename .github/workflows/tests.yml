@@ -7,7 +7,7 @@ on:
     branches: [ "master", "development" ]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   NO_INTERACTION: "true"
@@ -42,11 +42,4 @@ jobs:
         run: |
           cd cmd/kitehelper
           go build -v 
-          ./kitehelper seed-ci --check
           ./kitehelper test
-      
-      - uses: stefanzweifel/git-auto-commit-action@v4
-        if: github.event_name == 'push'
-        with:
-          commit_message: "Kitescratch: CI Task"
-          commit_user_name: "Kitescratch Tests[bot]"

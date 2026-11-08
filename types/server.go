@@ -35,7 +35,7 @@ type IndexServer struct {
 	CardColor        string             `db:"-" json:"card_color" description:"The server's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set" ci:"internal"`
 }
 
-// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users+stats_self_managed+last_stats_post+moderation_checked_at
+// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users+stats_self_managed+last_stats_post+moderation_checked_at+vote_channel_id
 type Server struct {
 	ServerID               string             `db:"server_id" json:"server_id" description:"The server's ID"`
 	Name                   string             `db:"name" json:"name" description:"The server's name"`
