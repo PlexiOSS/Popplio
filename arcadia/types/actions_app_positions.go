@@ -4,12 +4,24 @@ package types
 
 import "fmt"
 
+type AppPositionQuestionCondition struct {
+	QuestionID string   `json:"question_id"`
+	Values     []string `json:"values"`
+}
+
 type AppPositionQuestion struct {
-	ID          string `json:"id"`
-	Question    string `json:"question"`
-	Paragraph   string `json:"paragraph"`
-	Placeholder string `json:"placeholder"`
-	Short       bool   `json:"short"`
+	ID          string                        `json:"id"`
+	Question    string                        `json:"question"`
+	Paragraph   string                        `json:"paragraph"`
+	Placeholder string                        `json:"placeholder"`
+	Short       bool                          `json:"short"`
+	Type        string                        `json:"type,omitempty"`
+	Options     []string                      `json:"options,omitempty"`
+	Optional    bool                          `json:"optional,omitempty"`
+	MinLength   int                           `json:"min_length,omitempty"`
+	MaxLength   int                           `json:"max_length,omitempty"`
+	ShowIf      *AppPositionQuestionCondition `json:"show_if,omitempty"`
+	Flag        []string                      `json:"flag,omitempty"`
 }
 
 type AppPositionBehaviour struct {

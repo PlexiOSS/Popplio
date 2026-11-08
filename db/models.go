@@ -322,6 +322,12 @@ type Changelog struct {
 	Package          pgtype.Text        `db:"package" json:"package"`
 }
 
+type CreditReminder struct {
+	UserID string             `db:"user_id" json:"user_id"`
+	Period string             `db:"period" json:"period"`
+	SentAt pgtype.Timestamptz `db:"sent_at" json:"sent_at"`
+}
+
 type DpMfa struct {
 	UserID    string      `db:"user_id" json:"user_id"`
 	Secret    pgtype.Text `db:"secret" json:"secret"`
@@ -362,6 +368,7 @@ type EntityPageStyle struct {
 	Blur                int16              `db:"blur" json:"blur"`
 	ImagePosition       string             `db:"image_position" json:"image_position"`
 	Fixed               bool               `db:"fixed" json:"fixed"`
+	UnlockedUntil       pgtype.Timestamptz `db:"unlocked_until" json:"unlocked_until"`
 	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 

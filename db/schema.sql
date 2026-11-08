@@ -2833,6 +2833,7 @@ CREATE TABLE public.entity_page_styles (
     blur smallint DEFAULT 0 NOT NULL,
     image_position text DEFAULT 'center' NOT NULL,
     fixed boolean DEFAULT false NOT NULL,
+    unlocked_until timestamp with time zone,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT entity_page_styles_pkey PRIMARY KEY (target_type, target_id),
     CONSTRAINT entity_page_styles_target_type_check CHECK (target_type IN ('bot', 'server')),
@@ -2843,3 +2844,10 @@ CREATE TABLE public.entity_page_styles (
 );
 
 CREATE INDEX entity_page_styles_pending_idx ON public.entity_page_styles (pending_since) WHERE pending_image_version IS NOT NULL;
+
+CREATE TABLE public.credit_reminders (
+    user_id text NOT NULL,
+    period text NOT NULL,
+    sent_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT credit_reminders_pkey PRIMARY KEY (user_id, period)
+);

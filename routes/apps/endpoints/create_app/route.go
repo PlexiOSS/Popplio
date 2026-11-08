@@ -10,11 +10,13 @@ import (
 	"net/http"
 	"popplio/mainserver"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PlexiOSS/Keel/ptr"
 	"popplio/api/resp"
 	"popplio/apps"
+
 	"popplio/db"
 	"popplio/state"
 	"popplio/types"
@@ -172,28 +174,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	var answerMap = map[string]string{}
 
 	for _, question := range position.Questions {
-		ans, ok := payload.Answers[question.ID]
-
-		if !ok {
-			return resp.BadRequest("Missing answer for question " + question.ID)
+		if !apps.Visible(question, payload.Answers) {
+			continue
 		}
+
+		ans := strings.TrimSpace(payload.Answers[question.ID])
 
 		if ans == "" {
-			return resp.BadRequest("Answer for question " + question.ID + " cannot be empty")
+			if question.Optional {
+				continue
+			}
+
+			return resp.BadRequest("Please answer: " + question.Question)
 		}
 
-		if question.Short {
-			if len(ans) > 4096 {
-				return resp.BadRequest("Answer for question " + question.ID + " is too long")
-			}
-		} else {
-			if len(ans) < 50 {
-				return resp.BadRequest("Answer for question " + question.ID + " is too short")
-			}
-
-			if len(ans) > 10000 {
-				return resp.BadRequest("Answer for question " + question.ID + " is too long")
-			}
+		if err := apps.CheckAnswer(question, ans); err != nil {
+			return resp.BadRequest(question.Question + ": your answer " + err.Error())
 		}
 
 		answerMap[question.ID] = ans

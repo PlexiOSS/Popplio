@@ -103,6 +103,13 @@ func All() []Task {
 			Run:         AutoVoteSummary,
 		},
 		{
+			Name:        "credit_reminders",
+			Description: "Telling owners, once before each monthly vote reset, about votes they can turn into credits and credits they haven't spent",
+			Enabled:     true,
+			Interval:    6 * time.Hour,
+			Run:         CreditReminders,
+		},
+		{
 			Name:        "booster_sync",
 			Description: "Recording who boosts the main Discord server and applying their monthly booster premium",
 			Enabled:     true,

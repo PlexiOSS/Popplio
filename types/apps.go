@@ -13,12 +13,24 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
+type QuestionCondition struct {
+	QuestionID string   `json:"question_id" description:"An earlier question whose answer decides whether this one shows"`
+	Values     []string `json:"values" description:"This question shows when that answer is (or, for multiple choice, includes) one of these"`
+}
+
 type Question struct {
-	ID          string `json:"id" validate:"required"`
-	Question    string `json:"question" validate:"required"`
-	Paragraph   string `json:"paragraph" validate:"required"`
-	Placeholder string `json:"placeholder" validate:"required"`
-	Short       bool   `json:"short" validate:"required"`
+	ID          string             `json:"id" validate:"required"`
+	Question    string             `json:"question" validate:"required"`
+	Paragraph   string             `json:"paragraph" description:"Help text shown under the question"`
+	Placeholder string             `json:"placeholder"`
+	Short       bool               `json:"short" description:"Used when type is empty: a one-line answer instead of a paragraph"`
+	Type        string             `json:"type,omitempty" description:"short, long, choice, multi, yesno, number, url or rating. Empty means short or long, from the short flag"`
+	Options     []string           `json:"options,omitempty" description:"The choices for choice and multi questions"`
+	Optional    bool               `json:"optional,omitempty" description:"Whether the question can be left blank"`
+	MinLength   int                `json:"min_length,omitempty" description:"Fewest characters for short and long answers. 0 uses the default"`
+	MaxLength   int                `json:"max_length,omitempty" description:"Most characters for short and long answers. 0 uses the default"`
+	ShowIf      *QuestionCondition `json:"show_if,omitempty" description:"Only show this question for certain answers to an earlier one"`
+	Flag        []string           `json:"flag,omitempty" description:"Answers staff should see flagged when reviewing, such as No to having read the rules"`
 }
 
 type Position struct {

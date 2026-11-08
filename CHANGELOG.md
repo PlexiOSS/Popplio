@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Popplio, Arcadia and Infernoplex build with Go 1.27.3 (was 1.25.5), in
+  `go.mod`, `go.work`, `cmd/kitehelper` and the Dockerfile. `bytedance/sonic`
+  is updated to 1.15.5, the first release that supports Go 1.27; older
+  versions fall back to `encoding/json`.
+- Every application form has new questions using the new answer types, and
+  three new positions open: Beta Testers (`beta`), Listing Appeal
+  (`listing_appeal`) and Spotlight Request (`spotlight`). Staff applicants
+  must be 16 or older; a No to that, or to having read the rules, is flagged
+  for reviewers. Question IDs the built-in checks rely on (`id` on
+  certification and resubmission) are unchanged, as are the Dev Team coding
+  tasks. Needs the `20261108130000_application_forms` migration, which
+  must run together with this release and the matching website: older
+  versions of either treat the new question types as plain text.
+
 ### Fixed
 
 - The OpenAPI schema reported version 1.11.0. It now reports the release
@@ -18,6 +34,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A Page Style pass in the Credit shop (`page-style-30d`, the new
+  `page_style` benefit): 30 days of page styles for a bot or server
+  without premium. Buying it again adds another 30 days. When the pass
+  runs out the style is kept but hidden, as when premium ends.
+  `ManagedPageStyle.premium` is now true while a pass is active, and the
+  new `unlocked_until` says when it ends. Needs the
+  `20261108120000_page_style_pass` migration, which also adds the item.
+- Application questions can list answers to `flag` for reviewers (choice,
+  yes or no and rating questions only), for example a No to "Have you read
+  the rules?". Flagged answers are still accepted.
+- Application questions can have a `type` (`short`, `long`, `choice`,
+  `multi`, `yesno`, `number`, `url` or `rating`), `options`, `optional`,
+  `min_length` and `max_length`, and `show_if`, which only asks a question
+  for certain answers to an earlier one. Questions without a type behave as
+  before. Answers are checked by type when someone applies, and question
+  definitions are checked when staff save a position. Multiple-choice
+  answers are stored one choice per line.
+- A `credit_reminders` task. In the three days before each monthly vote
+  reset, each owner gets at most one notification saying how many of their
+  bots and servers have votes they can still turn into credits (10 or
+  more) and how many have unspent credits (at least the cheapest shop
+  item). It uses the Shop notification category, so it can be turned off.
+  Needs the `20261108110000_credit_reminders` migration.
 - Page styles for bots and servers, a premium perk: a preset gradient, an
   accent colour (rejected if it's unreadable on light or dark mode), and a
   background image with dim, blur, position and fixed options.

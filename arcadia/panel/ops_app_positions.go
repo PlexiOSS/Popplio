@@ -17,6 +17,7 @@ import (
 	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
+	ptypes "popplio/types"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -162,6 +163,32 @@ func normalisePosition(in *types.AppPositionInput, locked []string) string {
 		if len(q.Paragraph) > 1000 || len(q.Placeholder) > 200 {
 			return fmt.Sprintf("Question %d's help text or placeholder is too long", i+1)
 		}
+	}
+
+	asQuestions := make([]ptypes.Question, len(in.Questions))
+
+	for i, q := range in.Questions {
+		asQuestions[i] = ptypes.Question{
+			ID:          q.ID,
+			Question:    q.Question,
+			Paragraph:   q.Paragraph,
+			Placeholder: q.Placeholder,
+			Short:       q.Short,
+			Type:        q.Type,
+			Options:     q.Options,
+			Optional:    q.Optional,
+			MinLength:   q.MinLength,
+			MaxLength:   q.MaxLength,
+			Flag:        q.Flag,
+		}
+
+		if q.ShowIf != nil {
+			asQuestions[i].ShowIf = &ptypes.QuestionCondition{QuestionID: q.ShowIf.QuestionID, Values: q.ShowIf.Values}
+		}
+	}
+
+	if msg := apps.CheckDefinition(asQuestions); msg != "" {
+		return msg
 	}
 
 	for _, id := range locked {

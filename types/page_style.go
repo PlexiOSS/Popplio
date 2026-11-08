@@ -16,7 +16,8 @@ type PageStyle struct {
 
 type ManagedPageStyle struct {
 	PageStyle
-	Premium        bool       `json:"premium" description:"Whether the listing has premium. Page styles only show while it does"`
+	Premium        bool       `json:"premium" description:"Whether page styles are available: the listing has premium or an active Page Style pass. Page styles only show while they are"`
+	UnlockedUntil  *time.Time `json:"unlocked_until" description:"When the listing's Page Style pass from the Credit shop runs out, if one is active"`
 	PendingVersion *string    `json:"pending_version" description:"An uploaded background waiting for staff review"`
 	PendingSince   *time.Time `json:"pending_since" description:"When the pending background was uploaded"`
 	RejectedReason *string    `json:"rejected_reason" description:"Why staff rejected the last uploaded background"`

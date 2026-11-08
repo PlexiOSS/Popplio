@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyPageStylePass = `-- name: ApplyPageStylePass :exec
+INSERT INTO entity_page_styles (target_type, target_id, unlocked_until)
+VALUES ($1, $2, NOW() + make_interval(hours => $3::int))
+ON CONFLICT (target_type, target_id) DO UPDATE SET
+    unlocked_until = GREATEST(COALESCE(entity_page_styles.unlocked_until, NOW()), NOW()) + make_interval(hours => $3::int),
+    updated_at = NOW()
+`
+
+type ApplyPageStylePassParams struct {
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+	Hours      int32  `db:"hours" json:"hours"`
+}
+
+func (q *Queries) ApplyPageStylePass(ctx context.Context, arg ApplyPageStylePassParams) error {
+	_, err := q.db.Exec(ctx, applyPageStylePass, arg.TargetType, arg.TargetID, arg.Hours)
+	return err
+}
+
 const approvePageImage = `-- name: ApprovePageImage :execrows
 UPDATE entity_page_styles SET
     image_version = pending_image_version,
@@ -99,6 +118,22 @@ func (q *Queries) GetPageStyle(ctx context.Context, arg GetPageStyleParams) (Get
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getPageStyleUnlock = `-- name: GetPageStyleUnlock :one
+SELECT unlocked_until FROM entity_page_styles WHERE target_type = $1 AND target_id = $2
+`
+
+type GetPageStyleUnlockParams struct {
+	TargetType string `db:"target_type" json:"target_type"`
+	TargetID   string `db:"target_id" json:"target_id"`
+}
+
+func (q *Queries) GetPageStyleUnlock(ctx context.Context, arg GetPageStyleUnlockParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getPageStyleUnlock, arg.TargetType, arg.TargetID)
+	var unlocked_until pgtype.Timestamptz
+	err := row.Scan(&unlocked_until)
+	return unlocked_until, err
 }
 
 const listPendingPageImages = `-- name: ListPendingPageImages :many

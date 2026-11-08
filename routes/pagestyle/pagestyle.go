@@ -39,7 +39,7 @@ func errResponse(targetType string, err error) uapi.HttpResponse {
 	case errors.Is(err, ps.ErrNotFound):
 		return uapi.DefaultResponse(http.StatusNotFound)
 	case errors.Is(err, ps.ErrNotPremium):
-		return resp.BadRequest("Page styles are a premium perk. Upgrade this " + targetType + " to customise its page.")
+		return resp.BadRequest("Page styles need premium or a Page Style pass from the Credit shop. Get one for this " + targetType + " to customise its page.")
 	case errors.Is(err, ps.ErrBadGradient):
 		return resp.BadRequest("That gradient isn't one of the presets")
 	case errors.Is(err, ps.ErrBadAccent):
