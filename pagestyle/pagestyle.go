@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"popplio/db"
 	"popplio/state"
@@ -20,7 +21,7 @@ import (
 var Gradients = []string{"aurora", "sunset", "ocean", "forest", "candy", "midnight", "ember", "mono"}
 
 var (
-	ErrNotPremium  = errors.New("page styles need premium")
+	ErrNotPremium  = errors.New("page styles need premium or a Page Style pass")
 	ErrBadGradient = errors.New("unknown gradient preset")
 	ErrBadAccent   = errors.New("accent colour is too dark or too light to read")
 	ErrNotFound    = errors.New("listing not found")
@@ -96,7 +97,28 @@ func Premium(ctx context.Context, targetType, targetID string) (bool, error) {
 		return false, ErrNotFound
 	}
 
-	return premium, err
+	if err != nil || premium {
+		return premium, err
+	}
+
+	until, err := UnlockedUntil(ctx, targetType, targetID)
+
+	return until != nil && until.After(time.Now()), err
+}
+
+func UnlockedUntil(ctx context.Context, targetType, targetID string) (*time.Time, error) {
+	until, err := db.New(state.Pool).GetPageStyleUnlock(ctx, db.GetPageStyleUnlockParams{TargetType: targetType, TargetID: targetID})
+
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !until.Valid) {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	t := until.Time
+	return &t, nil
 }
 
 func text(t pgtype.Text) *string {
@@ -172,6 +194,12 @@ func Managed(ctx context.Context, targetType, targetID string) (types.ManagedPag
 	out.PageStyle = toStyle(row)
 	out.PendingVersion = text(row.PendingImageVersion)
 	out.RejectedReason = text(row.RejectedReason)
+
+	if until, err := UnlockedUntil(ctx, targetType, targetID); err != nil {
+		return out, err
+	} else if until != nil && until.After(time.Now()) {
+		out.UnlockedUntil = until
+	}
 
 	if row.PendingSince.Valid {
 		t := row.PendingSince.Time

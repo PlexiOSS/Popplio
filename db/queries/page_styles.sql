@@ -56,3 +56,13 @@ UPDATE entity_page_styles SET
     reviewed_at = NOW(),
     updated_at = NOW()
 WHERE target_type = sqlc.arg(target_type) AND target_id = sqlc.arg(target_id) AND pending_image_version = sqlc.arg(version);
+
+-- name: GetPageStyleUnlock :one
+SELECT unlocked_until FROM entity_page_styles WHERE target_type = $1 AND target_id = $2;
+
+-- name: ApplyPageStylePass :exec
+INSERT INTO entity_page_styles (target_type, target_id, unlocked_until)
+VALUES (sqlc.arg(target_type), sqlc.arg(target_id), NOW() + make_interval(hours => sqlc.arg(hours)::int))
+ON CONFLICT (target_type, target_id) DO UPDATE SET
+    unlocked_until = GREATEST(COALESCE(entity_page_styles.unlocked_until, NOW()), NOW()) + make_interval(hours => sqlc.arg(hours)::int),
+    updated_at = NOW();

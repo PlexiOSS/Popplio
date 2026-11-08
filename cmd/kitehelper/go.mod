@@ -1,15 +1,12 @@
 module kitehelper
 
-go 1.21
-
-require (
-	github.com/fatih/color v1.17.0 // direct
-	github.com/jackc/pgx/v5 v5.6.0
-)
+go 1.27.0
 
 require (
 	github.com/PlexiOSS/Keel v1.0.4
 	github.com/disgoorg/disgo v0.18.11
+	github.com/fatih/color v1.17.0 // direct
+	github.com/jackc/pgx/v5 v5.6.0
 )
 
 require (

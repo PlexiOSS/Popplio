@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"popplio/db"
 	"popplio/state"
@@ -184,5 +185,48 @@ func TestImageNeedsApproval(t *testing.T) {
 
 	if style, _ := Public(ctx, "bot", bot); style == nil || style.ImageVersion != nil {
 		t.Fatalf("after removing the image = %+v", style)
+	}
+}
+
+func TestPageStylePass(t *testing.T) {
+	testdb.Pool(t)
+	ctx := context.Background()
+	bot := seedBot(t, false)
+	q := db.New(state.Pool)
+
+	if err := q.ApplyPageStylePass(ctx, db.ApplyPageStylePassParams{TargetType: "bot", TargetID: bot, Hours: 720}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Update(ctx, "bot", bot, settings()); err != nil {
+		t.Fatalf("update with a pass = %v", err)
+	}
+
+	if style, err := Public(ctx, "bot", bot); err != nil || style == nil {
+		t.Fatalf("public style with a pass = %v, %v", style, err)
+	}
+
+	if err := q.ApplyPageStylePass(ctx, db.ApplyPageStylePassParams{TargetType: "bot", TargetID: bot, Hours: 720}); err != nil {
+		t.Fatal(err)
+	}
+
+	managed, err := Managed(ctx, "bot", bot)
+
+	if err != nil || !managed.Premium || managed.UnlockedUntil == nil {
+		t.Fatalf("managed = %+v, %v", managed, err)
+	}
+
+	if left := time.Until(*managed.UnlockedUntil); left < 1430*time.Hour || left > 1441*time.Hour {
+		t.Fatalf("a second pass should stack to about 60 days, got %v", left)
+	}
+
+	testdb.Exec(t, "UPDATE entity_page_styles SET unlocked_until = NOW() - INTERVAL '1 minute' WHERE target_id = $1", bot)
+
+	if style, err := Public(ctx, "bot", bot); err != nil || style != nil {
+		t.Fatalf("public style after the pass ran out = %v, %v", style, err)
+	}
+
+	if err := Update(ctx, "bot", bot, settings()); !errors.Is(err, ErrNotPremium) {
+		t.Fatalf("update after the pass ran out = %v, want ErrNotPremium", err)
 	}
 }

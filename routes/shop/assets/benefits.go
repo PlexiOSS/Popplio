@@ -18,6 +18,7 @@ const (
 	BenefitHighlight      = "highlight"
 	BenefitSpotlightSlot  = "spotlight_slot"
 	BenefitCardTheme      = "card_theme"
+	BenefitPageStyle      = "page_style"
 )
 
 var recognizedBenefits = map[string]bool{
@@ -29,6 +30,7 @@ var recognizedBenefits = map[string]bool{
 	BenefitHighlight:      true,
 	BenefitSpotlightSlot:  true,
 	BenefitCardTheme:      true,
+	BenefitPageStyle:      true,
 }
 
 func HasRecognizedBenefit(benefitIDs []string) bool {
@@ -89,6 +91,8 @@ func ApplyBenefit(ctx context.Context, tx pgx.Tx, benefitID, targetType, targetI
 			return q.ApplyBotCardTheme(ctx, targetID)
 		}
 		return q.ApplyServerCardTheme(ctx, targetID)
+	case BenefitPageStyle:
+		return q.ApplyPageStylePass(ctx, db.ApplyPageStylePassParams{TargetType: targetType, TargetID: targetID, Hours: int32(durationHours)})
 	default:
 		return nil
 	}
