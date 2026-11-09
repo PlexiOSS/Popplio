@@ -9,15 +9,22 @@ import (
 
 	"popplio/state"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 )
 
 const (
+	OfflineTrustWindow = 7 * 24 * time.Hour
+
 	keyPrefix  = "botpresence:"
 	unknown    = "unknown"
 	FreshTTL   = 45 * time.Minute
 	UnknownTTL = time.Hour
 )
+
+func OfflineIsTrusted(lastSeenOnline pgtype.Timestamptz) bool {
+	return lastSeenOnline.Valid && time.Since(lastSeenOnline.Time) < OfflineTrustWindow
+}
 
 func Set(ctx context.Context, botID, status string) error {
 	return state.Redis.Set(ctx, keyPrefix+botID, status, FreshTTL).Err()

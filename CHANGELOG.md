@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-11-09
+
+### Changed
+
+- Uptime covers the last 30 days instead of a bot's whole life. Checks are
+  counted per day in a new `bot_uptime_daily` table, and `GET /bots/{id}`
+  returns `uptime_percent` and `uptime_checks`. `uptime_percent` is null
+  when the bot hasn't been seen online in that time, so an unseen bot isn't
+  reported as 0%. The table starts empty, so older checks wrongly counted
+  as offline before the 1.15.0 fix no longer affect anyone. The all-time
+  `uptime` and `total_uptime` fields are still returned. Needs the
+  `20261109100000_bot_uptime_daily` migration.
+
+### Fixed
+
+- Bots using HTTP interactions have no Discord presence, so they looked
+  offline and failed every uptime check. An offline reading from Discord or
+  japi.rest now only counts if the bot was seen online in the last 7 days,
+  tracked in a new `last_seen_online` column. A status the bot posts itself
+  is always trusted, and a fresh stats post now outweighs an offline
+  reading. Otherwise the check is skipped, and `status` stays `offline` with
+  `extra_data.presence_unknown` set. Needs the
+  `20261109120000_bot_last_seen_online` migration.
+- The presence sync always asked japi.rest about bots in the same order and
+  stopped when rate limited, so bots further down the list could go without
+  a status, and an uptime check, indefinitely. It now picks at random from
+  the bots that are due, so every bot gets a turn.
+
+### Added
+
+- Owners can hide stats with `hidden_stats` on bot and server settings. Bots
+  can hide `servers`, `shards`, `uptime`, `views` and `invites`, and servers
+  can hide `members`, `boosts`, `views` and `invites`. Votes can't be
+  hidden. Hidden stats come back as zero everywhere the public API returns
+  a listing, with `hidden_stats` saying which ones, and search range filters
+  no longer match on them. Hiding `uptime` also blanks the bot's `status`
+  everywhere its user object is returned, since bots using HTTP interactions
+  have no presence and can look offline when they aren't. People who manage
+  the listing, and staff, still get the real numbers from the bot's own
+  endpoint. Needs the `20261109110000_hidden_stats` migration.
+
 ## [1.23.0] - 2026-11-08
 
 ### Changed

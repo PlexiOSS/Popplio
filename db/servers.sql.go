@@ -1042,7 +1042,7 @@ func (q *Queries) GetRecentlyAddedIndexServers(ctx context.Context) ([]GetRecent
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at, hidden_stats
 FROM servers
 WHERE server_id = $1
 `
@@ -1094,6 +1094,7 @@ type GetServerByIDRow struct {
 	CardTheme              bool               `db:"card_theme" json:"card_theme"`
 	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
 	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at"`
+	HiddenStats            []string           `db:"hidden_stats" json:"hidden_stats"`
 }
 
 func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServerByIDRow, error) {
@@ -1146,6 +1147,7 @@ func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServer
 		&i.CardTheme,
 		&i.CardColor,
 		&i.BumpedAt,
+		&i.HiddenStats,
 	)
 	return i, err
 }
@@ -1338,6 +1340,17 @@ func (q *Queries) GetServerEmojiPreviews(ctx context.Context, arg GetServerEmoji
 		return nil, err
 	}
 	return items, nil
+}
+
+const getServerHiddenStats = `-- name: GetServerHiddenStats :one
+SELECT hidden_stats FROM servers WHERE server_id = $1
+`
+
+func (q *Queries) GetServerHiddenStats(ctx context.Context, serverID string) ([]string, error) {
+	row := q.db.QueryRow(ctx, getServerHiddenStats, serverID)
+	var hidden_stats []string
+	err := row.Scan(&hidden_stats)
+	return hidden_stats, err
 }
 
 const getServerIDsAndStatsSelfManaged = `-- name: GetServerIDsAndStatsSelfManaged :many
@@ -1934,8 +1947,8 @@ FROM servers s
 LEFT JOIN vanity v ON v.itag = s.vanity_ref
 WHERE (s.type = 'approved' OR s.type = 'certified')
 AND s.state = 'public'
-AND ($1::int = 0 OR s.total_members >= $1::int)
-AND ($2::int = 0 OR s.total_members <= $2::int)
+AND ($1::int = 0 OR (s.total_members >= $1::int AND NOT 'members' = ANY(s.hidden_stats)))
+AND ($2::int = 0 OR (s.total_members <= $2::int AND NOT 'members' = ANY(s.hidden_stats)))
 AND ($3::int = 0 OR s.approximate_votes >= $3::int)
 AND ($4::int = 0 OR s.approximate_votes <= $4::int)
 AND (
@@ -2204,6 +2217,20 @@ func (q *Queries) ServerQueuePending(ctx context.Context) ([]ServerQueuePendingR
 		return nil, err
 	}
 	return items, nil
+}
+
+const setServerHiddenStats = `-- name: SetServerHiddenStats :exec
+UPDATE servers SET hidden_stats = $2 WHERE server_id = $1
+`
+
+type SetServerHiddenStatsParams struct {
+	ServerID    string   `db:"server_id" json:"server_id"`
+	HiddenStats []string `db:"hidden_stats" json:"hidden_stats"`
+}
+
+func (q *Queries) SetServerHiddenStats(ctx context.Context, arg SetServerHiddenStatsParams) error {
+	_, err := q.db.Exec(ctx, setServerHiddenStats, arg.ServerID, arg.HiddenStats)
+	return err
 }
 
 const setServerSpotlightedUntil = `-- name: SetServerSpotlightedUntil :exec

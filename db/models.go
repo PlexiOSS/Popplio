@@ -254,6 +254,7 @@ type Bot struct {
 	ShardList            []int64            `db:"shard_list" json:"shard_list"`
 	CaptchaOptOut        bool               `db:"captcha_opt_out" json:"captcha_opt_out"`
 	UptimeLastChecked    pgtype.Timestamptz `db:"uptime_last_checked" json:"uptime_last_checked"`
+	LastSeenOnline       pgtype.Timestamptz `db:"last_seen_online" json:"last_seen_online"`
 	Itag                 pgtype.UUID        `db:"itag" json:"itag"`
 	LastStatsPost        pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
 	VanityRef            pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
@@ -271,6 +272,7 @@ type Bot struct {
 	ModerationCheckedAt  pgtype.Timestamptz `db:"moderation_checked_at" json:"moderation_checked_at"`
 	SpotlightedUntil     pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
 	AutoVotesOptOut      bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HiddenStats          []string           `db:"hidden_stats" json:"hidden_stats"`
 	HighlightedUntil     pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
 	CardTheme            bool               `db:"card_theme" json:"card_theme"`
 	CardColor            pgtype.Text        `db:"card_color" json:"card_color"`
@@ -296,6 +298,13 @@ type BotCommand struct {
 	Position    int32              `db:"position" json:"position"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type BotUptimeDaily struct {
+	BotID  string      `db:"bot_id" json:"bot_id"`
+	Day    pgtype.Date `db:"day" json:"day"`
+	Checks int32       `db:"checks" json:"checks"`
+	Online int32       `db:"online" json:"online"`
 }
 
 type BotWhitelist struct {
@@ -657,6 +666,7 @@ type Server struct {
 	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
 	BoostCount             int32              `db:"boost_count" json:"boost_count"`
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HiddenStats            []string           `db:"hidden_stats" json:"hidden_stats"`
 	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
 	CardTheme              bool               `db:"card_theme" json:"card_theme"`
 	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`

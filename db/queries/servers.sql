@@ -16,8 +16,8 @@ FROM servers s
 LEFT JOIN vanity v ON v.itag = s.vanity_ref
 WHERE (s.type = 'approved' OR s.type = 'certified')
 AND s.state = 'public'
-AND (sqlc.arg('members_from')::int = 0 OR s.total_members >= sqlc.arg('members_from')::int)
-AND (sqlc.arg('members_to')::int = 0 OR s.total_members <= sqlc.arg('members_to')::int)
+AND (sqlc.arg('members_from')::int = 0 OR (s.total_members >= sqlc.arg('members_from')::int AND NOT 'members' = ANY(s.hidden_stats)))
+AND (sqlc.arg('members_to')::int = 0 OR (s.total_members <= sqlc.arg('members_to')::int AND NOT 'members' = ANY(s.hidden_stats)))
 AND (sqlc.arg('votes_from')::int = 0 OR s.approximate_votes >= sqlc.arg('votes_from')::int)
 AND (sqlc.arg('votes_to')::int = 0 OR s.approximate_votes <= sqlc.arg('votes_to')::int)
 AND (
@@ -331,7 +331,7 @@ SELECT server_id, name, avatar, total_members, online_members, short, type, stat
 FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9;
 
 -- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at, hidden_stats
 FROM servers
 WHERE server_id = $1;
 
@@ -412,3 +412,9 @@ SELECT vote_channel_id FROM servers WHERE server_id = $1;
 
 -- name: SetServerVoteChannel :exec
 UPDATE servers SET vote_channel_id = sqlc.narg(channel_id) WHERE server_id = sqlc.arg(server_id);
+
+-- name: GetServerHiddenStats :one
+SELECT hidden_stats FROM servers WHERE server_id = $1;
+
+-- name: SetServerHiddenStats :exec
+UPDATE servers SET hidden_stats = $2 WHERE server_id = $1;

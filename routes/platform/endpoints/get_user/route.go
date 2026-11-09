@@ -10,6 +10,7 @@ import (
 
 	"popplio/api/resp"
 
+	"popplio/listing"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -67,6 +68,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	return uapi.HttpResponse{
-		Json: user,
+		Json: listing.HideBotUserStatus(d.Context, id, user),
 	}
 }

@@ -11,11 +11,13 @@ import (
 	"popplio/botpresence"
 	"popplio/db"
 	"popplio/entityassets"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/PlexiOSS/Keel/dovewing"
@@ -24,7 +26,28 @@ import (
 
 const statsPostFreshness = 24 * time.Hour
 
-func ApplySelfStatus(user *dovetypes.PlatformUser, selfStatus string, servers int, lastStatsPost pgtype.Timestamptz, japiStatus string) {
+func UptimePercent(checks, online int64) *float64 {
+	if checks <= 0 || online <= 0 {
+		return nil
+	}
+
+	percent := min(float64(online)/float64(checks)*100, 100)
+
+	return &percent
+}
+
+func RecentUptime(ctx context.Context, botID string) (*float64, int) {
+	row, err := db.New(state.Pool).GetBotRecentUptime(ctx, botID)
+
+	if err != nil {
+		state.Logger.Warn("failed to load recent uptime", zap.Error(err), zap.String("bot_id", botID))
+		return nil, 0
+	}
+
+	return UptimePercent(row.Checks, row.Online), int(row.Checks)
+}
+
+func ApplySelfStatus(user *dovetypes.PlatformUser, selfStatus string, servers int, lastStatsPost pgtype.Timestamptz, japiStatus string, lastSeenOnline pgtype.Timestamptz) {
 	if user == nil {
 		return
 	}
@@ -34,13 +57,21 @@ func ApplySelfStatus(user *dovetypes.PlatformUser, selfStatus string, servers in
 		return
 	}
 
-	if cache, _ := user.ExtraData["cache"].(string); cache == "platform" {
-		return
-	}
+	seenOffline := false
 
-	if status, ok := japiPresenceStatus(japiStatus); ok {
-		user.Status = status
-		return
+	if cache, _ := user.ExtraData["cache"].(string); cache == "platform" {
+		if user.Status != dovetypes.PlatformStatusOffline && user.Status != "" {
+			return
+		}
+
+		seenOffline = user.Status == dovetypes.PlatformStatusOffline
+	} else if status, ok := japiPresenceStatus(japiStatus); ok {
+		if status != dovetypes.PlatformStatusOffline {
+			user.Status = status
+			return
+		}
+
+		seenOffline = true
 	}
 
 	if servers > 0 && lastStatsPost.Valid && time.Since(lastStatsPost.Time) < statsPostFreshness {
@@ -49,6 +80,11 @@ func ApplySelfStatus(user *dovetypes.PlatformUser, selfStatus string, servers in
 	}
 
 	user.Status = dovetypes.PlatformStatusOffline
+
+	if seenOffline && botpresence.OfflineIsTrusted(lastSeenOnline) {
+		return
+	}
+
 	extra := maps.Clone(user.ExtraData)
 
 	if extra == nil {
@@ -81,8 +117,14 @@ func ResolveIndexBot(ctx context.Context, bot *types.IndexBot) error {
 		return fmt.Errorf("error querying for bot user [dovewing]: %w", err)
 	}
 
+	extras, err := db.New(state.Pool).GetBotListingExtras(ctx, bot.BotID)
+
+	if err != nil {
+		return fmt.Errorf("error getting listing extras: %w", err)
+	}
+
 	bot.User = botUser
-	ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost, botpresence.Get(ctx, bot.BotID))
+	ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost, botpresence.Get(ctx, bot.BotID), extras.LastSeenOnline)
 
 	code, err := db.New(state.Pool).GetVanityCodeByItag(ctx, bot.VanityRef)
 
@@ -97,6 +139,9 @@ func ResolveIndexBot(ctx context.Context, bot *types.IndexBot) error {
 	if err != nil {
 		return fmt.Errorf("error getting vote count: %w", err)
 	}
+
+	bot.HiddenStats = extras.HiddenStats
+	listing.HideIndexBotStats(bot)
 
 	return nil
 }

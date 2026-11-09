@@ -7,6 +7,7 @@ import (
 
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/types"
 
@@ -54,7 +55,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				return nil
 			}
 
-			bots[i].User = user
+			bots[i].User = listing.HideBotUserStatus(ctx, row.BotID, user)
 			return nil
 		})
 	}

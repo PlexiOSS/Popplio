@@ -408,6 +408,7 @@ CREATE TABLE public.bots (
     shard_list bigint[] DEFAULT '{}'::bigint[] NOT NULL,
     captcha_opt_out boolean DEFAULT false NOT NULL,
     uptime_last_checked timestamp with time zone DEFAULT now() NOT NULL,
+    last_seen_online timestamp with time zone,
     itag uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     last_stats_post timestamp with time zone,
     vanity_ref uuid NOT NULL,
@@ -427,6 +428,7 @@ CREATE TABLE public.bots (
     CONSTRAINT bots_self_status_check CHECK (((self_status IS NULL) OR (self_status = ANY (ARRAY['online'::text, 'idle'::text, 'dnd'::text, 'offline'::text])))),
     CONSTRAINT owner_team_oneof CHECK (((owner IS NULL) <> (team_owner IS NULL))),
     auto_votes_opt_out boolean DEFAULT false NOT NULL,
+    hidden_stats text[] DEFAULT '{}'::text[] NOT NULL,
     highlighted_until timestamp with time zone,
     card_theme boolean DEFAULT false NOT NULL,
     card_color text
@@ -819,6 +821,7 @@ CREATE TABLE public.servers (
     premium_tier smallint DEFAULT 0 NOT NULL,
     boost_count integer DEFAULT 0 NOT NULL,
     auto_votes_opt_out boolean DEFAULT false NOT NULL,
+    hidden_stats text[] DEFAULT '{}'::text[] NOT NULL,
     highlighted_until timestamp with time zone,
     card_theme boolean DEFAULT false NOT NULL,
     card_color text,
@@ -2860,3 +2863,14 @@ CREATE TABLE public.user_site_prefs (
     CONSTRAINT user_site_prefs_user_fkey FOREIGN KEY (user_id) REFERENCES public.users(user_id) ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT user_site_prefs_object_check CHECK (jsonb_typeof(prefs) = 'object')
 );
+
+CREATE TABLE public.bot_uptime_daily (
+    bot_id text NOT NULL,
+    day date NOT NULL,
+    checks integer DEFAULT 0 NOT NULL,
+    online integer DEFAULT 0 NOT NULL,
+    CONSTRAINT bot_uptime_daily_pkey PRIMARY KEY (bot_id, day),
+    CONSTRAINT bot_uptime_daily_bot_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(bot_id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX bot_uptime_daily_day_idx ON public.bot_uptime_daily USING btree (day);
