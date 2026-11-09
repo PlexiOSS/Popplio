@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 
+	"popplio/listing"
 	"popplio/api/resp"
 	"popplio/db"
 	"popplio/state"
@@ -76,6 +77,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	q := db.New(state.Pool)
 
+	var hiddenStats []string
+
+	if payload.HiddenStats != nil {
+		var valid bool
+
+		if hiddenStats, valid = listing.CleanHiddenStats(listing.ServerHideableStats, *payload.HiddenStats); !valid {
+			return resp.BadRequest("hidden_stats can only include members, boosts, views and invites")
+		}
+	}
+
 	err = q.UpdateServerSettings(d.Context, db.UpdateServerSettingsParams{
 		Short:                  payload.Short,
 		Long:                   payload.Long,
@@ -91,6 +102,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Error while updating server", err, zap.String("serverID", id))
+	}
+
+	if payload.HiddenStats != nil {
+		if err := q.SetServerHiddenStats(d.Context, db.SetServerHiddenStatsParams{ServerID: id, HiddenStats: hiddenStats}); err != nil {
+			return resp.Err("Failed to update hidden stats", err, zap.String("serverID", id))
+		}
 	}
 
 	if payload.AutoVotesOptOut != nil {

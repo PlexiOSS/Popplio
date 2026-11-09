@@ -13,6 +13,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -55,6 +56,10 @@ func BotUptimeCheck(ctx context.Context) error {
 		}
 	}
 
+	if err := q.PruneBotUptimeDaily(ctx); err != nil {
+		state.Logger.Warn("bot_uptime_check: failed to prune old daily counts", zap.Error(err))
+	}
+
 	if skipped > 0 {
 		state.Logger.Info("bot_uptime_check: skipped bots with no presence signal", zap.Int("skipped", skipped), zap.Int("total", len(bots)))
 	}
@@ -70,24 +75,51 @@ func statusIsOnline(status string) bool {
 	return false
 }
 
-func resolveUptimeStatus(ctx context.Context, mainGuild, userID snowflake.ID, bot db.GetListedBotPresenceInputsRow) (online bool, known bool) {
-	statsFresh := bot.LastStatsPost.Valid && time.Since(bot.LastStatsPost.Time) < uptimeStatsFreshness
+type uptimeSignals struct {
+	selfStatus     string
+	statsFresh     bool
+	servers        int32
+	presence       string
+	lastSeenOnline pgtype.Timestamptz
+}
 
-	if bot.SelfStatus.Valid && bot.SelfStatus.String != "" && statsFresh {
-		return statusIsOnline(bot.SelfStatus.String), true
+func decideUptime(s uptimeSignals) (online bool, known bool) {
+	if s.selfStatus != "" && s.statsFresh {
+		return statusIsOnline(s.selfStatus), true
 	}
 
-	if presence, ok := state.Discord.Caches().Presence(mainGuild, userID); ok {
-		return presence.Status != discord.OnlineStatusOffline && presence.Status != discord.OnlineStatusInvisible, true
-	}
-
-	if status := botpresence.Get(ctx, bot.BotID); status != "" {
-		return statusIsOnline(status), true
-	}
-
-	if bot.Servers > 0 && statsFresh {
+	if statusIsOnline(s.presence) {
 		return true, true
 	}
 
+	if s.servers > 0 && s.statsFresh {
+		return true, true
+	}
+
+	if s.presence == "offline" && botpresence.OfflineIsTrusted(s.lastSeenOnline) {
+		return false, true
+	}
+
 	return false, false
+}
+
+func resolveUptimeStatus(ctx context.Context, mainGuild, userID snowflake.ID, bot db.GetListedBotPresenceInputsRow) (online bool, known bool) {
+	signals := uptimeSignals{
+		selfStatus:     bot.SelfStatus.String,
+		statsFresh:     bot.LastStatsPost.Valid && time.Since(bot.LastStatsPost.Time) < uptimeStatsFreshness,
+		servers:        bot.Servers,
+		lastSeenOnline: bot.LastSeenOnline,
+	}
+
+	if presence, ok := state.Discord.Caches().Presence(mainGuild, userID); ok {
+		signals.presence = "online"
+
+		if presence.Status == discord.OnlineStatusOffline || presence.Status == discord.OnlineStatusInvisible {
+			signals.presence = "offline"
+		}
+	} else {
+		signals.presence = botpresence.Get(ctx, bot.BotID)
+	}
+
+	return decideUptime(signals)
 }

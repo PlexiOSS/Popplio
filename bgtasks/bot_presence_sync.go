@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"popplio/botpresence"
@@ -21,6 +22,24 @@ const (
 	botPresenceBatchSize = 200
 	botPresenceGap       = 1200 * time.Millisecond
 )
+
+func pickDueBots(candidates []string, tracked map[string]bool, limit int) ([]string, int) {
+	due := make([]string, 0, len(candidates))
+
+	for _, botID := range candidates {
+		if !tracked[botID] {
+			due = append(due, botID)
+		}
+	}
+
+	untracked := len(due)
+
+	rand.Shuffle(untracked, func(i, j int) {
+		due[i], due[j] = due[j], due[i]
+	})
+
+	return due[:min(limit, untracked)], untracked
+}
 
 func BotPresenceSync(ctx context.Context) error {
 	botIDs, err := db.New(state.Pool).GetListedBotIDs(ctx)
@@ -52,20 +71,7 @@ func BotPresenceSync(ctx context.Context) error {
 		return fmt.Errorf("reading tracked presences: %w", err)
 	}
 
-	due := make([]string, 0, botPresenceBatchSize)
-	untracked := 0
-
-	for _, botID := range candidates {
-		if tracked[botID] {
-			continue
-		}
-
-		untracked++
-
-		if len(due) < botPresenceBatchSize {
-			due = append(due, botID)
-		}
-	}
+	due, untracked := pickDueBots(candidates, tracked, botPresenceBatchSize)
 
 	if len(due) == 0 {
 		return nil

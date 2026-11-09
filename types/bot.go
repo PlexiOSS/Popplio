@@ -24,6 +24,7 @@ type IndexBot struct {
 	Library          string                  `db:"library" json:"library" description:"The bot's library"`
 	InviteClick      int                     `db:"invite_clicks" json:"invite_clicks" description:"The bot's invite click count (via users inviting the bot from IBL)"`
 	Clicks           int                     `db:"clicks" json:"clicks" description:"The bot's view count"`
+	HiddenStats      []string                `db:"-" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing" ci:"internal"`
 	Servers          int                     `db:"servers" json:"servers" description:"The bot's server count"`
 	NSFW             bool                    `db:"nsfw" json:"nsfw" description:"Whether the bot is NSFW or not"`
 	Tags             []string                `db:"tags" json:"tags" description:"The bot's tags (e.g. music, moderation, etc.)"`
@@ -52,7 +53,7 @@ type BotStats struct {
 	Status string `json:"status" validate:"omitempty,oneof=online idle dnd offline" msg:"Status must be one of online, idle, dnd or offline"`
 }
 
-// @ci table=bots, ignore_fields=api_token+unique_clicks+cache_server_uninvitable+flags+moderation_checked_at
+// @ci table=bots, ignore_fields=api_token+unique_clicks+cache_server_uninvitable+flags+moderation_checked_at+last_seen_online
 //
 // Bot represents a bot.
 type Bot struct {
@@ -90,8 +91,10 @@ type Bot struct {
 	StartPeriod          pgtype.Timestamptz      `db:"start_premium_period" json:"start_premium_period"`
 	PremiumPeriodLength  timex.Duration          `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the bot in nanoseconds"`
 	CertReason           pgtype.Text             `db:"cert_reason" json:"cert_reason" description:"The reason for the bot being certified"`
-	Uptime               int                     `db:"uptime" json:"uptime" description:"The bot's total number of successful uptime checks"`
-	TotalUptime          int                     `db:"total_uptime" json:"total_uptime" description:"The bot's total number of uptime checks"`
+	Uptime               int                     `db:"uptime" json:"uptime" description:"The bot's all-time number of successful uptime checks. Includes older checks that weren't reliable, so use uptime_percent to show uptime"`
+	TotalUptime          int                     `db:"total_uptime" json:"total_uptime" description:"The bot's all-time number of uptime checks. Includes older checks that weren't reliable, so use uptime_percent to show uptime"`
+	UptimePercent        *float64                `db:"-" json:"uptime_percent" description:"The share of uptime checks in the last 30 days where the bot was online, from 0 to 100. Null when it hasn't been seen online in that time" ci:"internal"`
+	UptimeChecks         int                     `db:"-" json:"uptime_checks" description:"How many uptime checks ran in the last 30 days" ci:"internal"`
 	UptimeLastChecked    pgtype.Timestamptz      `db:"uptime_last_checked" json:"uptime_last_checked" description:"The bot's last uptime check"`
 	Note                 pgtype.Text             `db:"approval_note" json:"approval_note" description:"The note for the bot's approval"`
 	CreatedAt            pgtype.Timestamptz      `db:"created_at" json:"created_at" description:"The bot's creation date"`
@@ -101,6 +104,7 @@ type Bot struct {
 	TeamOwnerID          pgtype.UUID             `db:"team_owner" json:"-"`
 	TeamOwner            *Team                   `db:"-" json:"team_owner" description:"If the bot is in a team, who owns the bot. If not in a team, this will be null and owner will instead be set" ci:"internal"` // Must be parsed internally
 	CaptchaOptOut        bool                    `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the bot should have captchas shown if the user has captcha_sponsor_enabled"`
+	HiddenStats          []string                `db:"hidden_stats" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing"`
 	AutoVotesOptOut      bool                    `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the bot refuses automatic votes from auto-vote subscribers"`
 	HighlightedUntil     pgtype.Timestamptz      `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the bot's card has an accent glow until this time"`
 	CardTheme            bool                    `db:"card_theme" json:"card_theme" description:"Whether the bot has bought the Card Theme, which unlocks card_color"`
@@ -140,17 +144,18 @@ type CreateBot struct {
 }
 
 type BotSettingsUpdate struct {
-	Short           string   `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
-	Long            string   `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
-	Prefix          string   `db:"prefix" json:"prefix" validate:"required,min=1,max=10" msg:"Prefix must be between 1 and 10 characters"`                    // impld
-	Invite          string   `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS URL"`                     // impld
-	Library         string   `db:"library" json:"library" validate:"required,min=1,max=50" msg:"Library must be between 1 and 50 characters"`                 // impld
-	ExtraLinks      []Link   `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
-	Tags            []string `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	NSFW            bool     `db:"nsfw" json:"nsfw"`
-	CaptchaOptOut   bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
-	AutoVotesOptOut *bool    `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
-	CardColor       *string  `db:"card_color" json:"card_color,omitempty" validate:"omitempty,len=0|hex6" msg:"Card colour must be a hex colour like #5865f2"`
+	Short           string    `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
+	Long            string    `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
+	Prefix          string    `db:"prefix" json:"prefix" validate:"required,min=1,max=10" msg:"Prefix must be between 1 and 10 characters"`                    // impld
+	Invite          string    `db:"invite" json:"invite" validate:"required,https" msg:"Invite is required and must be a valid HTTPS URL"`                     // impld
+	Library         string    `db:"library" json:"library" validate:"required,min=1,max=50" msg:"Library must be between 1 and 50 characters"`                 // impld
+	ExtraLinks      []Link    `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
+	Tags            []string  `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	NSFW            bool      `db:"nsfw" json:"nsfw"`
+	CaptchaOptOut   bool      `db:"captcha_opt_out" json:"captcha_opt_out"`
+	AutoVotesOptOut *bool     `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
+	HiddenStats     *[]string `db:"hidden_stats" json:"hidden_stats,omitempty" description:"Stats to hide from public view: servers, shards, uptime (which also hides the online status), views and invites. Leave it out to keep the current choice"`
+	CardColor       *string   `db:"card_color" json:"card_color,omitempty" validate:"omitempty,len=0|hex6" msg:"Card colour must be a hex colour like #5865f2"`
 }
 
 type Invite struct {

@@ -200,6 +200,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		PremiumPeriodLength:    row.PremiumPeriodLength,
 		CaptchaOptOut:          row.CaptchaOptOut,
 		AutoVotesOptOut:        row.AutoVotesOptOut,
+		HiddenStats:            row.HiddenStats,
 		HighlightedUntil:       row.HighlightedUntil,
 		CardTheme:              row.CardTheme,
 		BumpedAt:               row.BumpedAt,
@@ -340,6 +341,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 				server.Long = long
 			}
 		}
+	}
+
+	if len(server.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeServer, server.ServerID) {
+		listing.HideServerStats(&server)
 	}
 
 	if !unlisted {

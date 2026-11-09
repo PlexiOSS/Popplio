@@ -18,12 +18,12 @@ FROM bots
 LEFT JOIN internal_user_cache__discord iucd ON bots.bot_id = iucd.id
 LEFT JOIN vanity v ON v.itag = bots.vanity_ref
 WHERE (bots.type = 'approved' OR bots.type = 'certified')
-AND (sqlc.arg('servers_from')::int = 0 OR bots.servers >= sqlc.arg('servers_from')::int)
-AND (sqlc.arg('servers_to')::int = 0 OR bots.servers <= sqlc.arg('servers_to')::int)
+AND (sqlc.arg('servers_from')::int = 0 OR (bots.servers >= sqlc.arg('servers_from')::int AND NOT 'servers' = ANY(bots.hidden_stats)))
+AND (sqlc.arg('servers_to')::int = 0 OR (bots.servers <= sqlc.arg('servers_to')::int AND NOT 'servers' = ANY(bots.hidden_stats)))
 AND (sqlc.arg('votes_from')::int = 0 OR bots.approximate_votes >= sqlc.arg('votes_from')::int)
 AND (sqlc.arg('votes_to')::int = 0 OR bots.approximate_votes <= sqlc.arg('votes_to')::int)
-AND (sqlc.arg('shards_from')::int = 0 OR bots.shards >= sqlc.arg('shards_from')::int)
-AND (sqlc.arg('shards_to')::int = 0 OR bots.shards <= sqlc.arg('shards_to')::int)
+AND (sqlc.arg('shards_from')::int = 0 OR (bots.shards >= sqlc.arg('shards_from')::int AND NOT 'shards' = ANY(bots.hidden_stats)))
+AND (sqlc.arg('shards_to')::int = 0 OR (bots.shards <= sqlc.arg('shards_to')::int AND NOT 'shards' = ANY(bots.hidden_stats)))
 AND (
     cardinality(sqlc.arg('tags')::text[]) = 0
     OR (sqlc.arg('tag_mode')::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(bots.tags) t) @> sqlc.arg('tags')::text[])
@@ -106,14 +106,31 @@ UPDATE bots SET last_japi_update = NOW() WHERE bot_id = $1;
 SELECT bot_id FROM bots WHERE type = 'approved' OR type = 'certified';
 
 -- name: GetListedBotPresenceInputs :many
-SELECT bot_id, self_status, servers, last_stats_post FROM bots WHERE type = 'approved' OR type = 'certified';
+SELECT bot_id, self_status, servers, last_stats_post, last_seen_online FROM bots WHERE type = 'approved' OR type = 'certified';
 
 -- name: RecordBotUptimeCheck :exec
-UPDATE bots SET
-	total_uptime = total_uptime + 1,
-	uptime = uptime + CASE WHEN sqlc.arg('online')::boolean THEN 1 ELSE 0 END,
-	uptime_last_checked = NOW()
-WHERE bot_id = sqlc.arg('bot_id')::text;
+WITH updated AS (
+	UPDATE bots SET
+		total_uptime = total_uptime + 1,
+		uptime = uptime + CASE WHEN sqlc.arg('online')::boolean THEN 1 ELSE 0 END,
+		uptime_last_checked = NOW(),
+		last_seen_online = CASE WHEN sqlc.arg('online')::boolean THEN NOW() ELSE last_seen_online END
+	WHERE bot_id = sqlc.arg('bot_id')::text
+	RETURNING bot_id
+)
+INSERT INTO bot_uptime_daily (bot_id, day, checks, online)
+SELECT bot_id, CURRENT_DATE, 1, CASE WHEN sqlc.arg('online')::boolean THEN 1 ELSE 0 END FROM updated
+ON CONFLICT (bot_id, day) DO UPDATE SET
+	checks = bot_uptime_daily.checks + 1,
+	online = bot_uptime_daily.online + EXCLUDED.online;
+
+-- name: GetBotRecentUptime :one
+SELECT COALESCE(SUM(checks), 0)::bigint AS checks, COALESCE(SUM(online), 0)::bigint AS online
+FROM bot_uptime_daily
+WHERE bot_id = $1 AND day > CURRENT_DATE - 30;
+
+-- name: PruneBotUptimeDaily :exec
+DELETE FROM bot_uptime_daily WHERE day < CURRENT_DATE - 90;
 
 -- name: ResubmitBot :exec
 UPDATE bots SET type = 'pending', claimed_by = NULL WHERE bot_id = $1;
@@ -225,7 +242,7 @@ WHERE team_owner IN (SELECT team_id FROM team_members WHERE user_id = $1);
 SELECT short FROM bots WHERE bot_id = $1;
 
 -- name: GetBotByID :one
-SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out, highlighted_until, card_theme, card_color
+SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out, highlighted_until, card_theme, card_color, hidden_stats, last_seen_online
 FROM bots
 WHERE bot_id = $1;
 
@@ -484,3 +501,12 @@ UPDATE bots SET shard_list = $1 WHERE bot_id = $2;
 
 -- name: UpdateBotSelfStatus :exec
 UPDATE bots SET self_status = $1 WHERE bot_id = $2;
+
+-- name: GetBotHiddenStats :one
+SELECT hidden_stats FROM bots WHERE bot_id = $1;
+
+-- name: SetBotHiddenStats :exec
+UPDATE bots SET hidden_stats = $2 WHERE bot_id = $1;
+
+-- name: GetBotListingExtras :one
+SELECT hidden_stats, last_seen_online FROM bots WHERE bot_id = $1;

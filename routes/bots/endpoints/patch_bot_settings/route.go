@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 
+	"popplio/listing"
 	"popplio/api/resp"
 	"popplio/db"
 	"popplio/state"
@@ -81,6 +82,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error marshaling extra links", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 	}
 
+	var hiddenStats []string
+
+	if payload.HiddenStats != nil {
+		var valid bool
+
+		if hiddenStats, valid = listing.CleanHiddenStats(listing.BotHideableStats, *payload.HiddenStats); !valid {
+			return resp.BadRequest("hidden_stats can only include servers, shards, uptime, views and invites")
+		}
+	}
+
 	err = db.New(state.Pool).UpdateBotSettings(d.Context, db.UpdateBotSettingsParams{
 		Short:         payload.Short,
 		Long:          payload.Long,
@@ -96,6 +107,12 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.Err("Failed to update bot: ", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
+	}
+
+	if payload.HiddenStats != nil {
+		if err := db.New(state.Pool).SetBotHiddenStats(d.Context, db.SetBotHiddenStatsParams{BotID: id, HiddenStats: hiddenStats}); err != nil {
+			return resp.Err("Failed to update hidden stats", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
+		}
 	}
 
 	if payload.AutoVotesOptOut != nil {

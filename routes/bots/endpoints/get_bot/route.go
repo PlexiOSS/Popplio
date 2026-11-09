@@ -184,6 +184,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		shardList[i] = int(s)
 	}
 
+	uptimePercent, uptimeChecks := botassets.RecentUptime(d.Context, row.BotID)
+
 	bot := types.Bot{
 		ITag:                 row.Itag,
 		BotID:                row.BotID,
@@ -214,6 +216,9 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		CertReason:           row.CertReason,
 		Uptime:               int(row.Uptime),
 		TotalUptime:          int(row.TotalUptime),
+		HiddenStats:          row.HiddenStats,
+		UptimePercent:        uptimePercent,
+		UptimeChecks:         uptimeChecks,
 		UptimeLastChecked:    row.UptimeLastChecked,
 		Note:                 pgtype.Text{String: row.ApprovalNote, Valid: true},
 		CreatedAt:            row.CreatedAt,
@@ -305,7 +310,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	bot.User = botUser
-	botassets.ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost, botpresence.Get(d.Context, bot.BotID))
+	botassets.ApplySelfStatus(bot.User, bot.SelfStatus.String, bot.Servers, bot.LastStatsPost, botpresence.Get(d.Context, bot.BotID), row.LastSeenOnline)
 
 	uniqueClicks, err := q.GetBotUniqueClicksCount(d.Context, bot.BotID)
 
@@ -337,6 +342,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	if err != nil {
 		return resp.ErrBody("Error while getting bot vote count [db fetch]", "Error while getting bot vote count [db fetch].", err)
+	}
+
+	if len(bot.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeBot, bot.BotID) {
+		listing.HideBotStats(&bot)
 	}
 
 	if !unlisted {

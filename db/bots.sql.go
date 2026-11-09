@@ -415,7 +415,7 @@ func (q *Queries) GetAllBotIDs(ctx context.Context) ([]string, error) {
 }
 
 const getBotByID = `-- name: GetBotByID :one
-SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out, highlighted_until, card_theme, card_color
+SELECT itag, bot_id, client_id, extra_links, tags, prefix, owner, short, library, nsfw, premium, last_stats_post, last_japi_update, servers, shards, shard_list, users, approximate_votes, clicks, invite_clicks, invite, type, vanity_ref, vote_banned, start_premium_period, premium_period_length, cert_reason, uptime, total_uptime, uptime_last_checked, approval_note, created_at, claimed_by, updated_at, last_claimed, team_owner, captcha_opt_out, self_status, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, moderation_flagged, moderation_categories, auto_votes_opt_out, highlighted_until, card_theme, card_color, hidden_stats, last_seen_online
 FROM bots
 WHERE bot_id = $1
 `
@@ -470,6 +470,8 @@ type GetBotByIDRow struct {
 	HighlightedUntil     pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
 	CardTheme            bool               `db:"card_theme" json:"card_theme"`
 	CardColor            pgtype.Text        `db:"card_color" json:"card_color"`
+	HiddenStats          []string           `db:"hidden_stats" json:"hidden_stats"`
+	LastSeenOnline       pgtype.Timestamptz `db:"last_seen_online" json:"last_seen_online"`
 }
 
 func (q *Queries) GetBotByID(ctx context.Context, botID string) (GetBotByIDRow, error) {
@@ -525,6 +527,8 @@ func (q *Queries) GetBotByID(ctx context.Context, botID string) (GetBotByIDRow, 
 		&i.HighlightedUntil,
 		&i.CardTheme,
 		&i.CardColor,
+		&i.HiddenStats,
+		&i.LastSeenOnline,
 	)
 	return i, err
 }
@@ -732,6 +736,17 @@ func (q *Queries) GetBotCommands(ctx context.Context, botID string) ([]GetBotCom
 	return items, nil
 }
 
+const getBotHiddenStats = `-- name: GetBotHiddenStats :one
+SELECT hidden_stats FROM bots WHERE bot_id = $1
+`
+
+func (q *Queries) GetBotHiddenStats(ctx context.Context, botID string) ([]string, error) {
+	row := q.db.QueryRow(ctx, getBotHiddenStats, botID)
+	var hidden_stats []string
+	err := row.Scan(&hidden_stats)
+	return hidden_stats, err
+}
+
 const getBotInvite = `-- name: GetBotInvite :one
 SELECT invite FROM bots WHERE bot_id = $1 ORDER BY created_at DESC LIMIT 1
 `
@@ -743,6 +758,22 @@ func (q *Queries) GetBotInvite(ctx context.Context, botID string) (string, error
 	return invite, err
 }
 
+const getBotListingExtras = `-- name: GetBotListingExtras :one
+SELECT hidden_stats, last_seen_online FROM bots WHERE bot_id = $1
+`
+
+type GetBotListingExtrasRow struct {
+	HiddenStats    []string           `db:"hidden_stats" json:"hidden_stats"`
+	LastSeenOnline pgtype.Timestamptz `db:"last_seen_online" json:"last_seen_online"`
+}
+
+func (q *Queries) GetBotListingExtras(ctx context.Context, botID string) (GetBotListingExtrasRow, error) {
+	row := q.db.QueryRow(ctx, getBotListingExtras, botID)
+	var i GetBotListingExtrasRow
+	err := row.Scan(&i.HiddenStats, &i.LastSeenOnline)
+	return i, err
+}
+
 const getBotLongDescription = `-- name: GetBotLongDescription :one
 SELECT long FROM bots WHERE bot_id = $1
 `
@@ -752,6 +783,24 @@ func (q *Queries) GetBotLongDescription(ctx context.Context, botID string) (stri
 	var long string
 	err := row.Scan(&long)
 	return long, err
+}
+
+const getBotRecentUptime = `-- name: GetBotRecentUptime :one
+SELECT COALESCE(SUM(checks), 0)::bigint AS checks, COALESCE(SUM(online), 0)::bigint AS online
+FROM bot_uptime_daily
+WHERE bot_id = $1 AND day > CURRENT_DATE - 30
+`
+
+type GetBotRecentUptimeRow struct {
+	Checks int64 `db:"checks" json:"checks"`
+	Online int64 `db:"online" json:"online"`
+}
+
+func (q *Queries) GetBotRecentUptime(ctx context.Context, botID string) (GetBotRecentUptimeRow, error) {
+	row := q.db.QueryRow(ctx, getBotRecentUptime, botID)
+	var i GetBotRecentUptimeRow
+	err := row.Scan(&i.Checks, &i.Online)
+	return i, err
 }
 
 const getBotReviewStatus = `-- name: GetBotReviewStatus :one
@@ -1500,14 +1549,15 @@ func (q *Queries) GetListedBotIDs(ctx context.Context) ([]string, error) {
 }
 
 const getListedBotPresenceInputs = `-- name: GetListedBotPresenceInputs :many
-SELECT bot_id, self_status, servers, last_stats_post FROM bots WHERE type = 'approved' OR type = 'certified'
+SELECT bot_id, self_status, servers, last_stats_post, last_seen_online FROM bots WHERE type = 'approved' OR type = 'certified'
 `
 
 type GetListedBotPresenceInputsRow struct {
-	BotID         string             `db:"bot_id" json:"bot_id"`
-	SelfStatus    pgtype.Text        `db:"self_status" json:"self_status"`
-	Servers       int32              `db:"servers" json:"servers"`
-	LastStatsPost pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+	BotID          string             `db:"bot_id" json:"bot_id"`
+	SelfStatus     pgtype.Text        `db:"self_status" json:"self_status"`
+	Servers        int32              `db:"servers" json:"servers"`
+	LastStatsPost  pgtype.Timestamptz `db:"last_stats_post" json:"last_stats_post"`
+	LastSeenOnline pgtype.Timestamptz `db:"last_seen_online" json:"last_seen_online"`
 }
 
 func (q *Queries) GetListedBotPresenceInputs(ctx context.Context) ([]GetListedBotPresenceInputsRow, error) {
@@ -1524,6 +1574,7 @@ func (q *Queries) GetListedBotPresenceInputs(ctx context.Context) ([]GetListedBo
 			&i.SelfStatus,
 			&i.Servers,
 			&i.LastStatsPost,
+			&i.LastSeenOnline,
 		); err != nil {
 			return nil, err
 		}
@@ -2238,6 +2289,15 @@ func (q *Queries) InsertBotCommand(ctx context.Context, arg InsertBotCommandPara
 	return err
 }
 
+const pruneBotUptimeDaily = `-- name: PruneBotUptimeDaily :exec
+DELETE FROM bot_uptime_daily WHERE day < CURRENT_DATE - 90
+`
+
+func (q *Queries) PruneBotUptimeDaily(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pruneBotUptimeDaily)
+	return err
+}
+
 const recordBotModerationScan = `-- name: RecordBotModerationScan :exec
 UPDATE bots SET moderation_flagged = $2, moderation_categories = $3, moderation_checked_at = NOW() WHERE bot_id = $1
 `
@@ -2254,11 +2314,20 @@ func (q *Queries) RecordBotModerationScan(ctx context.Context, arg RecordBotMode
 }
 
 const recordBotUptimeCheck = `-- name: RecordBotUptimeCheck :exec
-UPDATE bots SET
-	total_uptime = total_uptime + 1,
-	uptime = uptime + CASE WHEN $1::boolean THEN 1 ELSE 0 END,
-	uptime_last_checked = NOW()
-WHERE bot_id = $2::text
+WITH updated AS (
+	UPDATE bots SET
+		total_uptime = total_uptime + 1,
+		uptime = uptime + CASE WHEN $1::boolean THEN 1 ELSE 0 END,
+		uptime_last_checked = NOW(),
+		last_seen_online = CASE WHEN $1::boolean THEN NOW() ELSE last_seen_online END
+	WHERE bot_id = $2::text
+	RETURNING bot_id
+)
+INSERT INTO bot_uptime_daily (bot_id, day, checks, online)
+SELECT bot_id, CURRENT_DATE, 1, CASE WHEN $1::boolean THEN 1 ELSE 0 END FROM updated
+ON CONFLICT (bot_id, day) DO UPDATE SET
+	checks = bot_uptime_daily.checks + 1,
+	online = bot_uptime_daily.online + EXCLUDED.online
 `
 
 type RecordBotUptimeCheckParams struct {
@@ -2366,12 +2435,12 @@ FROM bots
 LEFT JOIN internal_user_cache__discord iucd ON bots.bot_id = iucd.id
 LEFT JOIN vanity v ON v.itag = bots.vanity_ref
 WHERE (bots.type = 'approved' OR bots.type = 'certified')
-AND ($1::int = 0 OR bots.servers >= $1::int)
-AND ($2::int = 0 OR bots.servers <= $2::int)
+AND ($1::int = 0 OR (bots.servers >= $1::int AND NOT 'servers' = ANY(bots.hidden_stats)))
+AND ($2::int = 0 OR (bots.servers <= $2::int AND NOT 'servers' = ANY(bots.hidden_stats)))
 AND ($3::int = 0 OR bots.approximate_votes >= $3::int)
 AND ($4::int = 0 OR bots.approximate_votes <= $4::int)
-AND ($5::int = 0 OR bots.shards >= $5::int)
-AND ($6::int = 0 OR bots.shards <= $6::int)
+AND ($5::int = 0 OR (bots.shards >= $5::int AND NOT 'shards' = ANY(bots.hidden_stats)))
+AND ($6::int = 0 OR (bots.shards <= $6::int AND NOT 'shards' = ANY(bots.hidden_stats)))
 AND (
     cardinality($7::text[]) = 0
     OR ($8::text = '@>' AND ARRAY(SELECT lower(t) FROM unnest(bots.tags) t) @> $7::text[])
@@ -2568,6 +2637,20 @@ func (q *Queries) SearchBotsQueue(ctx context.Context, arg SearchBotsQueueParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const setBotHiddenStats = `-- name: SetBotHiddenStats :exec
+UPDATE bots SET hidden_stats = $2 WHERE bot_id = $1
+`
+
+type SetBotHiddenStatsParams struct {
+	BotID       string   `db:"bot_id" json:"bot_id"`
+	HiddenStats []string `db:"hidden_stats" json:"hidden_stats"`
+}
+
+func (q *Queries) SetBotHiddenStats(ctx context.Context, arg SetBotHiddenStatsParams) error {
+	_, err := q.db.Exec(ctx, setBotHiddenStats, arg.BotID, arg.HiddenStats)
+	return err
 }
 
 const setBotSpotlightedUntil = `-- name: SetBotSpotlightedUntil :exec

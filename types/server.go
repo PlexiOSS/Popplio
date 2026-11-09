@@ -23,6 +23,7 @@ type IndexServer struct {
 	ApproximateVotes int                `db:"approximate_votes" json:"approximate_votes" description:"The server's approximate vote count, used for home page listing etc."`
 	InviteClicks     int                `db:"invite_clicks" json:"invite_clicks" description:"The server's invite click count (via users inviting the server from IBL)"`
 	Clicks           int                `db:"clicks" json:"clicks" description:"The server's view count"`
+	HiddenStats      []string           `db:"-" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing" ci:"internal"`
 	NSFW             bool               `db:"nsfw" json:"nsfw" description:"Whether the server is NSFW or not"`
 	Tags             []string           `db:"tags" json:"tags" description:"The server's tags (e.g. music, moderation, etc.)"`
 	Premium          bool               `db:"premium" json:"premium" description:"Whether the server is a premium server or not"`
@@ -67,6 +68,7 @@ type Server struct {
 	StartPeriod            pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
 	PremiumPeriodLength    time.Duration      `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the server in nanoseconds"`
 	CaptchaOptOut          bool               `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the server should have captchas shown if the user has captcha_sponsor_enabled"`
+	HiddenStats            []string           `db:"hidden_stats" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing"`
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
 	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the server's card has an accent glow until this time"`
 	CardTheme              bool               `db:"card_theme" json:"card_theme" description:"Whether the server has bought the Card Theme, which unlocks card_color"`
@@ -144,17 +146,18 @@ type CreateServer struct {
 }
 
 type ServerSettingsUpdate struct {
-	Short                  string   `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
-	Long                   string   `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
-	ExtraLinks             []Link   `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
-	State                  string   `db:"state" json:"state" validate:"required,oneof=public private unlisted defunct" msg:"State must be one of public, private, unlisted or defunct"`
-	Tags                   []string `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
-	NSFW                   bool     `db:"nsfw" json:"nsfw"`
-	CaptchaOptOut          bool     `db:"captcha_opt_out" json:"captcha_opt_out"`
-	AutoVotesOptOut        *bool    `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
-	CardColor              *string  `db:"card_color" json:"card_color,omitempty" validate:"omitempty,len=0|hex6" msg:"Card colour must be a hex colour like #5865f2"`
-	LoginRequiredForInvite bool     `db:"login_required_for_invite" json:"login_required_for_invite" description:"Whether the server requires a login to be invited to it"`
-	ShowEmojis             bool     `db:"show_emojis" json:"show_emojis" description:"Whether to show this server's emojis and stickers on its listing page. Requires the tracking bot to be in the server to actually have anything to show"`
+	Short                  string    `db:"short" json:"short" validate:"required,min=30,max=150,noxss" msg:"Short description must be between 30 and 150 characters"` // impld
+	Long                   string    `db:"long" json:"long" validate:"required,min=500,noxss" msg:"Long description must be at least 500 characters"`                 // impld
+	ExtraLinks             []Link    `db:"extra_links" json:"extra_links" validate:"required" msg:"Extra links must be sent"`                                         // Impld
+	State                  string    `db:"state" json:"state" validate:"required,oneof=public private unlisted defunct" msg:"State must be one of public, private, unlisted or defunct"`
+	Tags                   []string  `db:"tags" json:"tags" validate:"required,unique,min=1,max=5,dive,min=3,max=30,notblank,nonvulgar" msg:"There must be between 1 and 5 tags without duplicates" amsg:"Each tag must be between 3 and 30 characters and alphabetic"`
+	NSFW                   bool      `db:"nsfw" json:"nsfw"`
+	CaptchaOptOut          bool      `db:"captcha_opt_out" json:"captcha_opt_out"`
+	AutoVotesOptOut        *bool     `db:"auto_votes_opt_out" json:"auto_votes_opt_out,omitempty"`
+	HiddenStats            *[]string `db:"hidden_stats" json:"hidden_stats,omitempty" description:"Stats to hide from public view: members, boosts, views and invites. Leave it out to keep the current choice"`
+	CardColor              *string   `db:"card_color" json:"card_color,omitempty" validate:"omitempty,len=0|hex6" msg:"Card colour must be a hex colour like #5865f2"`
+	LoginRequiredForInvite bool      `db:"login_required_for_invite" json:"login_required_for_invite" description:"Whether the server requires a login to be invited to it"`
+	ShowEmojis             bool      `db:"show_emojis" json:"show_emojis" description:"Whether to show this server's emojis and stickers on its listing page. Requires the tracking bot to be in the server to actually have anything to show"`
 }
 
 type ServerInviteUpdate struct {

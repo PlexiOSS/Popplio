@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"popplio/listing"
 	"popplio/api"
 	"popplio/db"
 	"popplio/entityassets"
@@ -123,6 +124,14 @@ func ResolveIndexServer(ctx context.Context, server *types.IndexServer) error {
 	if err != nil {
 		return fmt.Errorf("error getting vote count: %w", err)
 	}
+
+	server.HiddenStats, err = db.New(state.Pool).GetServerHiddenStats(ctx, server.ServerID)
+
+	if err != nil {
+		return fmt.Errorf("error getting hidden stats: %w", err)
+	}
+
+	listing.HideIndexServerStats(server)
 
 	return nil
 }
