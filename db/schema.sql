@@ -2874,3 +2874,14 @@ CREATE TABLE public.bot_uptime_daily (
 );
 
 CREATE INDEX bot_uptime_daily_day_idx ON public.bot_uptime_daily USING btree (day);
+
+CREATE TABLE public.entity_views_daily (
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    day date NOT NULL,
+    views integer DEFAULT 0 NOT NULL,
+    CONSTRAINT entity_views_daily_pkey PRIMARY KEY (target_type, target_id, day),
+    CONSTRAINT entity_views_daily_target_type_check CHECK (target_type IN ('bot', 'server'))
+);
+
+CREATE INDEX entity_views_daily_day_idx ON public.entity_views_daily USING btree (day);

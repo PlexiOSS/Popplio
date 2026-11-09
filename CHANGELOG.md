@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-11-09
+
+### Added
+
+- `POST /{bots,servers}/{id}/views` and `POST /{bots,servers}/{id}/invite-clicks`
+  record page views and invite clicks from the visitor's browser. Each
+  visitor counts once per listing per day, known crawlers are ignored, and
+  repeat visits are spotted with a keyed hash in Redis that expires within
+  two days, so no IP-derived data is stored in Postgres. Daily view counts
+  go in a new `entity_views_daily` table, and bots and servers return
+  `views_30d`. Needs the `20261109130000_entity_views_daily` migration.
+
+### Changed
+
+- Most Viewed ranks by views in the last 30 days, using old totals only to
+  break ties. Certification's unique clicks requirement uses the higher of
+  a listing's old unique count and its views in the last 30 days.
+
+### Fixed
+
+- The website never sent `target=page`, so recent listings weren't gaining
+  page views or unique clicks. The `target` parameter on `GET /bots/{id}` and
+  `GET /servers/{id}` no longer counts anything, because it counted every
+  request, including repeats and crawlers, and stored plain hashes of IPs.
+  `unique_clicks` stops growing and `clicks` is kept as an all-time total.
+
 ## [1.24.0] - 2026-11-09
 
 ### Changed

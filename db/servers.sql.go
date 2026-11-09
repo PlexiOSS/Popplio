@@ -13,20 +13,6 @@ import (
 	"time"
 )
 
-const appendServerUniqueClick = `-- name: AppendServerUniqueClick :exec
-UPDATE servers SET unique_clicks = array_append(unique_clicks, $1) WHERE server_id = $2
-`
-
-type AppendServerUniqueClickParams struct {
-	ArrayAppend interface{} `db:"array_append" json:"array_append"`
-	ServerID    string      `db:"server_id" json:"server_id"`
-}
-
-func (q *Queries) AppendServerUniqueClick(ctx context.Context, arg AppendServerUniqueClickParams) error {
-	_, err := q.db.Exec(ctx, appendServerUniqueClick, arg.ArrayAppend, arg.ServerID)
-	return err
-}
-
 const approveServer = `-- name: ApproveServer :exec
 UPDATE servers SET type = 'approved', claimed_by = NULL WHERE server_id = $1
 `
@@ -144,22 +130,6 @@ UPDATE servers SET type = 'certified' WHERE server_id = $1
 func (q *Queries) CertifyServer(ctx context.Context, serverID string) error {
 	_, err := q.db.Exec(ctx, certifyServer, serverID)
 	return err
-}
-
-const checkServerHasUniqueClick = `-- name: CheckServerHasUniqueClick :one
-SELECT $1::text = ANY(unique_clicks) FROM servers WHERE server_id = $2::text
-`
-
-type CheckServerHasUniqueClickParams struct {
-	HashedIp string `db:"hashed_ip" json:"hashed_ip"`
-	ServerID string `db:"server_id" json:"server_id"`
-}
-
-func (q *Queries) CheckServerHasUniqueClick(ctx context.Context, arg CheckServerHasUniqueClickParams) (bool, error) {
-	row := q.db.QueryRow(ctx, checkServerHasUniqueClick, arg.HashedIp, arg.ServerID)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
 }
 
 const clearServerFeaturedUntil = `-- name: ClearServerFeaturedUntil :exec
@@ -772,7 +742,7 @@ func (q *Queries) GetIndexServersByTeamOwner(ctx context.Context, teamOwner pgty
 
 const getMostViewedIndexServers = `-- name: GetMostViewedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY clicks DESC LIMIT 9
+FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30) DESC, clicks DESC LIMIT 9
 `
 
 type GetMostViewedIndexServersRow struct {
@@ -1164,7 +1134,7 @@ func (q *Queries) GetServerCaptchaOptOut(ctx context.Context, serverID string) (
 }
 
 const getServerCertStats = `-- name: GetServerCertStats :one
-SELECT type, total_members, cardinality(unique_clicks) AS unique_clicks, approximate_votes, created_at
+SELECT type, total_members, GREATEST(cardinality(unique_clicks), (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30))::int AS unique_clicks, approximate_votes, created_at
 FROM servers
 WHERE server_id = $1
 `
@@ -1405,6 +1375,22 @@ func (q *Queries) GetServerInviteEligibility(ctx context.Context, serverID strin
 		&i.Type,
 		&i.State,
 	)
+	return i, err
+}
+
+const getServerListingExtras = `-- name: GetServerListingExtras :one
+SELECT hidden_stats, (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30)::int AS views_30d FROM servers WHERE server_id = $1
+`
+
+type GetServerListingExtrasRow struct {
+	HiddenStats []string `db:"hidden_stats" json:"hidden_stats"`
+	Views30d    int32    `db:"views_30d" json:"views_30d"`
+}
+
+func (q *Queries) GetServerListingExtras(ctx context.Context, serverID string) (GetServerListingExtrasRow, error) {
+	row := q.db.QueryRow(ctx, getServerListingExtras, serverID)
+	var i GetServerListingExtrasRow
+	err := row.Scan(&i.HiddenStats, &i.Views30d)
 	return i, err
 }
 

@@ -42,7 +42,7 @@ func TestHideBotStats(t *testing.T) {
 	bot := types.Bot{
 		Servers: 10, Shards: 2, ShardList: []int{1, 2}, Uptime: 5, TotalUptime: 6,
 		UptimePercent: &percent, UptimeChecks: 6, UptimeLastChecked: pgtype.Timestamptz{Valid: true},
-		Clicks: 7, UniqueClicks: 3, InviteClicks: 4, ApproximateVotes: 9,
+		Clicks: 7, Views30d: 5, UniqueClicks: 3, InviteClicks: 4, ApproximateVotes: 9,
 		HiddenStats: BotHideableStats,
 		User:        shared,
 	}
@@ -58,7 +58,7 @@ func TestHideBotStats(t *testing.T) {
 	}
 
 	if bot.Servers != 0 || bot.Shards != 0 || len(bot.ShardList) != 0 || bot.Uptime != 0 || bot.TotalUptime != 0 ||
-		bot.UptimePercent != nil || bot.UptimeChecks != 0 || bot.UptimeLastChecked.Valid || bot.Clicks != 0 ||
+		bot.UptimePercent != nil || bot.UptimeChecks != 0 || bot.UptimeLastChecked.Valid || bot.Clicks != 0 || bot.Views30d != 0 ||
 		bot.UniqueClicks != 0 || bot.InviteClicks != 0 {
 		t.Fatalf("something leaked: %+v", bot)
 	}

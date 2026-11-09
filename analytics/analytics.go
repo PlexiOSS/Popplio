@@ -38,6 +38,10 @@ func Snapshot(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 
+	if err := q.PruneEntityViewsDaily(ctx); err != nil {
+		return 0, err
+	}
+
 	return bots + servers, nil
 }
 

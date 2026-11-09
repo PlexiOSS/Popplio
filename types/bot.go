@@ -24,6 +24,7 @@ type IndexBot struct {
 	Library          string                  `db:"library" json:"library" description:"The bot's library"`
 	InviteClick      int                     `db:"invite_clicks" json:"invite_clicks" description:"The bot's invite click count (via users inviting the bot from IBL)"`
 	Clicks           int                     `db:"clicks" json:"clicks" description:"The bot's view count"`
+	Views30d         int                     `db:"-" json:"views_30d" description:"Views in the last 30 days, counting each visitor once per listing per day" ci:"internal"`
 	HiddenStats      []string                `db:"-" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing" ci:"internal"`
 	Servers          int                     `db:"servers" json:"servers" description:"The bot's server count"`
 	NSFW             bool                    `db:"nsfw" json:"nsfw" description:"Whether the bot is NSFW or not"`
@@ -104,6 +105,7 @@ type Bot struct {
 	TeamOwnerID          pgtype.UUID             `db:"team_owner" json:"-"`
 	TeamOwner            *Team                   `db:"-" json:"team_owner" description:"If the bot is in a team, who owns the bot. If not in a team, this will be null and owner will instead be set" ci:"internal"` // Must be parsed internally
 	CaptchaOptOut        bool                    `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the bot should have captchas shown if the user has captcha_sponsor_enabled"`
+	Views30d             int                     `db:"-" json:"views_30d" description:"Views in the last 30 days, counting each visitor once per listing per day" ci:"internal"`
 	HiddenStats          []string                `db:"hidden_stats" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing"`
 	AutoVotesOptOut      bool                    `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the bot refuses automatic votes from auto-vote subscribers"`
 	HighlightedUntil     pgtype.Timestamptz      `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the bot's card has an accent glow until this time"`
