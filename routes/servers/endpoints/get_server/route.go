@@ -4,10 +4,8 @@
 package get_server
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -47,18 +45,8 @@ func Docs() *docs.Doc {
 				Schema:      docs.IdSchema,
 			},
 			{
-				Name: "target",
-				Description: `The target page of the request if any.
-
-If target is 'page', then unique clicks will be counted based on a SHA-256 hashed IP
-
-If target is 'invite', then the invite will be counted as a click
-
-Officially recognized targets:
-
-- page -> server page view
-- settings -> server settings page view
-- invite -> server invite view`,
+				Name:        "target",
+				Description: "No longer used. Views and invite clicks are recorded with POST /servers/{id}/views and POST /servers/{id}/invite-clicks.",
 				Required: false,
 				In:       "query",
 				Schema:   docs.IdSchema,
@@ -80,70 +68,6 @@ Officially recognized targets:
 		},
 		Resp: types.Bot{},
 	}
-}
-
-func handleAnalytics(r *http.Request, id, target string) error {
-	switch target {
-	case "page":
-		// Get IP from request and hash it
-		hashedIp := fmt.Sprintf("%x", sha256.Sum256([]byte(r.RemoteAddr)))
-
-		// Create transaction
-		tx, err := state.Pool.Begin(state.Context)
-
-		if err != nil {
-			return fmt.Errorf("error creating transaction: %w", err)
-		}
-
-		defer tx.Rollback(state.Context)
-
-		q := db.New(tx)
-
-		err = q.UpdateServerClicks(state.Context, id)
-
-		if err != nil {
-			return fmt.Errorf("error updating clicks count: %w", err)
-		}
-
-		// Check if the IP has already clicked the server by checking the unique_clicks row
-		hasClicked, err := q.CheckServerHasUniqueClick(state.Context, db.CheckServerHasUniqueClickParams{
-			HashedIp: hashedIp,
-			ServerID: id,
-		})
-
-		if err != nil {
-			return fmt.Errorf("error checking for any unique clicks from this user: %w", err)
-		}
-
-		if !hasClicked {
-			// If not, add it to the array
-			state.Logger.Debug("Adding new unique click for user during handleAnalytics", zap.String("id", id), zap.String("target", target), zap.String("targetType", "bot"))
-			err = q.AppendServerUniqueClick(state.Context, db.AppendServerUniqueClickParams{
-				ArrayAppend: hashedIp,
-				ServerID:    id,
-			})
-
-			if err != nil {
-				return fmt.Errorf("error adding new unique click for user: %w", err)
-			}
-		}
-
-		// Commit transaction
-		err = tx.Commit(state.Context)
-
-		if err != nil {
-			return fmt.Errorf("error committing transaction: %w", err)
-		}
-	case "invite":
-		// Update clicks
-		err := db.New(state.Pool).UpdateServerInviteClicks(state.Context, id)
-
-		if err != nil {
-			return fmt.Errorf("error updating invite clicks: %w", err)
-		}
-	}
-
-	return nil
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
@@ -343,22 +267,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	if len(server.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeServer, server.ServerID) {
-		listing.HideServerStats(&server)
+	recentViews, err := q.GetEntityRecentViews(d.Context, db.GetEntityRecentViewsParams{TargetType: "server", TargetID: server.ServerID})
+
+	if err != nil {
+		return resp.Err("Error while getting recent views", err)
 	}
 
-	if !unlisted {
-		go func() {
-			defer func() {
-				if rec := recover(); rec != nil {
-					state.Logger.Error("Panic while handling analytics", zap.Any("panic", rec), zap.String("id", id), zap.String("target", target))
-				}
-			}()
+	server.Views30d = int(recentViews)
 
-			if err := handleAnalytics(r, id, target); err != nil {
-				state.Logger.Error("Error while handling analytics", zap.Error(err), zap.String("id", id), zap.String("target", target))
-			}
-		}()
+	if len(server.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeServer, server.ServerID) {
+		listing.HideServerStats(&server)
 	}
 
 	return uapi.HttpResponse{

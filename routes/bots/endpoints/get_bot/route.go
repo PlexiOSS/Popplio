@@ -4,10 +4,8 @@
 package get_bot
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -50,19 +48,8 @@ func Docs() *docs.Doc {
 				Schema:      docs.IdSchema,
 			},
 			{
-				Name: "target",
-				Description: `The target page of the request if any.
-
-If target is 'page', then unique clicks will be counted based on a SHA-256 hashed IP
-
-If target is 'invite', then the invite will be counted as a click
-
-Officially recognized targets:
-
-- page -> bot page view
-- settings -> bot settings page view
-- stats -> bot stats page view
-- invite -> bot invite view`,
+				Name:        "target",
+				Description: "No longer used. Views and invite clicks are recorded with POST /bots/{id}/views and POST /bots/{id}/invite-clicks.",
 				Required: false,
 				In:       "query",
 				Schema:   docs.IdSchema,
@@ -84,70 +71,6 @@ Officially recognized targets:
 		},
 		Resp: types.Bot{},
 	}
-}
-
-func handleAnalytics(r *http.Request, id, target string) error {
-	switch target {
-	case "page":
-		// Get IP from request and hash it
-		hashedIp := fmt.Sprintf("%x", sha256.Sum256([]byte(r.RemoteAddr)))
-
-		// Create transaction
-		tx, err := state.Pool.Begin(state.Context)
-
-		if err != nil {
-			return fmt.Errorf("error creating transaction: %w", err)
-		}
-
-		defer tx.Rollback(state.Context)
-
-		q := db.New(tx)
-
-		err = q.UpdateBotClicks(state.Context, id)
-
-		if err != nil {
-			return fmt.Errorf("error updating clicks count: %w", err)
-		}
-
-		// Check if the IP has already clicked the bot by checking the unique_clicks row
-		hasClicked, err := q.CheckBotHasUniqueClick(state.Context, db.CheckBotHasUniqueClickParams{
-			HashedIp: hashedIp,
-			BotID:    id,
-		})
-
-		if err != nil {
-			return fmt.Errorf("error checking for any unique clicks from this user: %w", err)
-		}
-
-		if !hasClicked {
-			// If not, add it to the array
-			state.Logger.Debug("Adding new unique click for user during handleAnalytics", zap.String("id", id), zap.String("target", target), zap.String("targetType", "bot"))
-			err = q.AppendBotUniqueClick(state.Context, db.AppendBotUniqueClickParams{
-				ArrayAppend: hashedIp,
-				BotID:       id,
-			})
-
-			if err != nil {
-				return fmt.Errorf("error adding new unique click for user: %w", err)
-			}
-		}
-
-		// Commit transaction
-		err = tx.Commit(state.Context)
-
-		if err != nil {
-			return fmt.Errorf("error committing transaction: %w", err)
-		}
-	case "invite":
-		// Update clicks
-		err := db.New(state.Pool).UpdateBotInviteClicks(state.Context, id)
-
-		if err != nil {
-			return fmt.Errorf("error updating invite clicks: %w", err)
-		}
-	}
-
-	return nil
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
@@ -344,22 +267,16 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.ErrBody("Error while getting bot vote count [db fetch]", "Error while getting bot vote count [db fetch].", err)
 	}
 
-	if len(bot.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeBot, bot.BotID) {
-		listing.HideBotStats(&bot)
+	recentViews, err := q.GetEntityRecentViews(d.Context, db.GetEntityRecentViewsParams{TargetType: "bot", TargetID: bot.BotID})
+
+	if err != nil {
+		return resp.Err("Error while getting recent views", err)
 	}
 
-	if !unlisted {
-		go func() {
-			defer func() {
-				if rec := recover(); rec != nil {
-					state.Logger.Error("Panic while handling analytics", zap.Any("panic", rec), zap.String("id", id), zap.String("target", target))
-				}
-			}()
+	bot.Views30d = int(recentViews)
 
-			if err := handleAnalytics(r, id, target); err != nil {
-				state.Logger.Error("Error while handling analytics", zap.Error(err), zap.String("id", id), zap.String("target", target))
-			}
-		}()
+	if len(bot.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeBot, bot.BotID) {
+		listing.HideBotStats(&bot)
 	}
 
 	// Handle extra includes

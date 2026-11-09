@@ -136,7 +136,7 @@ DELETE FROM bot_uptime_daily WHERE day < CURRENT_DATE - 90;
 UPDATE bots SET type = 'pending', claimed_by = NULL WHERE bot_id = $1;
 
 -- name: GetBotCertStats :one
-SELECT type, servers, cardinality(unique_clicks) AS unique_clicks, approximate_votes, created_at
+SELECT type, servers, GREATEST(cardinality(unique_clicks), (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'bot' AND v.target_id = bots.bot_id AND v.day > CURRENT_DATE - 30))::int AS unique_clicks, approximate_votes, created_at
 FROM bots
 WHERE bot_id = $1;
 
@@ -252,12 +252,6 @@ SELECT cardinality(unique_clicks) FROM bots WHERE bot_id = $1;
 -- name: UpdateBotClicks :exec
 UPDATE bots SET clicks = clicks + 1 WHERE bot_id = $1;
 
--- name: CheckBotHasUniqueClick :one
-SELECT sqlc.arg('hashed_ip')::text = ANY(unique_clicks) FROM bots WHERE bot_id = sqlc.arg('bot_id')::text;
-
--- name: AppendBotUniqueClick :exec
-UPDATE bots SET unique_clicks = array_append(unique_clicks, $1) WHERE bot_id = $2;
-
 -- name: UpdateBotInviteClicks :exec
 UPDATE bots SET invite_clicks = invite_clicks + 1 WHERE bot_id = $1;
 
@@ -351,7 +345,7 @@ FROM bots WHERE premium = true AND (type = 'approved' OR type = 'certified') ORD
 
 -- name: GetMostViewedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY clicks DESC LIMIT 9;
+FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'bot' AND v.target_id = bots.bot_id AND v.day > CURRENT_DATE - 30) DESC, clicks DESC LIMIT 9;
 
 -- name: GetRecentlyAddedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
@@ -509,4 +503,4 @@ SELECT hidden_stats FROM bots WHERE bot_id = $1;
 UPDATE bots SET hidden_stats = $2 WHERE bot_id = $1;
 
 -- name: GetBotListingExtras :one
-SELECT hidden_stats, last_seen_online FROM bots WHERE bot_id = $1;
+SELECT hidden_stats, last_seen_online, (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'bot' AND v.target_id = bots.bot_id AND v.day > CURRENT_DATE - 30)::int AS views_30d FROM bots WHERE bot_id = $1;

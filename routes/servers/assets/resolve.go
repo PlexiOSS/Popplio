@@ -125,11 +125,14 @@ func ResolveIndexServer(ctx context.Context, server *types.IndexServer) error {
 		return fmt.Errorf("error getting vote count: %w", err)
 	}
 
-	server.HiddenStats, err = db.New(state.Pool).GetServerHiddenStats(ctx, server.ServerID)
+	extras, err := db.New(state.Pool).GetServerListingExtras(ctx, server.ServerID)
 
 	if err != nil {
-		return fmt.Errorf("error getting hidden stats: %w", err)
+		return fmt.Errorf("error getting listing extras: %w", err)
 	}
+
+	server.HiddenStats = extras.HiddenStats
+	server.Views30d = int(extras.Views30d)
 
 	listing.HideIndexServerStats(server)
 

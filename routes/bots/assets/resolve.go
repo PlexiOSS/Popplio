@@ -141,6 +141,7 @@ func ResolveIndexBot(ctx context.Context, bot *types.IndexBot) error {
 	}
 
 	bot.HiddenStats = extras.HiddenStats
+	bot.Views30d = int(extras.Views30d)
 	listing.HideIndexBotStats(bot)
 
 	return nil

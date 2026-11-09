@@ -12,20 +12,6 @@ import (
 	"popplio/validators/timex"
 )
 
-const appendBotUniqueClick = `-- name: AppendBotUniqueClick :exec
-UPDATE bots SET unique_clicks = array_append(unique_clicks, $1) WHERE bot_id = $2
-`
-
-type AppendBotUniqueClickParams struct {
-	ArrayAppend interface{} `db:"array_append" json:"array_append"`
-	BotID       string      `db:"bot_id" json:"bot_id"`
-}
-
-func (q *Queries) AppendBotUniqueClick(ctx context.Context, arg AppendBotUniqueClickParams) error {
-	_, err := q.db.Exec(ctx, appendBotUniqueClick, arg.ArrayAppend, arg.BotID)
-	return err
-}
-
 const approveBot = `-- name: ApproveBot :exec
 UPDATE bots SET type = 'approved', claimed_by = NULL WHERE bot_id = $1
 `
@@ -213,22 +199,6 @@ UPDATE bots SET type = 'certified' WHERE bot_id = $1
 func (q *Queries) CertifyBot(ctx context.Context, botID string) error {
 	_, err := q.db.Exec(ctx, certifyBot, botID)
 	return err
-}
-
-const checkBotHasUniqueClick = `-- name: CheckBotHasUniqueClick :one
-SELECT $1::text = ANY(unique_clicks) FROM bots WHERE bot_id = $2::text
-`
-
-type CheckBotHasUniqueClickParams struct {
-	HashedIp string `db:"hashed_ip" json:"hashed_ip"`
-	BotID    string `db:"bot_id" json:"bot_id"`
-}
-
-func (q *Queries) CheckBotHasUniqueClick(ctx context.Context, arg CheckBotHasUniqueClickParams) (bool, error) {
-	row := q.db.QueryRow(ctx, checkBotHasUniqueClick, arg.HashedIp, arg.BotID)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
 }
 
 const clearBotFeaturedUntil = `-- name: ClearBotFeaturedUntil :exec
@@ -545,7 +515,7 @@ func (q *Queries) GetBotCaptchaOptOut(ctx context.Context, botID string) (bool, 
 }
 
 const getBotCertStats = `-- name: GetBotCertStats :one
-SELECT type, servers, cardinality(unique_clicks) AS unique_clicks, approximate_votes, created_at
+SELECT type, servers, GREATEST(cardinality(unique_clicks), (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'bot' AND v.target_id = bots.bot_id AND v.day > CURRENT_DATE - 30))::int AS unique_clicks, approximate_votes, created_at
 FROM bots
 WHERE bot_id = $1
 `
@@ -759,18 +729,19 @@ func (q *Queries) GetBotInvite(ctx context.Context, botID string) (string, error
 }
 
 const getBotListingExtras = `-- name: GetBotListingExtras :one
-SELECT hidden_stats, last_seen_online FROM bots WHERE bot_id = $1
+SELECT hidden_stats, last_seen_online, (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'bot' AND v.target_id = bots.bot_id AND v.day > CURRENT_DATE - 30)::int AS views_30d FROM bots WHERE bot_id = $1
 `
 
 type GetBotListingExtrasRow struct {
 	HiddenStats    []string           `db:"hidden_stats" json:"hidden_stats"`
 	LastSeenOnline pgtype.Timestamptz `db:"last_seen_online" json:"last_seen_online"`
+	Views30d       int32              `db:"views_30d" json:"views_30d"`
 }
 
 func (q *Queries) GetBotListingExtras(ctx context.Context, botID string) (GetBotListingExtrasRow, error) {
 	row := q.db.QueryRow(ctx, getBotListingExtras, botID)
 	var i GetBotListingExtrasRow
-	err := row.Scan(&i.HiddenStats, &i.LastSeenOnline)
+	err := row.Scan(&i.HiddenStats, &i.LastSeenOnline, &i.Views30d)
 	return i, err
 }
 
@@ -1588,7 +1559,7 @@ func (q *Queries) GetListedBotPresenceInputs(ctx context.Context) ([]GetListedBo
 
 const getMostViewedIndexBots = `-- name: GetMostViewedIndexBots :many
 SELECT bot_id, short, type, vanity_ref, approximate_votes, shards, library, invite_clicks, clicks, servers, nsfw, tags, premium, created_at, self_status, last_stats_post, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until
-FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY clicks DESC LIMIT 9
+FROM bots WHERE type = 'approved' OR type = 'certified' ORDER BY (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'bot' AND v.target_id = bots.bot_id AND v.day > CURRENT_DATE - 30) DESC, clicks DESC LIMIT 9
 `
 
 type GetMostViewedIndexBotsRow struct {

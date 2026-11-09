@@ -98,6 +98,7 @@ func HideBotStats(bot *types.Bot) {
 
 	if slices.Contains(bot.HiddenStats, StatViews) {
 		bot.Clicks = 0
+		bot.Views30d = 0
 		bot.UniqueClicks = 0
 	}
 
@@ -121,6 +122,7 @@ func HideIndexBotStats(bot *types.IndexBot) {
 
 	if slices.Contains(bot.HiddenStats, StatViews) {
 		bot.Clicks = 0
+		bot.Views30d = 0
 	}
 
 	if slices.Contains(bot.HiddenStats, StatInvites) {
@@ -141,6 +143,7 @@ func HideServerStats(server *types.Server) {
 
 	if slices.Contains(server.HiddenStats, StatViews) {
 		server.Clicks = 0
+		server.Views30d = 0
 		server.UniqueClicks = 0
 	}
 
@@ -157,6 +160,7 @@ func HideIndexServerStats(server *types.IndexServer) {
 
 	if slices.Contains(server.HiddenStats, StatViews) {
 		server.Clicks = 0
+		server.Views30d = 0
 	}
 
 	if slices.Contains(server.HiddenStats, StatInvites) {

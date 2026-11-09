@@ -23,6 +23,7 @@ type IndexServer struct {
 	ApproximateVotes int                `db:"approximate_votes" json:"approximate_votes" description:"The server's approximate vote count, used for home page listing etc."`
 	InviteClicks     int                `db:"invite_clicks" json:"invite_clicks" description:"The server's invite click count (via users inviting the server from IBL)"`
 	Clicks           int                `db:"clicks" json:"clicks" description:"The server's view count"`
+	Views30d         int                `db:"-" json:"views_30d" description:"Views in the last 30 days, counting each visitor once per listing per day" ci:"internal"`
 	HiddenStats      []string           `db:"-" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing" ci:"internal"`
 	NSFW             bool               `db:"nsfw" json:"nsfw" description:"Whether the server is NSFW or not"`
 	Tags             []string           `db:"tags" json:"tags" description:"The server's tags (e.g. music, moderation, etc.)"`
@@ -68,6 +69,7 @@ type Server struct {
 	StartPeriod            pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
 	PremiumPeriodLength    time.Duration      `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the server in nanoseconds"`
 	CaptchaOptOut          bool               `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the server should have captchas shown if the user has captcha_sponsor_enabled"`
+	Views30d               int                `db:"-" json:"views_30d" description:"Views in the last 30 days, counting each visitor once per listing per day" ci:"internal"`
 	HiddenStats            []string           `db:"hidden_stats" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing"`
 	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
 	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the server's card has an accent glow until this time"`

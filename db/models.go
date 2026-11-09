@@ -394,6 +394,13 @@ type EntityStatsDaily struct {
 	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type EntityViewsDaily struct {
+	TargetType string      `db:"target_type" json:"target_type"`
+	TargetID   string      `db:"target_id" json:"target_id"`
+	Day        pgtype.Date `db:"day" json:"day"`
+	Views      int32       `db:"views" json:"views"`
+}
+
 type EntityVote struct {
 	Itag         pgtype.UUID        `db:"itag" json:"itag"`
 	TargetID     string             `db:"target_id" json:"target_id"`

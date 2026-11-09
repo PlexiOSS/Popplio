@@ -6,6 +6,7 @@ package bots
 import (
 	"net/http"
 
+	"popplio/views"
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/bots/endpoints/add_bot"
@@ -51,6 +52,22 @@ func (b Router) Tag() (string, string) {
 func (b Router) Routes(r *chi.Mux) {
 	put_entity_asset.Mount(r, api.TargetTypeBot, "/bots", "id", perms.EntityEditBots)
 	pagestyle.Mount(r, api.TargetTypeBot, "/bots", perms.EntityEditBots)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/views",
+		OpId:    "record_bot_view",
+		Method:  uapi.POST,
+		Docs:    views.Docs(views.EventView, "bot"),
+		Handler: views.Route(views.EventView, "bot"),
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/bots/{id}/invite-clicks",
+		OpId:    "record_bot_invite_click",
+		Method:  uapi.POST,
+		Docs:    views.Docs(views.EventInvite, "bot"),
+		Handler: views.Route(views.EventInvite, "bot"),
+	}.Route(r)
 
 	uapi.Route{
 		Pattern: "/bots/@all",

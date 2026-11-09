@@ -68,7 +68,7 @@ LIMIT $1;
 UPDATE servers SET moderation_flagged = $2, moderation_categories = $3, moderation_checked_at = NOW() WHERE server_id = $1;
 
 -- name: GetServerCertStats :one
-SELECT type, total_members, cardinality(unique_clicks) AS unique_clicks, approximate_votes, created_at
+SELECT type, total_members, GREATEST(cardinality(unique_clicks), (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30))::int AS unique_clicks, approximate_votes, created_at
 FROM servers
 WHERE server_id = $1;
 
@@ -312,7 +312,7 @@ FROM servers WHERE state = 'public' AND premium = true AND (type = 'approved' OR
 
 -- name: GetMostViewedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
-FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY clicks DESC LIMIT 9;
+FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') ORDER BY (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30) DESC, clicks DESC LIMIT 9;
 
 -- name: GetRecentlyAddedIndexServers :many
 SELECT server_id, name, avatar, total_members, online_members, short, type, state, vanity_ref, approximate_votes, invite_clicks, clicks, nsfw, tags, premium, supporter_badge, boosted_until, featured_until, spotlighted_until
@@ -343,12 +343,6 @@ SELECT long FROM servers WHERE server_id = $1;
 
 -- name: UpdateServerClicks :exec
 UPDATE servers SET clicks = clicks + 1 WHERE server_id = $1;
-
--- name: CheckServerHasUniqueClick :one
-SELECT sqlc.arg('hashed_ip')::text = ANY(unique_clicks) FROM servers WHERE server_id = sqlc.arg('server_id')::text;
-
--- name: AppendServerUniqueClick :exec
-UPDATE servers SET unique_clicks = array_append(unique_clicks, $1) WHERE server_id = $2;
 
 -- name: UpdateServerInviteClicks :exec
 UPDATE servers SET invite_clicks = invite_clicks + 1 WHERE server_id = $1;
@@ -418,3 +412,6 @@ SELECT hidden_stats FROM servers WHERE server_id = $1;
 
 -- name: SetServerHiddenStats :exec
 UPDATE servers SET hidden_stats = $2 WHERE server_id = $1;
+
+-- name: GetServerListingExtras :one
+SELECT hidden_stats, (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30)::int AS views_30d FROM servers WHERE server_id = $1;

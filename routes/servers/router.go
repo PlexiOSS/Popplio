@@ -6,6 +6,7 @@ package servers
 import (
 	"net/http"
 
+	"popplio/views"
 	"popplio/api"
 	"popplio/perms"
 	"popplio/routes/entityassets/put_entity_asset"
@@ -49,6 +50,22 @@ func (b Router) Tag() (string, string) {
 func (b Router) Routes(r *chi.Mux) {
 	put_entity_asset.Mount(r, api.TargetTypeServer, "/servers", "id", perms.EntityEditServers)
 	pagestyle.Mount(r, api.TargetTypeServer, "/servers", perms.EntityEditServers)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/views",
+		OpId:    "record_server_view",
+		Method:  uapi.POST,
+		Docs:    views.Docs(views.EventView, "server"),
+		Handler: views.Route(views.EventView, "server"),
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/servers/{id}/invite-clicks",
+		OpId:    "record_server_invite_click",
+		Method:  uapi.POST,
+		Docs:    views.Docs(views.EventInvite, "server"),
+		Handler: views.Route(views.EventInvite, "server"),
+	}.Route(r)
 
 	uapi.Route{
 		Pattern: "/servers/@all",
