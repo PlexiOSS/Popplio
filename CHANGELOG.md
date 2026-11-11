@@ -7,17 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.25.0] - 2026-11-11
+## [1.26.0] - 2026-11-11
 
 ### Added
 
-- `POST /{bots,servers}/{id}/views` and `POST /{bots,servers}/{id}/invite-clicks`
-  record page views and invite clicks from the visitor's browser. Each
-  visitor counts once per listing per day, known crawlers are ignored, and
-  repeat visits are spotted with a keyed hash in Redis that expires within
-  two days, so no IP-derived data is stored in Postgres. Daily view counts
-  go in a new `entity_views_daily` table, and bots and servers return
-  `views_30d`. Needs the `20261109130000_entity_views_daily` migration.
 - Application positions have a one-line `summary`, returned by the public
   positions list and editable in the staff panel. The
   `20261111110000_app_position_summary` migration adds it and fills in a
@@ -27,9 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Most Viewed ranks by views in the last 30 days, using old totals only to
-  break ties. Certification's unique clicks requirement uses the higher of
-  a listing's old unique count and its views in the last 30 days.
 - Config defaults no longer point at infinitybots.gg, a domain we no longer
   own. The default sign-in redirects, site addresses and the staff
   two-factor label use omniplex.gg instead. Production sets its own values,
@@ -37,11 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- The website never sent `target=page`, so recent listings weren't gaining
-  page views or unique clicks. The `target` parameter on `GET /bots/{id}` and
-  `GET /servers/{id}` no longer counts anything, because it counted every
-  request, including repeats and crawlers, and stored plain hashes of IPs.
-  `unique_clicks` stops growing and `clicks` is kept as an all-time total.
 - Popplio and the Arcadia panel recorded a Cloudflare address instead of the
   visitor's, in the audit log, rate limits, view tracking and payment checks.
   Behind Traefik, `X-Real-IP` is the Cloudflare server that connected, and
@@ -63,6 +48,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   leaderboard's rank returns `next_reset`, and credit reminders use it. The
   27 October reset counts as October's, so the next one is 1 December.
   Needs the `20261111100000_vote_reset_schedule` migration.
+
+## [1.25.0] - 2026-11-09
+
+### Added
+
+- `POST /{bots,servers}/{id}/views` and `POST /{bots,servers}/{id}/invite-clicks`
+  record page views and invite clicks from the visitor's browser. Each
+  visitor counts once per listing per day, known crawlers are ignored, and
+  repeat visits are spotted with a keyed hash in Redis that expires within
+  two days, so no IP-derived data is stored in Postgres. Daily view counts
+  go in a new `entity_views_daily` table, and bots and servers return
+  `views_30d`. Needs the `20261109130000_entity_views_daily` migration.
+
+### Changed
+
+- Most Viewed ranks by views in the last 30 days, using old totals only to
+  break ties. Certification's unique clicks requirement uses the higher of
+  a listing's old unique count and its views in the last 30 days.
+
+### Fixed
+
+- The website never sent `target=page`, so recent listings weren't gaining
+  page views or unique clicks. The `target` parameter on `GET /bots/{id}` and
+  `GET /servers/{id}` no longer counts anything, because it counted every
+  request, including repeats and crawlers, and stored plain hashes of IPs.
+  `unique_clicks` stops growing and `clicks` is kept as an all-time total.
 
 ## [1.24.0] - 2026-11-09
 
