@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-11-11
+
+### Security
+
+- Push notification subscriptions accepted any `endpoint`, and Popplio sent
+  each notification to it with a plain HTTP client, so a signed-in user
+  could make Popplio send POST requests to internal addresses, including
+  loopback, private networks and cloud metadata. `POST
+  /users/{id}/notifications` now only accepts `https` endpoints on browser
+  push services (Google, Mozilla, Apple and Windows), and pushes are sent
+  through the same `netguard` client as webhooks, which refuses non-public
+  addresses and doesn't follow redirects. Saved subscriptions with any
+  other endpoint are deleted the next time they would be used.
+- A review reply's `parent_id` had to exist but could belong to a different
+  listing. It now has to be a review on the same listing.
+
+### Fixed
+
+- Booster sync ended the perks of everyone missing from the bot's member
+  cache, and the cache can be incomplete after a restart if Discord's
+  member list request fails. Before ending anyone's perks, the sync now
+  checks with Discord directly and keeps them if they're still boosting or
+  the check fails. When the cache holds under 90% of the server, it asks
+  Discord for the member list again. Booster status checks fall back to
+  Discord too, and people who were wrongly marked as stopped in the last
+  day don't get the "Thanks for boosting" notification again.
+- Two `BOOSTPREMIUM` redemptions sent at the same moment could both pass
+  the 30-day check and give premium to two listings. The offer now uses
+  the same once-a-day fulfillment record as monthly booster premium, so
+  only one can succeed. It also no longer returns raw database errors.
+
 ## [1.26.0] - 2026-11-11
 
 ### Added

@@ -5,6 +5,7 @@
 package redeem_payment_offer
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -108,8 +109,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		userId, err := snowflake.Parse(d.Auth.ID)
 
 		if err != nil {
-			state.Logger.Error("Error while parsing snowflake", zap.Error(err), zap.String("userID", d.Auth.ID))
-			return resp.BadRequest("Error: " + err.Error())
+			return resp.BadRequest("Invalid user ID")
 		}
 
 		bs := assets.CheckUserBoosterStatus(userId)
@@ -123,8 +123,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		lastRedeemedBoosterOffer, err := q.GetUserLastBoosterClaim(d.Context, d.Auth.ID)
 
 		if err != nil {
-			state.Logger.Error("Error while checking last booster claim", zap.Error(err), zap.String("userID", d.Auth.ID))
-			return resp.BadRequest("Error: " + err.Error())
+			return resp.Err("Error while checking last booster claim", err, zap.String("userID", d.Auth.ID))
 		}
 
 		// Check the last time the user redeemed a booster offer
@@ -134,18 +133,20 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			}
 		}
 
-		err = assets.GivePerks(d.Context, payload)
+		hours, err := assets.ApplyBoosterPremium(d.Context, d.Auth.ID, payload.ForType, payload.For, time.Now())
 
 		if err != nil {
-			state.Logger.Error("Error while giving perks", zap.Error(err), zap.String("userID", d.Auth.ID))
-			return resp.BadRequest("Error: " + err.Error())
+			var targetErr *assets.TargetError
+
+			if errors.As(err, &targetErr) {
+				return resp.BadRequest("Booster premium can't be applied because " + targetErr.Reason)
+			}
+
+			return resp.Err("Error while applying booster premium", err, zap.String("userID", d.Auth.ID))
 		}
 
-		err = q.UpdateUserLastBoosterClaim(d.Context, d.Auth.ID)
-
-		if err != nil {
-			state.Logger.Error("Error while updating last booster claim", zap.Error(err), zap.String("userID", d.Auth.ID))
-			return resp.BadRequest("Error: " + err.Error())
+		if hours == 0 {
+			return resp.BadRequest("You can only redeem a booster offer once every 30 days")
 		}
 
 		return uapi.DefaultResponse(http.StatusNoContent)

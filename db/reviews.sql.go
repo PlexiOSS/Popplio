@@ -12,11 +12,17 @@ import (
 )
 
 const countReviewByID = `-- name: CountReviewByID :one
-SELECT COUNT(*) FROM reviews WHERE id = $1
+SELECT COUNT(*) FROM reviews WHERE id = $1 AND target_id = $2 AND target_type = $3
 `
 
-func (q *Queries) CountReviewByID(ctx context.Context, id pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countReviewByID, id)
+type CountReviewByIDParams struct {
+	ID         pgtype.UUID `db:"id" json:"id"`
+	TargetID   string      `db:"target_id" json:"target_id"`
+	TargetType string      `db:"target_type" json:"target_type"`
+}
+
+func (q *Queries) CountReviewByID(ctx context.Context, arg CountReviewByIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countReviewByID, arg.ID, arg.TargetID, arg.TargetType)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

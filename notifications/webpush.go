@@ -87,6 +87,12 @@ func PushNotification(userId string, notif types.Alert) error {
 			continue
 		}
 
+		if !ValidPushEndpoint(endpoint) {
+			state.Logger.Warn("Removing push subscription with a disallowed endpoint", zap.String("notif_id", notifId), zap.String("user_id", userId))
+			q.DeleteUserNotificationByNotifID(state.Context, notifId)
+			continue
+		}
+
 		state.Logger.Info("Sending notification", zap.String("notif_id", notifId), zap.String("endpoint", endpoint))
 
 		sub := webpush.Subscription{
@@ -102,6 +108,7 @@ func PushNotification(userId string, notif types.Alert) error {
 			VAPIDPublicKey:  state.Config.Notifications.VapidPublicKey,
 			VAPIDPrivateKey: state.Config.Notifications.VapidPrivateKey,
 			TTL:             ttl,
+			HTTPClient:      pushClient,
 		})
 
 		if err != nil {

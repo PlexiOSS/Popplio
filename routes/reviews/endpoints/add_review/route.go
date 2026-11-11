@@ -186,7 +186,11 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			return resp.BadRequest("Parent review not found")
 		}
 
-		count, err := q.CountReviewByID(d.Context, parentID)
+		count, err := q.CountReviewByID(d.Context, db.CountReviewByIDParams{
+			ID:         parentID,
+			TargetID:   targetId,
+			TargetType: targetType,
+		})
 
 		if err != nil {
 			return resp.Err("Failed to query parent review count [db count]", err, zap.String("parent_id", payload.ParentID))

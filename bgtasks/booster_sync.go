@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"popplio/boosters"
@@ -38,6 +39,28 @@ func BoosterSync(ctx context.Context) error {
 
 	q := db.New(state.Pool)
 
+	current, err := q.ListBoosting(ctx)
+
+	if err != nil {
+		return fmt.Errorf("listing current boosters: %w", err)
+	}
+
+	missing := []string{}
+
+	for _, id := range current {
+		if !slices.Contains(ids, id) {
+			missing = append(missing, id)
+		}
+	}
+
+	ids = append(ids, boosters.StillBoosting(missing)...)
+
+	recentlyStopped, err := q.ListRecentlyStoppedBoosters(ctx)
+
+	if err != nil {
+		return fmt.Errorf("listing recently stopped boosters: %w", err)
+	}
+
 	started, err := q.StartBoosting(ctx, ids)
 
 	if err != nil {
@@ -50,7 +73,11 @@ func BoosterSync(ctx context.Context) error {
 		return fmt.Errorf("recording ended boosts: %w", err)
 	}
 
-	notifyBoosters(ctx, q, started, types.Alert{
+	newBoosters := slices.DeleteFunc(slices.Clone(started), func(id string) bool {
+		return slices.Contains(recentlyStopped, id)
+	})
+
+	notifyBoosters(ctx, q, newBoosters, types.Alert{
 		Type:     types.AlertTypeSuccess,
 		Title:    "Thanks for boosting!",
 		Message:  "You now get a free month of Bronze premium every 30 days, a free extra Auto-vote slot and the Server Booster badge. Pick the listing your premium goes to.",
