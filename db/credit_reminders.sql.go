@@ -7,8 +7,6 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getCheapestShopItemPrice = `-- name: GetCheapestShopItemPrice :one
@@ -20,17 +18,6 @@ func (q *Queries) GetCheapestShopItemPrice(ctx context.Context) (int32, error) {
 	var cents int32
 	err := row.Scan(&cents)
 	return cents, err
-}
-
-const getNextVoteReset = `-- name: GetNextVoteReset :one
-SELECT (MAX(created_at) + INTERVAL '1 month')::timestamptz AS next_reset FROM automated_vote_resets
-`
-
-func (q *Queries) GetNextVoteReset(ctx context.Context) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, getNextVoteReset)
-	var next_reset pgtype.Timestamptz
-	err := row.Scan(&next_reset)
-	return next_reset, err
 }
 
 const listRedeemableVoteTotals = `-- name: ListRedeemableVoteTotals :many

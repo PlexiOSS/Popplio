@@ -57,6 +57,15 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.POST,
 		Docs:    views.Docs(views.EventView, "server"),
 		Handler: views.Route(views.EventView, "server"),
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{
@@ -65,6 +74,15 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.POST,
 		Docs:    views.Docs(views.EventInvite, "server"),
 		Handler: views.Route(views.EventInvite, "server"),
+		Auth: []uapi.AuthType{
+			{
+				Type: api.TargetTypeUser,
+			},
+		},
+		AuthOptional: true,
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 
 	uapi.Route{

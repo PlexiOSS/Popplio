@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.25.0] - 2026-11-09
+## [1.25.0] - 2026-11-11
 
 ### Added
 
@@ -18,12 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   two days, so no IP-derived data is stored in Postgres. Daily view counts
   go in a new `entity_views_daily` table, and bots and servers return
   `views_30d`. Needs the `20261109130000_entity_views_daily` migration.
+- Application positions have a one-line `summary`, returned by the public
+  positions list and editable in the staff panel. The
+  `20261111110000_app_position_summary` migration adds it and fills in a
+  summary for every current position.
+- `GET /users/{id}/auto-vote` returns `votes_24h` and `votes_7d`, overall and
+  per listing, counting the automatic votes cast for the user.
 
 ### Changed
 
 - Most Viewed ranks by views in the last 30 days, using old totals only to
   break ties. Certification's unique clicks requirement uses the higher of
   a listing's old unique count and its views in the last 30 days.
+- Config defaults no longer point at infinitybots.gg, a domain we no longer
+  own. The default sign-in redirects, site addresses and the staff
+  two-factor label use omniplex.gg instead. Production sets its own values,
+  so this only affects a config that leaves them out.
 
 ### Fixed
 
@@ -32,6 +42,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /servers/{id}` no longer counts anything, because it counted every
   request, including repeats and crawlers, and stored plain hashes of IPs.
   `unique_clicks` stops growing and `clicks` is kept as an all-time total.
+- Popplio and the Arcadia panel recorded a Cloudflare address instead of the
+  visitor's, in the audit log, rate limits, view tracking and payment checks.
+  Behind Traefik, `X-Real-IP` is the Cloudflare server that connected, and
+  chi's `RealIP` middleware trusted it first. A new `clientip` middleware
+  replaces it: `CF-Connecting-IP` is only trusted when the request really
+  comes from Cloudflare's network, `X-Real-IP` only from a private proxy, and
+  `X-Forwarded-For` never, so none of them can be faked by calling the server
+  directly. The panel's staff API proxy passes the staff member's address
+  with a per-process key instead of `X-Forwarded-For`.
+- View and invite click requests accept an optional sign-in, so the activity
+  log shows who it was instead of "Anonymous". People who manage the listing
+  aren't counted.
+- The monthly vote reset ran one month after the previous one, so it had
+  drifted to the 27th. It now runs at 00:00 UTC on the 1st and records which
+  month it closed, so it can't run twice for the same month. A staff
+  `VoteResetAll` is now recorded too: one done in the last 7 days of a month
+  counts as that month's reset for that listing type, and the automatic
+  reset skips it. Earlier ones don't affect the schedule. The voter
+  leaderboard's rank returns `next_reset`, and credit reminders use it. The
+  27 October reset counts as October's, so the next one is 1 December.
+  Needs the `20261111100000_vote_reset_schedule` migration.
 
 ## [1.24.0] - 2026-11-09
 

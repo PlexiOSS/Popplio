@@ -7,7 +7,6 @@ package create_data_task
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"popplio/api/resp"
@@ -79,7 +78,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		taskName = "data_delete"
 	}
 
-	remoteIp := strings.Split(strings.ReplaceAll(r.Header.Get("X-Forwarded-For"), " ", ""), ",")
+	remoteIp := []string{r.RemoteAddr}
 
 	taskKey := crypto.RandString(128)
 

@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"time"
 
+	"popplio/clientip"
 	"popplio/arcadia/types"
 	"popplio/state"
 
-	"github.com/go-chi/chi/v5/middleware"
 
 	"go.uber.org/zap"
 )
@@ -37,7 +37,7 @@ func New() *Server {
 	handler := recoverMiddleware(
 		loggingMiddleware(
 			corsMiddleware(
-				middleware.RealIP(
+				clientip.Middleware(
 					maxBodyMiddleware(mux),
 				),
 			),

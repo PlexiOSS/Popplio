@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"popplio/arcadia/impls"
 	"popplio/arcadia/types"
@@ -152,6 +153,20 @@ func voteResetAll(ctx context.Context, m *types.RPCVoteResetAll, h Handle) (Succ
 	err = db.New(tx).VoidAllEntityVotesForType(ctx, h.TargetType.String())
 
 	if err != nil {
+		return Success{}, err
+	}
+
+	manualPeriod := pgtype.Date{}
+
+	if period, counted := votes.ManualResetPeriod(time.Now()); counted {
+		manualPeriod = votes.Date(period)
+	}
+
+	if err := db.New(tx).InsertManualVoteReset(ctx, db.InsertManualVoteResetParams{
+		Period:      manualPeriod,
+		TargetType:  pgtype.Text{String: h.TargetType.String(), Valid: true},
+		TriggeredBy: pgtype.Text{String: h.UserID, Valid: true},
+	}); err != nil {
 		return Success{}, err
 	}
 

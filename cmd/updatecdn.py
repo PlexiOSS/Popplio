@@ -9,13 +9,13 @@ async def main():
         print(f"Updating CDN for user {uid['user_id']}...")
 
         # Call DELETE first to clear cache
-        resp = requests.delete(f"https://spider-staging.infinitybots.gg/platform/user/{uid['user_id']}?platform=discord")
+        resp = requests.delete(f"https://spider.omniplex.gg/platform/user/{uid['user_id']}?platform=discord")
 
         if not resp.ok:
             print(f"Failed to clear cache for user {uid['user_id']}")
         
         # Call GET to update cache
-        resp = requests.get(f"https://spider-staging.infinitybots.gg/platform/user/{uid['user_id']}?platform=discord")
+        resp = requests.get(f"https://spider.omniplex.gg/platform/user/{uid['user_id']}?platform=discord")
 
         if not resp.ok:
             print(f"Failed to update cache for user {uid['user_id']}")

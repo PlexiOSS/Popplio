@@ -24,14 +24,14 @@ type DiscordAuth struct {
 	Token            string   `yaml:"token" comment:"Discord bot token" validate:"required"`
 	ClientID         string   `yaml:"client_id" default:"815553000470478850" comment:"Discord Client ID" validate:"required"`
 	ClientSecret     string   `yaml:"client_secret" comment:"Discord Client Secret" validate:"required"`
-	AllowedRedirects []string `yaml:"allowed_redirects" default:"http://localhost:3000/auth/sauron,http://localhost:8000/auth/sauron,https://reedwhisker.infinitybots.gg/auth/sauron,https://infinitybots.gg/auth/sauron,https://botlist.site/auth/sauron,https://infinitybots.xyz/auth/sauron" validate:"required"`
+	AllowedRedirects []string `yaml:"allowed_redirects" default:"http://localhost:3000/auth/sauron,https://omniplex.gg/auth/sauron" validate:"required"`
 }
 
 type Sites struct {
-	Frontend    string `yaml:"frontend" default:"https://reedwhisker.infinitybots.gg" comment:"Frontend URL" validate:"required"`
-	API         string `yaml:"api" default:"https://spider.infinitybots.gg" comment:"API URL" validate:"required"`
-	Panel       string `yaml:"panel" default:"https://panel.infinitybots.gg" comment:"Panel URL" validate:"required"`
-	Infernoplex string `yaml:"infernoplex" default:"https://infernoplex.infinitybots.gg" comment:"Infernoplex URL" validate:"required"`
+	Frontend    string `yaml:"frontend" default:"https://omniplex.gg" comment:"Frontend URL" validate:"required"`
+	API         string `yaml:"api" default:"https://spider.omniplex.gg" comment:"API URL" validate:"required"`
+	Panel       string `yaml:"panel" default:"https://omniplex.gg" comment:"Panel URL" validate:"required"`
+	Infernoplex string `yaml:"infernoplex" default:"http://127.0.0.1:61001" comment:"Infernoplex URL" validate:"required"`
 }
 
 type Roles struct {

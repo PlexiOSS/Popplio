@@ -44,10 +44,6 @@ func IsCrawler(userAgent string) bool {
 }
 
 func ViewerIP(r *http.Request) string {
-	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
-		return ip
-	}
-
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return host
 	}
@@ -128,11 +124,11 @@ func save(ctx context.Context, event Event, targetType, targetID string) error {
 
 func Docs(event Event, targetType string) func() *docs.Doc {
 	summary := "Record " + targetType + " View"
-	description := "Records that a visitor opened this " + targetType + "'s page. Each visitor counts once per " + targetType + " per day, and known crawlers aren't counted. Always returns 204."
+	description := "Records that a visitor opened this " + targetType + "'s page. Each visitor counts once per " + targetType + " per day. Known crawlers, and people who manage the " + targetType + ", aren't counted. Signing in is optional. Always returns 204."
 
 	if event == EventInvite {
 		summary = "Record " + targetType + " Invite Click"
-		description = "Records that a visitor opened this " + targetType + "'s invite. Each visitor counts once per " + targetType + " per day, and known crawlers aren't counted. Always returns 204."
+		description = "Records that a visitor opened this " + targetType + "'s invite. Each visitor counts once per " + targetType + " per day. Known crawlers, and people who manage the " + targetType + ", aren't counted. Signing in is optional. Always returns 204."
 	}
 
 	return func() *docs.Doc {
@@ -179,6 +175,10 @@ func Route(event Event, targetType string) func(d uapi.RouteData, r *http.Reques
 		public, err := listing.EntityIsPublic(d.Context, targetType, id)
 
 		if err != nil || !public {
+			return done
+		}
+
+		if d.Auth.Authorized && listing.CanViewUnlisted(d.Context, d.Auth, targetType, id) {
 			return done
 		}
 

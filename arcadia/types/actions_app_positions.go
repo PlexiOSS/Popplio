@@ -35,6 +35,7 @@ type AppPosition struct {
 	ID                 string                `json:"id"`
 	Name               string                `json:"name"`
 	Info               string                `json:"info"`
+	Summary            string                `json:"summary"`
 	Tags               []string              `json:"tags"`
 	Questions          []AppPositionQuestion `json:"questions"`
 	Hidden             bool                  `json:"hidden"`
@@ -53,6 +54,7 @@ type AppPositionInput struct {
 	ID                 string                `json:"id"`
 	Name               string                `json:"name"`
 	Info               string                `json:"info"`
+	Summary            string                `json:"summary"`
 	Tags               []string              `json:"tags"`
 	Questions          []AppPositionQuestion `json:"questions"`
 	Hidden             bool                  `json:"hidden"`

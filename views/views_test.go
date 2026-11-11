@@ -35,16 +35,17 @@ func TestIsCrawler(t *testing.T) {
 
 func TestViewerIP(t *testing.T) {
 	r := httptest.NewRequest("POST", "/bots/1/views", nil)
-	r.RemoteAddr = "10.0.0.1:443"
+	r.RemoteAddr = "203.0.113.7:443"
 
-	if got := ViewerIP(r); got != "10.0.0.1" {
-		t.Errorf("no Cloudflare header = %q", got)
+	if got := ViewerIP(r); got != "203.0.113.7" {
+		t.Errorf("with a port = %q", got)
 	}
 
-	r.Header.Set("CF-Connecting-IP", "203.0.113.9")
+	r.RemoteAddr = "203.0.113.7"
+	r.Header.Set("CF-Connecting-IP", "1.1.1.1")
 
-	if got := ViewerIP(r); got != "203.0.113.9" {
-		t.Errorf("with Cloudflare header = %q", got)
+	if got := ViewerIP(r); got != "203.0.113.7" {
+		t.Errorf("the Cloudflare header should be left to the clientip middleware, got %q", got)
 	}
 }
 

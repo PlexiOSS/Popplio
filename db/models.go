@@ -55,6 +55,7 @@ type AppPosition struct {
 	ID                 string             `db:"id" json:"id"`
 	Name               string             `db:"name" json:"name"`
 	Info               string             `db:"info" json:"info"`
+	Summary            string             `db:"summary" json:"summary"`
 	Tags               []string           `db:"tags" json:"tags"`
 	Questions          []byte             `db:"questions" json:"questions"`
 	Hidden             bool               `db:"hidden" json:"hidden"`
@@ -171,8 +172,12 @@ type AutoVoteTarget struct {
 }
 
 type AutomatedVoteReset struct {
-	ID        pgtype.UUID        `db:"id" json:"id"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID          pgtype.UUID        `db:"id" json:"id"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Period      pgtype.Date        `db:"period" json:"period"`
+	Kind        string             `db:"kind" json:"kind"`
+	TargetType  pgtype.Text        `db:"target_type" json:"target_type"`
+	TriggeredBy pgtype.Text        `db:"triggered_by" json:"triggered_by"`
 }
 
 type Badge struct {

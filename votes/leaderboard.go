@@ -194,6 +194,10 @@ func LeaderboardRank(ctx context.Context, period, userID string) (types.VoterLea
 		res.PeriodStart = &t
 	}
 
+	if next, err := NextReset(ctx, time.Now()); err == nil {
+		res.NextReset = &next
+	}
+
 	row, err := db.New(state.Pool).GetVoterRank(ctx, db.GetVoterRankParams{Author: userID, Since: since})
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {

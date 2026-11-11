@@ -1,6 +1,3 @@
--- name: GetNextVoteReset :one
-SELECT (MAX(created_at) + INTERVAL '1 month')::timestamptz AS next_reset FROM automated_vote_resets;
-
 -- name: ListRedeemableVoteTotals :many
 SELECT target_type, target_id, (COUNT(*) FILTER (WHERE upvote) - COUNT(*) FILTER (WHERE NOT upvote))::int AS votes
 FROM entity_votes

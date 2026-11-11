@@ -29,6 +29,8 @@ type AutoVoteTarget struct {
 	LastVotedAt    *time.Time `json:"last_voted_at" description:"When an automatic vote was last cast"`
 	LastSkipReason *string    `json:"last_skip_reason" description:"Why the last automatic vote was skipped, if it was"`
 	CooldownUntil  *time.Time `json:"cooldown_until" description:"When the user's vote cooldown on this listing ends, whether their last vote was automatic or by hand. Null if they aren't on cooldown"`
+	VotesDay       int        `json:"votes_24h" description:"Automatic votes cast for this listing in the last 24 hours"`
+	VotesWeek      int        `json:"votes_7d" description:"Automatic votes cast for this listing in the last 7 days"`
 	InSchedule     bool       `json:"in_schedule" description:"Whether the listing's schedule allows a vote right now"`
 	Paused         bool       `json:"paused" description:"Whether automatic votes for this listing are paused"`
 }
@@ -47,6 +49,8 @@ type AutoVoteStatus struct {
 	BillingInterval   string           `json:"billing_interval" description:"month or year. month if the user never subscribed"`
 	BoosterSlots      int              `json:"booster_slots" description:"Free slots the user gets for boosting the Omniplex Discord server, included in max_targets"`
 	Targets           []AutoVoteTarget `json:"targets" description:"The listings being auto-voted for"`
+	VotesDay          int              `json:"votes_24h" description:"Automatic votes cast in the last 24 hours, including for listings no longer on the list"`
+	VotesWeek         int              `json:"votes_7d" description:"Automatic votes cast in the last 7 days, including for listings no longer on the list"`
 	Notify            string           `json:"notify" description:"How the user hears about automatic votes: off, each (a notification for every vote) or daily (one summary a day)"`
 }
 

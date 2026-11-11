@@ -3,6 +3,7 @@ package get_auto_vote
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/autovote"
@@ -14,6 +15,7 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func Docs() *docs.Doc {
@@ -86,6 +88,34 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	for _, row := range rows {
 		out.Targets = append(out.Targets, autovote.Target(d.Context, row))
+	}
+
+	for _, window := range []struct {
+		since time.Duration
+		total *int
+		set   func(t *types.AutoVoteTarget, n int)
+	}{
+		{24 * time.Hour, &out.VotesDay, func(t *types.AutoVoteTarget, n int) { t.VotesDay = n }},
+		{7 * 24 * time.Hour, &out.VotesWeek, func(t *types.AutoVoteTarget, n int) { t.VotesWeek = n }},
+	} {
+		counts, err := q.CountUserAutoVotesSince(d.Context, db.CountUserAutoVotesSinceParams{
+			Author: userID,
+			Since:  pgtype.Timestamp{Time: time.Now().UTC().Add(-window.since), Valid: true},
+		})
+
+		if err != nil {
+			return resp.Err("Failed to count automatic votes", err)
+		}
+
+		for _, c := range counts {
+			*window.total += int(c.Votes)
+
+			for i := range out.Targets {
+				if out.Targets[i].TargetType == c.TargetType && out.Targets[i].TargetID == c.TargetID {
+					window.set(&out.Targets[i], int(c.Votes))
+				}
+			}
+		}
 	}
 
 	return uapi.HttpResponse{Json: out}
