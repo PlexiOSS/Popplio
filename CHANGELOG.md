@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `DELETE /platform/user/{id}` needed no sign-in, so anyone could clear the
+  cached Discord profile of any user over and over, making every page that
+  shows them refetch from Discord and risking our Discord rate limit. It now
+  needs a user session for the same ID.
+- API sessions created with `perm_limits` could be used to create a new
+  session without those limits, because `POST
+  /{target_type}/{target_id}/sessions` only compared the requested limits
+  with the user's team permissions. New sessions are now capped by the
+  calling session's own limits too.
+- User sessions with `perm_limits` were only limited on routes with an
+  entity permission check, so they could still use every account route
+  (data export, payments, profile edits and so on). Those routes now refuse
+  limited sessions, and routes where sign-in is optional treat them as
+  signed out.
+
 ## [1.26.1] - 2026-11-11
 
 ### Security

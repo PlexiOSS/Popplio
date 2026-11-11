@@ -368,6 +368,8 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 		}, false
 	}
 
+	entityChecked := false
+
 	permCheck, ok := pc.(PermissionCheck)
 
 	if ok {
@@ -402,6 +404,8 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				}, false
 			}
 
+			entityChecked = true
+
 			err = AuthzEntityPermissionCheck(
 				req.Context(),
 				authData,
@@ -417,6 +421,17 @@ func Authorize(r uapi.Route, req *http.Request) (uapi.AuthData, uapi.HttpRespons
 				}, false
 			}
 		}
+	}
+
+	if !entityChecked && authData.Authorized && authData.TargetType == TargetTypeUser && len(permLimits) > 0 {
+		if r.AuthOptional {
+			return uapi.AuthData{}, uapi.HttpResponse{}, true
+		}
+
+		return uapi.AuthData{}, uapi.HttpResponse{
+			Status: http.StatusForbidden,
+			Json:   types.ApiError{Message: "This session is limited to specific permissions, so it can't be used for account-level actions"},
+		}, false
 	}
 
 	return authData, uapi.HttpResponse{}, true

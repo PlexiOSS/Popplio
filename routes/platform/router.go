@@ -5,6 +5,7 @@
 package platform
 
 import (
+	"popplio/api"
 	"popplio/routes/platform/endpoints/clear_user"
 	"popplio/routes/platform/endpoints/get_user"
 
@@ -36,5 +37,14 @@ func (b Router) Routes(r *chi.Mux) {
 		Method:  uapi.DELETE,
 		Docs:    clear_user.Docs,
 		Handler: clear_user.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "id",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
 	}.Route(r)
 }
