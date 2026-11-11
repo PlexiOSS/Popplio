@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -213,13 +214,25 @@ func VoteResetter(ctx context.Context) error {
 
 	txq := db.New(tx)
 
-	_, err = txq.GetRecentAutomatedVoteResetForUpdate(ctx)
+	if err := txq.LockVoteResetSchedule(ctx); err != nil {
+		return err
+	}
 
-	if err == nil {
+	period := votes.ClosingPeriod(time.Now())
+
+	done, err := txq.AutomaticVoteResetDone(ctx, votes.Date(period))
+
+	if err != nil {
+		return err
+	}
+
+	if done {
 		return nil
 	}
 
-	if !isNoRows(err) {
+	manual, err := txq.ListManualVoteResetTypes(ctx, votes.Date(period))
+
+	if err != nil {
 		return err
 	}
 
@@ -227,19 +240,25 @@ func VoteResetter(ctx context.Context) error {
 		return err
 	}
 
-	err = txq.VoidAllUnvoidedEntityVotes(ctx)
+	var reset []string
 
-	if err != nil {
-		return err
-	}
+	for _, targetType := range votes.ResetTargetTypes {
+		if slices.Contains(manual, targetType) {
+			continue
+		}
 
-	for _, targetType := range []string{"bot", "server", "team"} {
+		if err := txq.VoidUnvoidedEntityVotesForType(ctx, targetType); err != nil {
+			return err
+		}
+
 		if err := votes.RecomputeApproximateVotes(ctx, tx, targetType); err != nil {
 			return err
 		}
+
+		reset = append(reset, targetType)
 	}
 
-	if err := txq.InsertAutomatedVoteReset(ctx); err != nil {
+	if err := txq.InsertAutomatedVoteReset(ctx, votes.Date(period)); err != nil {
 		return err
 	}
 
@@ -247,13 +266,24 @@ func VoteResetter(ctx context.Context) error {
 		return err
 	}
 
-	return impls.SendModLog(discord.MessageCreate{
-		Embeds: []discord.Embed{{
-			Title:  "__Automated Per-Monthly Vote Reset!__",
-			Footer: impls.Footer("Welcome back :)"),
-			Color:  impls.ColourRed,
-		}},
-	})
+	month := period.Format("January 2006")
+	embed := discord.Embed{
+		Title:  "__Automated Per-Monthly Vote Reset!__",
+		Footer: impls.Footer("Welcome back :)"),
+		Color:  impls.ColourRed,
+	}
+
+	if len(manual) > 0 {
+		embed.Description = fmt.Sprintf("Closed %s. Staff already reset %s in the last week of the month, so those were skipped.", month, strings.Join(manual, ", "))
+	} else {
+		embed.Description = "Closed " + month + "."
+	}
+
+	if len(reset) == 0 {
+		return nil
+	}
+
+	return impls.SendModLog(discord.MessageCreate{Embeds: []discord.Embed{embed}})
 }
 
 func isNoRows(err error) bool {

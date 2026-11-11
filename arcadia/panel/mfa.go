@@ -17,7 +17,7 @@ import (
 
 const (
 	totpSecretBits = 160
-	otpLabel       = "staff@infinitybots.gg"
+	otpLabel       = "staff@omniplex.gg"
 	otpIssuer      = "Omniplex"
 	qrSize         = 200
 )

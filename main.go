@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"popplio/clientip"
 	"popplio/audit"
 	"popplio/brandemoji"
 	"popplio/linkedroles"
@@ -118,7 +119,7 @@ func main() {
 
 	r.Use(
 		middleware.Recoverer,
-		middleware.RealIP,
+		clientip.Middleware,
 		middleware.CleanPath,
 		corsMiddleware,
 		zapchi.Logger(state.Logger, "api"),

@@ -14,6 +14,7 @@ import (
 	"popplio/notifications"
 	"popplio/state"
 	"popplio/types"
+	"popplio/votes"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -56,15 +57,13 @@ func CreditReminderMessage(resetAt time.Time, toRedeem, withCredits int) string 
 func CreditReminders(ctx context.Context) error {
 	q := db.New(state.Pool)
 
-	next, err := q.GetNextVoteReset(ctx)
+	resetAt, err := votes.NextReset(ctx, time.Now())
 
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil {
 		return fmt.Errorf("finding the next vote reset: %w", err)
 	}
 
-	if !next.Valid {
-		return nil
-	}
+	next := pgtype.Timestamptz{Time: resetAt, Valid: true}
 
 	until := time.Until(next.Time)
 

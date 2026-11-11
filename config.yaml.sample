@@ -4,17 +4,13 @@ discord_auth:
   client_secret:  # Discord Client Secret
   allowed_redirects:
     - http://localhost:3000/auth/sauron
-    - http://localhost:8000/auth/sauron
-    - https://reedwhisker.infinitybots.gg/auth/sauron
-    - https://infinitybots.gg/auth/sauron
-    - https://botlist.site/auth/sauron
-    - https://infinitybots.xyz/auth/sauron
+    - https://omniplex.gg/auth/sauron
 
 sites:
-  frontend: https://reedwhisker.infinitybots.gg # Frontend URL
-  api: https://spider.infinitybots.gg # API URL
-  panel: https://panel.infinitybots.gg # Panel URL
-  infernoplex: https://infernoplex.infinitybots.gg # Infernoplex URL
+  frontend: https://omniplex.gg # Frontend URL
+  api: https://spider.omniplex.gg # API URL
+  panel: https://omniplex.gg # Panel URL
+  infernoplex: http://127.0.0.1:61001 # Infernoplex URL
 
 channels:
   bot_logs: 762077915499593738 # Bot Logs Channel

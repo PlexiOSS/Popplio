@@ -125,6 +125,7 @@ type VoterLeaderboardRank struct {
 	Votes       int        `json:"votes" description:"The user's upvote count in the period"`
 	TotalVoters int        `json:"total_voters" description:"How many users have counted upvotes in the period"`
 	PeriodStart *time.Time `json:"period_start" description:"When the period started, null for all-time"`
+	NextReset   *time.Time `json:"next_reset" description:"When monthly votes next reset: 00:00 UTC on the 1st, or a month later if staff already reset every listing type at the end of this month"`
 }
 
 // One voter for an entity, with how many times they've upvoted it

@@ -271,7 +271,12 @@ CREATE TABLE public.apps (
 
 CREATE TABLE public.automated_vote_resets (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    period date,
+    kind text DEFAULT 'automatic'::text NOT NULL,
+    target_type text,
+    triggered_by text,
+    CONSTRAINT automated_vote_resets_kind_check CHECK ((kind = ANY (ARRAY['automatic'::text, 'manual'::text])))
 );
 
 
@@ -2764,6 +2769,7 @@ CREATE TABLE public.app_positions (
     id text NOT NULL,
     name text NOT NULL,
     info text DEFAULT ''::text NOT NULL,
+    summary text DEFAULT ''::text NOT NULL,
     tags text[] DEFAULT '{}'::text[] NOT NULL,
     questions jsonb DEFAULT '[]'::jsonb NOT NULL,
     hidden boolean DEFAULT false NOT NULL,
@@ -2885,3 +2891,5 @@ CREATE TABLE public.entity_views_daily (
 );
 
 CREATE INDEX entity_views_daily_day_idx ON public.entity_views_daily USING btree (day);
+
+CREATE INDEX automated_vote_resets_period_idx ON public.automated_vote_resets USING btree (period, kind);

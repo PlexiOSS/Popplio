@@ -45,6 +45,7 @@ func toAppPositionDTO(row db.AppPosition, pending int64) (types.AppPosition, err
 		ID:                 row.ID,
 		Name:               row.Name,
 		Info:               row.Info,
+		Summary:            row.Summary,
 		Tags:               types.NonNilStrings(row.Tags),
 		Questions:          questions,
 		Hidden:             row.Hidden,
@@ -79,6 +80,7 @@ func toAppPositionDTO(row db.AppPosition, pending int64) (types.AppPosition, err
 func normalisePosition(in *types.AppPositionInput, locked []string) string {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Info = strings.TrimSpace(in.Info)
+	in.Summary = strings.Join(strings.Fields(in.Summary), " ")
 	in.ApprovalNote = strings.TrimSpace(in.ApprovalNote)
 	in.HelpURL = strings.TrimSpace(in.HelpURL)
 	in.HelpLabel = strings.TrimSpace(in.HelpLabel)
@@ -89,6 +91,10 @@ func normalisePosition(in *types.AppPositionInput, locked []string) string {
 
 	if len(in.Info) > 10000 {
 		return "The description can be at most 10,000 characters"
+	}
+
+	if len(in.Summary) > 200 {
+		return "The summary can be at most 200 characters"
 	}
 
 	if len(in.ApprovalNote) > 1000 {
@@ -276,6 +282,7 @@ func (s *Server) updateAppPositions(ctx context.Context, q *types.QUpdateAppPosi
 			ID:                 in.ID,
 			Name:               in.Name,
 			Info:               in.Info,
+			Summary:            in.Summary,
 			Tags:               in.Tags,
 			Questions:          questions,
 			Hidden:             in.Hidden,
@@ -319,6 +326,7 @@ func (s *Server) updateAppPositions(ctx context.Context, q *types.QUpdateAppPosi
 			ID:                 in.ID,
 			Name:               in.Name,
 			Info:               in.Info,
+			Summary:            in.Summary,
 			Tags:               in.Tags,
 			Questions:          questions,
 			Hidden:             in.Hidden,

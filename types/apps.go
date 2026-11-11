@@ -51,6 +51,7 @@ type Position struct {
 	ReviewLogic         func(d uapi.RouteData, resp AppResponse, reason string, approved bool) (string, error) `json:"-"`
 	ApprovalNote        string                                                                                 `json:"-"`
 	HelpURL             string                                                                                 `json:"help_url,omitempty" description:"A page explaining the requirements for this position"`
+	Summary             string                                                                                 `json:"summary,omitempty" description:"One line describing the position, for lists of positions"`
 	HelpLabel           string                                                                                 `json:"help_label,omitempty" description:"The link text for help_url"`
 	Behaviour           string                                                                                 `json:"-"`
 }

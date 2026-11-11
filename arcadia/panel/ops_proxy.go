@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"popplio/clientip"
 	"popplio/arcadia/types"
 	"popplio/db"
 	"popplio/state"
@@ -75,9 +76,7 @@ func (s *Server) popplioStaff(ctx context.Context, q *types.QPopplioStaff) (resp
 
 	req.Header.Set("User-Agent", "arcadia")
 
-	if ip := clientIPFromContext(ctx); ip != "" {
-		req.Header.Set("X-Forwarded-For", ip)
-	}
+	clientip.SetInternal(req, clientIPFromContext(ctx))
 	req.Header.Set("X-Staff-Auth-Token", popplioToken)
 	req.Header.Set("X-User-ID", authData.UserID)
 

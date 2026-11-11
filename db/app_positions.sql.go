@@ -35,7 +35,7 @@ func (q *Queries) DeleteAppPosition(ctx context.Context, id string) (int64, erro
 }
 
 const getAppPosition = `-- name: GetAppPosition :one
-SELECT id, name, info, tags, questions, hidden, closed, requires_main_server, cooldown_secs, approval_note, help_url, help_label, behaviour, sort_order, created_at, updated_at
+SELECT id, name, info, summary, tags, questions, hidden, closed, requires_main_server, cooldown_secs, approval_note, help_url, help_label, behaviour, sort_order, created_at, updated_at
 FROM app_positions
 WHERE id = $1
 `
@@ -47,6 +47,7 @@ func (q *Queries) GetAppPosition(ctx context.Context, id string) (AppPosition, e
 		&i.ID,
 		&i.Name,
 		&i.Info,
+		&i.Summary,
 		&i.Tags,
 		&i.Questions,
 		&i.Hidden,
@@ -65,10 +66,10 @@ func (q *Queries) GetAppPosition(ctx context.Context, id string) (AppPosition, e
 }
 
 const insertAppPosition = `-- name: InsertAppPosition :exec
-INSERT INTO app_positions (id, name, info, tags, questions, hidden, closed, requires_main_server, cooldown_secs, approval_note, help_url, help_label, sort_order)
+INSERT INTO app_positions (id, name, info, summary, tags, questions, hidden, closed, requires_main_server, cooldown_secs, approval_note, help_url, help_label, sort_order)
 VALUES (
-	$1, $2, $3, $4, $5, $6, $7,
-	$8, $9, $10, $11, $12,
+	$1, $2, $3, $4, $5, $6, $7, $8,
+	$9, $10, $11, $12, $13,
 	COALESCE((SELECT MAX(sort_order) + 1 FROM app_positions), 0)
 )
 `
@@ -77,6 +78,7 @@ type InsertAppPositionParams struct {
 	ID                 string      `db:"id" json:"id"`
 	Name               string      `db:"name" json:"name"`
 	Info               string      `db:"info" json:"info"`
+	Summary            string      `db:"summary" json:"summary"`
 	Tags               []string    `db:"tags" json:"tags"`
 	Questions          []byte      `db:"questions" json:"questions"`
 	Hidden             bool        `db:"hidden" json:"hidden"`
@@ -93,6 +95,7 @@ func (q *Queries) InsertAppPosition(ctx context.Context, arg InsertAppPositionPa
 		arg.ID,
 		arg.Name,
 		arg.Info,
+		arg.Summary,
 		arg.Tags,
 		arg.Questions,
 		arg.Hidden,
@@ -107,7 +110,7 @@ func (q *Queries) InsertAppPosition(ctx context.Context, arg InsertAppPositionPa
 }
 
 const listAppPositions = `-- name: ListAppPositions :many
-SELECT id, name, info, tags, questions, hidden, closed, requires_main_server, cooldown_secs, approval_note, help_url, help_label, behaviour, sort_order, created_at, updated_at
+SELECT id, name, info, summary, tags, questions, hidden, closed, requires_main_server, cooldown_secs, approval_note, help_url, help_label, behaviour, sort_order, created_at, updated_at
 FROM app_positions
 ORDER BY sort_order, created_at
 `
@@ -125,6 +128,7 @@ func (q *Queries) ListAppPositions(ctx context.Context) ([]AppPosition, error) {
 			&i.ID,
 			&i.Name,
 			&i.Info,
+			&i.Summary,
 			&i.Tags,
 			&i.Questions,
 			&i.Hidden,
@@ -165,15 +169,16 @@ func (q *Queries) SetAppPositionOrder(ctx context.Context, arg SetAppPositionOrd
 
 const updateAppPosition = `-- name: UpdateAppPosition :execrows
 UPDATE app_positions
-SET name = $1, info = $2, tags = $3, questions = $4, hidden = $5,
-	closed = $6, requires_main_server = $7, cooldown_secs = $8,
-	approval_note = $9, help_url = $10, help_label = $11, updated_at = NOW()
-WHERE id = $12
+SET name = $1, info = $2, summary = $3, tags = $4, questions = $5, hidden = $6,
+	closed = $7, requires_main_server = $8, cooldown_secs = $9,
+	approval_note = $10, help_url = $11, help_label = $12, updated_at = NOW()
+WHERE id = $13
 `
 
 type UpdateAppPositionParams struct {
 	Name               string      `db:"name" json:"name"`
 	Info               string      `db:"info" json:"info"`
+	Summary            string      `db:"summary" json:"summary"`
 	Tags               []string    `db:"tags" json:"tags"`
 	Questions          []byte      `db:"questions" json:"questions"`
 	Hidden             bool        `db:"hidden" json:"hidden"`
@@ -190,6 +195,7 @@ func (q *Queries) UpdateAppPosition(ctx context.Context, arg UpdateAppPositionPa
 	result, err := q.db.Exec(ctx, updateAppPosition,
 		arg.Name,
 		arg.Info,
+		arg.Summary,
 		arg.Tags,
 		arg.Questions,
 		arg.Hidden,

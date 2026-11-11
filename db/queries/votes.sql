@@ -75,8 +75,23 @@ DELETE FROM entity_votes WHERE author = $1 AND target_id = $2 AND target_type = 
 -- name: GetVoteAuthors :many
 SELECT author FROM entity_votes WHERE target_id = $1 AND target_type = $2 GROUP BY author;
 
--- name: GetRecentAutomatedVoteResetForUpdate :one
-SELECT id FROM automated_vote_resets WHERE created_at > NOW() - INTERVAL '1 month' FOR UPDATE;
+-- name: LockVoteResetSchedule :exec
+SELECT pg_advisory_xact_lock(hashtext('monthly_vote_reset'));
+
+-- name: AutomaticVoteResetDone :one
+SELECT EXISTS(SELECT 1 FROM automated_vote_resets WHERE kind = 'automatic' AND period = sqlc.arg(period)::date);
+
+-- name: ListManualVoteResetTypes :many
+SELECT DISTINCT target_type::text FROM automated_vote_resets
+WHERE kind = 'manual' AND period = sqlc.arg(period)::date AND target_type IS NOT NULL;
+
+-- name: VoidUnvoidedEntityVotesForType :exec
+UPDATE entity_votes SET void = TRUE, void_reason = 'Automated votes reset', voided_at = NOW()
+WHERE target_type = $1 AND void = false AND immutable = false;
+
+-- name: InsertManualVoteReset :exec
+INSERT INTO automated_vote_resets (created_at, kind, period, target_type, triggered_by)
+VALUES (NOW(), 'manual', sqlc.narg(period)::date, sqlc.arg(target_type), sqlc.arg(triggered_by));
 
 -- name: LockEntityVotesExclusive :exec
 LOCK TABLE entity_votes IN EXCLUSIVE MODE;
@@ -85,7 +100,7 @@ LOCK TABLE entity_votes IN EXCLUSIVE MODE;
 UPDATE entity_votes SET void = TRUE, void_reason = 'Automated votes reset', voided_at = NOW() WHERE void = false AND immutable = false;
 
 -- name: InsertAutomatedVoteReset :exec
-INSERT INTO automated_vote_resets (created_at) VALUES (NOW());
+INSERT INTO automated_vote_resets (created_at, kind, period) VALUES (NOW(), 'automatic', sqlc.arg(period)::date);
 
 -- name: VoidEntityVotesForTarget :exec
 UPDATE entity_votes SET void = TRUE, void_reason = 'Votes (single entity) reset', voided_at = NOW()
@@ -279,7 +294,7 @@ GROUP BY ev.author, ev.target_type, ev.target_id, s.name, s.avatar, v.code
 ORDER BY ev.author, COUNT(*) DESC, MAX(ev.created_at) DESC;
 
 -- name: GetLatestAutomatedVoteReset :one
-SELECT created_at FROM automated_vote_resets ORDER BY created_at DESC LIMIT 1;
+SELECT created_at FROM automated_vote_resets WHERE kind = 'automatic' ORDER BY created_at DESC LIMIT 1;
 
 -- name: GetUserTopVoted :many
 SELECT ev.target_type, ev.target_id, COUNT(*) AS vote_count,

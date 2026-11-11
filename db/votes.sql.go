@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const automaticVoteResetDone = `-- name: AutomaticVoteResetDone :one
+SELECT EXISTS(SELECT 1 FROM automated_vote_resets WHERE kind = 'automatic' AND period = $1::date)
+`
+
+func (q *Queries) AutomaticVoteResetDone(ctx context.Context, period pgtype.Date) (bool, error) {
+	row := q.db.QueryRow(ctx, automaticVoteResetDone, period)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countEntityVotes = `-- name: CountEntityVotes :one
 SELECT COUNT(*) FILTER (WHERE upvote) AS upvotes, COUNT(*) FILTER (WHERE NOT upvote) AS downvotes, COUNT(*) FILTER (WHERE upvote AND auto) AS auto_upvotes
 FROM entity_votes
@@ -250,7 +261,7 @@ func (q *Queries) GetEntityVotes(ctx context.Context, arg GetEntityVotesParams) 
 }
 
 const getLatestAutomatedVoteReset = `-- name: GetLatestAutomatedVoteReset :one
-SELECT created_at FROM automated_vote_resets ORDER BY created_at DESC LIMIT 1
+SELECT created_at FROM automated_vote_resets WHERE kind = 'automatic' ORDER BY created_at DESC LIMIT 1
 `
 
 func (q *Queries) GetLatestAutomatedVoteReset(ctx context.Context) (pgtype.Timestamptz, error) {
@@ -269,17 +280,6 @@ func (q *Queries) GetPackVoteBanned(ctx context.Context, url string) (bool, erro
 	var vote_banned bool
 	err := row.Scan(&vote_banned)
 	return vote_banned, err
-}
-
-const getRecentAutomatedVoteResetForUpdate = `-- name: GetRecentAutomatedVoteResetForUpdate :one
-SELECT id FROM automated_vote_resets WHERE created_at > NOW() - INTERVAL '1 month' FOR UPDATE
-`
-
-func (q *Queries) GetRecentAutomatedVoteResetForUpdate(ctx context.Context) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getRecentAutomatedVoteResetForUpdate)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
 }
 
 const getRedeemableVoteItags = `-- name: GetRedeemableVoteItags :many
@@ -895,11 +895,11 @@ func (q *Queries) GetVoterRank(ctx context.Context, arg GetVoterRankParams) (Get
 }
 
 const insertAutomatedVoteReset = `-- name: InsertAutomatedVoteReset :exec
-INSERT INTO automated_vote_resets (created_at) VALUES (NOW())
+INSERT INTO automated_vote_resets (created_at, kind, period) VALUES (NOW(), 'automatic', $1::date)
 `
 
-func (q *Queries) InsertAutomatedVoteReset(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, insertAutomatedVoteReset)
+func (q *Queries) InsertAutomatedVoteReset(ctx context.Context, period pgtype.Date) error {
+	_, err := q.db.Exec(ctx, insertAutomatedVoteReset, period)
 	return err
 }
 
@@ -928,6 +928,22 @@ func (q *Queries) InsertEntityVote(ctx context.Context, arg InsertEntityVotePara
 	return err
 }
 
+const insertManualVoteReset = `-- name: InsertManualVoteReset :exec
+INSERT INTO automated_vote_resets (created_at, kind, period, target_type, triggered_by)
+VALUES (NOW(), 'manual', $1::date, $2, $3)
+`
+
+type InsertManualVoteResetParams struct {
+	Period      pgtype.Date `db:"period" json:"period"`
+	TargetType  pgtype.Text `db:"target_type" json:"target_type"`
+	TriggeredBy pgtype.Text `db:"triggered_by" json:"triggered_by"`
+}
+
+func (q *Queries) InsertManualVoteReset(ctx context.Context, arg InsertManualVoteResetParams) error {
+	_, err := q.db.Exec(ctx, insertManualVoteReset, arg.Period, arg.TargetType, arg.TriggeredBy)
+	return err
+}
+
 const insertVoteRedeemLog = `-- name: InsertVoteRedeemLog :one
 INSERT INTO entity_vote_redeem_logs (target_id, target_type, credits) VALUES ($1, $2, $3) RETURNING id
 `
@@ -943,6 +959,31 @@ func (q *Queries) InsertVoteRedeemLog(ctx context.Context, arg InsertVoteRedeemL
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listManualVoteResetTypes = `-- name: ListManualVoteResetTypes :many
+SELECT DISTINCT target_type::text FROM automated_vote_resets
+WHERE kind = 'manual' AND period = $1::date AND target_type IS NOT NULL
+`
+
+func (q *Queries) ListManualVoteResetTypes(ctx context.Context, period pgtype.Date) ([]string, error) {
+	rows, err := q.db.Query(ctx, listManualVoteResetTypes, period)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var target_type string
+		if err := rows.Scan(&target_type); err != nil {
+			return nil, err
+		}
+		items = append(items, target_type)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockEntityVotesExclusive = `-- name: LockEntityVotesExclusive :exec
@@ -998,6 +1039,15 @@ type LockVoteRedeemTargetParams struct {
 // however many votes are actually still unclaimed (possibly zero).
 func (q *Queries) LockVoteRedeemTarget(ctx context.Context, arg LockVoteRedeemTargetParams) error {
 	_, err := q.db.Exec(ctx, lockVoteRedeemTarget, arg.TargetType, arg.TargetID)
+	return err
+}
+
+const lockVoteResetSchedule = `-- name: LockVoteResetSchedule :exec
+SELECT pg_advisory_xact_lock(hashtext('monthly_vote_reset'))
+`
+
+func (q *Queries) LockVoteResetSchedule(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockVoteResetSchedule)
 	return err
 }
 
@@ -1155,6 +1205,16 @@ type VoidEntityVotesForTargetParams struct {
 
 func (q *Queries) VoidEntityVotesForTarget(ctx context.Context, arg VoidEntityVotesForTargetParams) error {
 	_, err := q.db.Exec(ctx, voidEntityVotesForTarget, arg.TargetType, arg.TargetID)
+	return err
+}
+
+const voidUnvoidedEntityVotesForType = `-- name: VoidUnvoidedEntityVotesForType :exec
+UPDATE entity_votes SET void = TRUE, void_reason = 'Automated votes reset', voided_at = NOW()
+WHERE target_type = $1 AND void = false AND immutable = false
+`
+
+func (q *Queries) VoidUnvoidedEntityVotesForType(ctx context.Context, targetType string) error {
+	_, err := q.db.Exec(ctx, voidUnvoidedEntityVotesForType, targetType)
 	return err
 }
 

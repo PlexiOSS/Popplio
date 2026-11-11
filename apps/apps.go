@@ -120,6 +120,7 @@ func FromRow(row db.AppPosition) (types.Position, error) {
 		RequiresMainServer: row.RequiresMainServer,
 		Cooldown:           timex.Duration(time.Duration(row.CooldownSecs) * time.Second),
 		ApprovalNote:       row.ApprovalNote,
+		Summary:            row.Summary,
 	}
 
 	if row.HelpUrl.Valid {

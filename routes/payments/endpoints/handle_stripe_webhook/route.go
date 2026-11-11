@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"popplio/api/resp"
@@ -190,10 +189,6 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 }
 
 func requestIP(r *http.Request) string {
-	if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
-		return ip
-	}
-
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return host
 	}
