@@ -3,8 +3,10 @@
 package add_theme
 
 import (
+	"github.com/PlexiOSS/Keel/ratelimit"
 	"net/http"
 	"slices"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/db"
@@ -52,6 +54,20 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	limit, err := ratelimit.Ratelimit{
+		Expiry:      time.Hour,
+		MaxRequests: 10,
+		Bucket:      "themes",
+	}.Limit(d.Context, r)
+
+	if err != nil {
+		return resp.Err("Error while ratelimiting", err)
+	}
+
+	if limit.Exceeded {
+		return resp.RateLimited(limit)
+	}
+
 	var payload CreateTheme
 
 	hresp, ok := uapi.MarshalReq(r, &payload)

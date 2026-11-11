@@ -4,7 +4,9 @@ package add_server_template
 
 import (
 	"encoding/json"
+	"github.com/PlexiOSS/Keel/ratelimit"
 	"net/http"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/db"
@@ -49,6 +51,20 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	limit, err := ratelimit.Ratelimit{
+		Expiry:      time.Hour,
+		MaxRequests: 10,
+		Bucket:      "server_templates",
+	}.Limit(d.Context, r)
+
+	if err != nil {
+		return resp.Err("Error while ratelimiting", err)
+	}
+
+	if limit.Exceeded {
+		return resp.RateLimited(limit)
+	}
+
 	var payload CreateServerTemplate
 
 	hresp, ok := uapi.MarshalReq(r, &payload)

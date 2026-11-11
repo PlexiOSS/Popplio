@@ -1,24 +1,27 @@
-import requests, asyncpg, asyncio
+import asyncio
+import os
+
+import asyncpg
+import requests
+
+API_URL = os.environ.get("API_URL", "https://spider.omniplex.gg")
+
 
 async def main():
-    conn = await asyncpg.connect('postgresql:///infinity')
+    conn = await asyncpg.connect(os.environ["DATABASE_URL"])
 
     uids = await conn.fetch('SELECT user_id FROM users')
 
     for uid in uids:
-        print(f"Updating CDN for user {uid['user_id']}...")
+        user_id = uid['user_id']
+        print(f"Updating CDN for user {user_id}...")
 
-        # Call DELETE first to clear cache
-        resp = requests.delete(f"https://spider.omniplex.gg/platform/user/{uid['user_id']}?platform=discord")
+        await conn.execute('DELETE FROM internal_user_cache__discord WHERE id = $1', user_id)
 
-        if not resp.ok:
-            print(f"Failed to clear cache for user {uid['user_id']}")
-        
-        # Call GET to update cache
-        resp = requests.get(f"https://spider.omniplex.gg/platform/user/{uid['user_id']}?platform=discord")
+        resp = requests.get(f"{API_URL}/platform/user/{user_id}?platform=discord")
 
         if not resp.ok:
-            print(f"Failed to update cache for user {uid['user_id']}")
+            print(f"Failed to update cache for user {user_id}")
 
         await asyncio.sleep(0.5)
 

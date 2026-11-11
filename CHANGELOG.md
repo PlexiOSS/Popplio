@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (data export, payments, profile edits and so on). Those routes now refuse
   limited sessions, and routes where sign-in is optional treat them as
   signed out.
+- Creating reports, ticket messages, packs, themes and server templates is
+  now rate limited (reports 10 an hour, ticket messages 30 every 5 minutes,
+  packs 5 an hour, themes and templates 10 an hour).
+
+### Changed
+
+- `cmd/updatecdn.py` clears the Discord user cache straight from the
+  database (from `DATABASE_URL`) instead of calling `DELETE
+  /platform/user/{id}`, which now needs a session.
 
 ## [1.26.1] - 2026-11-11
 

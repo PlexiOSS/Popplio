@@ -7,7 +7,9 @@
 package create_report
 
 import (
+	"github.com/PlexiOSS/Keel/ratelimit"
 	"net/http"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/db"
@@ -67,6 +69,20 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	limit, err := ratelimit.Ratelimit{
+		Expiry:      time.Hour,
+		MaxRequests: 10,
+		Bucket:      "reports",
+	}.Limit(d.Context, r)
+
+	if err != nil {
+		return resp.Err("Error while ratelimiting", err)
+	}
+
+	if limit.Exceeded {
+		return resp.RateLimited(limit)
+	}
+
 	targetId := chi.URLParam(r, "target_id")
 	targetType := validators.NormalizeTargetType(chi.URLParam(r, "target_type"))
 
