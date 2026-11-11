@@ -17,7 +17,7 @@ SELECT COUNT(*) FROM teams WHERE id = $1;
 SELECT COUNT(*) FROM reviews WHERE author = $1 AND target_id = $2 AND target_type = $3 AND parent_id IS NULL;
 
 -- name: CountReviewByID :one
-SELECT COUNT(*) FROM reviews WHERE id = $1;
+SELECT COUNT(*) FROM reviews WHERE id = sqlc.arg(id) AND target_id = sqlc.arg(target_id) AND target_type = sqlc.arg(target_type);
 
 -- name: InsertReview :one
 INSERT INTO reviews (author, target_id, target_type, content, stars, parent_id, owner_review) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;

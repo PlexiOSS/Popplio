@@ -57,6 +57,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return uapi.DefaultResponse(http.StatusBadRequest)
 	}
 
+	if !notifications.ValidPushEndpoint(subscription.Endpoint) {
+		return resp.BadRequest("endpoint must be an https address from a browser push service")
+	}
+
 	// Store new subscription
 	notifId := crypto.RandString(64)
 

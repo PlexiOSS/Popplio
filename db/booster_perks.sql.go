@@ -54,6 +54,30 @@ func (q *Queries) IsBoosting(ctx context.Context, userID string) (bool, error) {
 	return exists, err
 }
 
+const listBoosting = `-- name: ListBoosting :many
+SELECT user_id FROM booster_perks WHERE boosting
+`
+
+func (q *Queries) ListBoosting(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listBoosting)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDueBoosterRenewals = `-- name: ListDueBoosterRenewals :many
 SELECT bp.user_id, bp.target_type::text AS target_type, bp.target_id::text AS target_id
 FROM booster_perks bp
@@ -94,6 +118,30 @@ SELECT user_id FROM users WHERE user_id = ANY($1::text[])
 
 func (q *Queries) ListExistingUsers(ctx context.Context, userIds []string) ([]string, error) {
 	rows, err := q.db.Query(ctx, listExistingUsers, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentlyStoppedBoosters = `-- name: ListRecentlyStoppedBoosters :many
+SELECT user_id FROM booster_perks WHERE NOT boosting AND updated_at > NOW() - INTERVAL '1 day'
+`
+
+func (q *Queries) ListRecentlyStoppedBoosters(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRecentlyStoppedBoosters)
 	if err != nil {
 		return nil, err
 	}

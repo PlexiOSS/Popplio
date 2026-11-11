@@ -5,6 +5,12 @@ ON CONFLICT (user_id) DO UPDATE SET boosting = true, boosting_since = NOW(), upd
 WHERE NOT booster_perks.boosting
 RETURNING user_id;
 
+-- name: ListBoosting :many
+SELECT user_id FROM booster_perks WHERE boosting;
+
+-- name: ListRecentlyStoppedBoosters :many
+SELECT user_id FROM booster_perks WHERE NOT boosting AND updated_at > NOW() - INTERVAL '1 day';
+
 -- name: StopBoosting :many
 UPDATE booster_perks SET boosting = false, updated_at = NOW()
 WHERE boosting AND NOT (user_id = ANY(sqlc.arg(user_ids)::text[]))
