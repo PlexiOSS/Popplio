@@ -23,7 +23,7 @@ import (
 func Docs() *docs.Doc {
 	return &docs.Doc{
 		Summary:     "Clear Platform User Cache",
-		Description: "This endpoint will clear the cache for a user id on a given platform. This is useful if the user's data has changes",
+		Description: "Clears the cached profile for your own account on a given platform, so the next read refetches it. **Requires a user session for the same ID**",
 		Params: []docs.Parameter{
 			{
 				Name:        "id",

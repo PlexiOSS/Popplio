@@ -129,16 +129,23 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		outerPermLimit = perms.Entity.NewSet(perms.EntityOwner)
 	}
 
+	callerLimits := api.PermLimits(d.Auth)
+	callerLimit := perms.Entity.ResolveStrings(callerLimits)
+
+	allowed := func(p perms.Perm) bool {
+		return outerPermLimit.Has(p) && (len(callerLimits) == 0 || callerLimit.Has(p))
+	}
+
 	// All permission limits must be resolved before being added to db
 	permLimits := perms.Entity.ResolveStrings(createData.PermLimits)
 
-	if !outerPermLimit.Has(perms.EntityOwner) {
+	if !allowed(perms.EntityOwner) {
 		if len(createData.PermLimits) == 0 {
 			return resp.Forbidden("You must have Global Owner to create sessions without specifying a permission limit")
 		}
 
 		for _, perm := range permLimits.All() {
-			if !outerPermLimit.Has(perm) {
+			if !allowed(perm) {
 				return resp.Forbidden("User does not have permission to create sessions with the permission limit: " + perm.String())
 			}
 		}
