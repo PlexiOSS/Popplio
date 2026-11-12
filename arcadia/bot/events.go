@@ -33,7 +33,7 @@ func onGuildsReady(ctx context.Context, _ *events.GuildsReady) {
 		state.Logger.Error("Failed to run startup DB fixes", zap.Error(err))
 	}
 
-	if err := SyncCommands(); err != nil {
+	if err := SyncArcadiaCommands(); err != nil {
 		state.Logger.Error("Failed to sync application commands", zap.Error(err))
 	}
 }
@@ -43,12 +43,14 @@ func onGuildMemberJoin(e *events.GuildMemberJoin) {
 		return
 	}
 
+	d := impls.With(e.Client())
+
 	member := e.Member
 	face := member.User.EffectiveAvatarURL()
 	now := time.Now()
 
 	if member.User.Bot {
-		err := impls.SendChannel(state.Config.Channels.System, discord.MessageCreate{
+		err := d.SendChannel(state.Config.Channels.System, discord.MessageCreate{
 			Embeds: []discord.Embed{{
 				Title:     "__**New Bot Added**__",
 				Color:     impls.ColourGreen,
@@ -63,7 +65,7 @@ func onGuildMemberJoin(e *events.GuildMemberJoin) {
 			state.Logger.Error("Failed to announce new bot", zap.Error(err))
 		}
 
-		err = impls.AddRole(state.Config.Servers.Main, member.User.ID, state.Config.Roles.BotRole, "Bot added to server")
+		err = d.AddRole(state.Config.Servers.Main, member.User.ID, state.Config.Roles.BotRole, "Bot added to server")
 
 		if err != nil {
 			state.Logger.Error("Failed to add bot role", zap.Error(err))
@@ -72,7 +74,7 @@ func onGuildMemberJoin(e *events.GuildMemberJoin) {
 		return
 	}
 
-	err := impls.SendChannel(state.Config.Channels.System, discord.MessageCreate{
+	err := d.SendChannel(state.Config.Channels.System, discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title:     "__**New User**__",
 			Color:     impls.ColourGreen,

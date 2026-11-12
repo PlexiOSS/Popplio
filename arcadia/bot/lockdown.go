@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"popplio/arcadia/impls"
 	"popplio/perms"
 	"popplio/state"
 
@@ -95,9 +94,9 @@ func runLockdown(c *Ctx, lock bool, target snowflake.ID, reason string) error {
 	var err error
 
 	if lock {
-		err = impls.LockChannel(c.GuildID, target, reason)
+		err = c.Discord().LockChannel(c.GuildID, target, reason)
 	} else {
-		err = impls.UnlockChannel(c.GuildID, target, reason)
+		err = c.Discord().UnlockChannel(c.GuildID, target, reason)
 	}
 
 	if err != nil {

@@ -4,6 +4,7 @@ package infernoplex
 
 import (
 	"context"
+	"popplio/botstatus"
 	"popplio/brandemoji"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"popplio/infernoplex/tasks"
 	"popplio/state"
 
+	discordbot "github.com/disgoorg/disgo/bot"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +37,7 @@ func Start(parent context.Context) *Infernoplex {
 		state.Logger.Error("Infernoplex's Discord bot failed to start; Sorbet will run without it", zap.Error(err))
 	} else {
 		brandemoji.LoadAsync(brandemoji.Infernoplex, dclient.Get(), "infernoplex")
+		botstatus.Run(ctx, "infernoplex", func() discordbot.Client { return dclient.Get() }, botstatus.Servers)
 	}
 
 	go func() {

@@ -40,7 +40,7 @@ func (r staffRole) Mention() string {
 }
 
 func registerStaffRoleCommands() {
-	register(cmdStaffRoles(), cmdStaffPerms(), cmdPermissions())
+	arcadiaBot.register(cmdStaffRoles(), cmdStaffPerms(), cmdPermissions())
 }
 
 // managerContext is the caller: what they can do, and how senior they are.

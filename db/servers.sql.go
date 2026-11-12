@@ -150,6 +150,25 @@ func (q *Queries) ClearServerSpotlightedUntil(ctx context.Context, serverID stri
 	return err
 }
 
+const clearTrackingBotMissing = `-- name: ClearTrackingBotMissing :one
+UPDATE servers s SET state = COALESCE(s.tracking_bot_hidden_state, s.state), tracking_bot_hidden_state = NULL, tracking_bot_missing_since = NULL, tracking_bot_notice = 0
+FROM (SELECT p.server_id, p.tracking_bot_notice FROM servers p WHERE p.server_id = $1 FOR UPDATE) prev
+WHERE s.server_id = prev.server_id AND s.tracking_bot_missing_since IS NOT NULL
+RETURNING s.name, prev.tracking_bot_notice AS previous_notice
+`
+
+type ClearTrackingBotMissingRow struct {
+	Name           string `db:"name" json:"name"`
+	PreviousNotice int16  `db:"previous_notice" json:"previous_notice"`
+}
+
+func (q *Queries) ClearTrackingBotMissing(ctx context.Context, serverID string) (ClearTrackingBotMissingRow, error) {
+	row := q.db.QueryRow(ctx, clearTrackingBotMissing, serverID)
+	var i ClearTrackingBotMissingRow
+	err := row.Scan(&i.Name, &i.PreviousNotice)
+	return i, err
+}
+
 const countBrowseServers = `-- name: CountBrowseServers :one
 WITH trending AS (
     SELECT ev.target_id, COUNT(*) FILTER (WHERE ev.upvote) - COUNT(*) FILTER (WHERE NOT ev.upvote) AS score
@@ -1012,59 +1031,61 @@ func (q *Queries) GetRecentlyAddedIndexServers(ctx context.Context) ([]GetRecent
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at, hidden_stats
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at, hidden_stats, tracking_bot_missing_since, tracking_bot_hidden_state
 FROM servers
 WHERE server_id = $1
 `
 
 type GetServerByIDRow struct {
-	ServerID               string             `db:"server_id" json:"server_id"`
-	Name                   string             `db:"name" json:"name"`
-	Avatar                 string             `db:"avatar" json:"avatar"`
-	TotalMembers           int32              `db:"total_members" json:"total_members"`
-	OnlineMembers          int32              `db:"online_members" json:"online_members"`
-	Short                  string             `db:"short" json:"short"`
-	Type                   string             `db:"type" json:"type"`
-	ApprovalNote           string             `db:"approval_note" json:"approval_note"`
-	State                  string             `db:"state" json:"state"`
-	Tags                   []string           `db:"tags" json:"tags"`
-	VanityRef              pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
-	ExtraLinks             []byte             `db:"extra_links" json:"extra_links"`
-	TeamOwner              pgtype.UUID        `db:"team_owner" json:"team_owner"`
-	InviteClicks           int32              `db:"invite_clicks" json:"invite_clicks"`
-	Clicks                 int32              `db:"clicks" json:"clicks"`
-	Nsfw                   bool               `db:"nsfw" json:"nsfw"`
-	ApproximateVotes       int32              `db:"approximate_votes" json:"approximate_votes"`
-	VoteBanned             bool               `db:"vote_banned" json:"vote_banned"`
-	Premium                bool               `db:"premium" json:"premium"`
-	StartPremiumPeriod     pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
-	PremiumPeriodLength    time.Duration      `db:"premium_period_length" json:"premium_period_length"`
-	CaptchaOptOut          bool               `db:"captcha_opt_out" json:"captcha_opt_out"`
-	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	ClaimedBy              pgtype.Text        `db:"claimed_by" json:"claimed_by"`
-	LastClaimed            pgtype.Timestamptz `db:"last_claimed" json:"last_claimed"`
-	LoginRequiredForInvite bool               `db:"login_required_for_invite" json:"login_required_for_invite"`
-	ShowEmojis             bool               `db:"show_emojis" json:"show_emojis"`
-	Emojis                 []types.Emoji      `db:"emojis" json:"emojis"`
-	Stickers               []types.Sticker    `db:"stickers" json:"stickers"`
-	EmojisSyncedAt         pgtype.Timestamptz `db:"emojis_synced_at" json:"emojis_synced_at"`
-	SupporterBadge         bool               `db:"supporter_badge" json:"supporter_badge"`
-	BoostedUntil           pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
-	FeaturedUntil          pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
-	SpotlightedUntil       pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
-	VoteBlitzUntil         pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
-	DiscordNsfwLevel       int16              `db:"discord_nsfw_level" json:"discord_nsfw_level"`
-	NsfwChannelCount       int32              `db:"nsfw_channel_count" json:"nsfw_channel_count"`
-	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged"`
-	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories"`
-	PremiumTier            int16              `db:"premium_tier" json:"premium_tier"`
-	BoostCount             int32              `db:"boost_count" json:"boost_count"`
-	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
-	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
-	CardTheme              bool               `db:"card_theme" json:"card_theme"`
-	CardColor              pgtype.Text        `db:"card_color" json:"card_color"`
-	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at"`
-	HiddenStats            []string           `db:"hidden_stats" json:"hidden_stats"`
+	ServerID                string             `db:"server_id" json:"server_id"`
+	Name                    string             `db:"name" json:"name"`
+	Avatar                  string             `db:"avatar" json:"avatar"`
+	TotalMembers            int32              `db:"total_members" json:"total_members"`
+	OnlineMembers           int32              `db:"online_members" json:"online_members"`
+	Short                   string             `db:"short" json:"short"`
+	Type                    string             `db:"type" json:"type"`
+	ApprovalNote            string             `db:"approval_note" json:"approval_note"`
+	State                   string             `db:"state" json:"state"`
+	Tags                    []string           `db:"tags" json:"tags"`
+	VanityRef               pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	ExtraLinks              []byte             `db:"extra_links" json:"extra_links"`
+	TeamOwner               pgtype.UUID        `db:"team_owner" json:"team_owner"`
+	InviteClicks            int32              `db:"invite_clicks" json:"invite_clicks"`
+	Clicks                  int32              `db:"clicks" json:"clicks"`
+	Nsfw                    bool               `db:"nsfw" json:"nsfw"`
+	ApproximateVotes        int32              `db:"approximate_votes" json:"approximate_votes"`
+	VoteBanned              bool               `db:"vote_banned" json:"vote_banned"`
+	Premium                 bool               `db:"premium" json:"premium"`
+	StartPremiumPeriod      pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
+	PremiumPeriodLength     time.Duration      `db:"premium_period_length" json:"premium_period_length"`
+	CaptchaOptOut           bool               `db:"captcha_opt_out" json:"captcha_opt_out"`
+	CreatedAt               pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ClaimedBy               pgtype.Text        `db:"claimed_by" json:"claimed_by"`
+	LastClaimed             pgtype.Timestamptz `db:"last_claimed" json:"last_claimed"`
+	LoginRequiredForInvite  bool               `db:"login_required_for_invite" json:"login_required_for_invite"`
+	ShowEmojis              bool               `db:"show_emojis" json:"show_emojis"`
+	Emojis                  []types.Emoji      `db:"emojis" json:"emojis"`
+	Stickers                []types.Sticker    `db:"stickers" json:"stickers"`
+	EmojisSyncedAt          pgtype.Timestamptz `db:"emojis_synced_at" json:"emojis_synced_at"`
+	SupporterBadge          bool               `db:"supporter_badge" json:"supporter_badge"`
+	BoostedUntil            pgtype.Timestamptz `db:"boosted_until" json:"boosted_until"`
+	FeaturedUntil           pgtype.Timestamptz `db:"featured_until" json:"featured_until"`
+	SpotlightedUntil        pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until"`
+	VoteBlitzUntil          pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until"`
+	DiscordNsfwLevel        int16              `db:"discord_nsfw_level" json:"discord_nsfw_level"`
+	NsfwChannelCount        int32              `db:"nsfw_channel_count" json:"nsfw_channel_count"`
+	ModerationFlagged       bool               `db:"moderation_flagged" json:"moderation_flagged"`
+	ModerationCategories    []string           `db:"moderation_categories" json:"moderation_categories"`
+	PremiumTier             int16              `db:"premium_tier" json:"premium_tier"`
+	BoostCount              int32              `db:"boost_count" json:"boost_count"`
+	AutoVotesOptOut         bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out"`
+	HighlightedUntil        pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until"`
+	CardTheme               bool               `db:"card_theme" json:"card_theme"`
+	CardColor               pgtype.Text        `db:"card_color" json:"card_color"`
+	BumpedAt                pgtype.Timestamptz `db:"bumped_at" json:"bumped_at"`
+	HiddenStats             []string           `db:"hidden_stats" json:"hidden_stats"`
+	TrackingBotMissingSince pgtype.Timestamptz `db:"tracking_bot_missing_since" json:"tracking_bot_missing_since"`
+	TrackingBotHiddenState  pgtype.Text        `db:"tracking_bot_hidden_state" json:"tracking_bot_hidden_state"`
 }
 
 func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServerByIDRow, error) {
@@ -1118,6 +1139,8 @@ func (q *Queries) GetServerByID(ctx context.Context, serverID string) (GetServer
 		&i.CardColor,
 		&i.BumpedAt,
 		&i.HiddenStats,
+		&i.TrackingBotMissingSince,
+		&i.TrackingBotHiddenState,
 	)
 	return i, err
 }
@@ -1818,6 +1841,19 @@ func (q *Queries) GetTopVotedIndexServers(ctx context.Context) ([]GetTopVotedInd
 	return items, nil
 }
 
+const hideServerForTrackingBot = `-- name: HideServerForTrackingBot :execrows
+UPDATE servers SET tracking_bot_hidden_state = state, state = 'unlisted'
+WHERE server_id = $1 AND tracking_bot_missing_since IS NOT NULL AND tracking_bot_hidden_state IS NULL AND state = 'public'
+`
+
+func (q *Queries) HideServerForTrackingBot(ctx context.Context, serverID string) (int64, error) {
+	result, err := q.db.Exec(ctx, hideServerForTrackingBot, serverID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertServer = `-- name: InsertServer :exec
 INSERT INTO servers (invite, short, long, extra_links, tags, nsfw, team_owner, server_id, name, avatar, total_members, online_members, vanity_ref)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -1899,6 +1935,61 @@ func (q *Queries) InsertServerChangelog(ctx context.Context, arg InsertServerCha
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listTrackingBotServers = `-- name: ListTrackingBotServers :many
+SELECT server_id, name, state, tracking_bot_missing_since, tracking_bot_hidden_state, tracking_bot_notice
+FROM servers
+WHERE type = 'approved' OR type = 'certified'
+`
+
+type ListTrackingBotServersRow struct {
+	ServerID                string             `db:"server_id" json:"server_id"`
+	Name                    string             `db:"name" json:"name"`
+	State                   string             `db:"state" json:"state"`
+	TrackingBotMissingSince pgtype.Timestamptz `db:"tracking_bot_missing_since" json:"tracking_bot_missing_since"`
+	TrackingBotHiddenState  pgtype.Text        `db:"tracking_bot_hidden_state" json:"tracking_bot_hidden_state"`
+	TrackingBotNotice       int16              `db:"tracking_bot_notice" json:"tracking_bot_notice"`
+}
+
+func (q *Queries) ListTrackingBotServers(ctx context.Context) ([]ListTrackingBotServersRow, error) {
+	rows, err := q.db.Query(ctx, listTrackingBotServers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrackingBotServersRow
+	for rows.Next() {
+		var i ListTrackingBotServersRow
+		if err := rows.Scan(
+			&i.ServerID,
+			&i.Name,
+			&i.State,
+			&i.TrackingBotMissingSince,
+			&i.TrackingBotHiddenState,
+			&i.TrackingBotNotice,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markTrackingBotMissing = `-- name: MarkTrackingBotMissing :execrows
+UPDATE servers SET tracking_bot_missing_since = NOW(), tracking_bot_notice = 0
+WHERE server_id = $1 AND tracking_bot_missing_since IS NULL AND (type = 'approved' OR type = 'certified')
+`
+
+func (q *Queries) MarkTrackingBotMissing(ctx context.Context, serverID string) (int64, error) {
+	result, err := q.db.Exec(ctx, markTrackingBotMissing, serverID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordServerModerationScan = `-- name: RecordServerModerationScan :exec
@@ -2261,6 +2352,20 @@ func (q *Queries) SetServerVoteChannel(ctx context.Context, arg SetServerVoteCha
 	return err
 }
 
+const setTrackingBotNotice = `-- name: SetTrackingBotNotice :exec
+UPDATE servers SET tracking_bot_notice = $2 WHERE server_id = $1
+`
+
+type SetTrackingBotNoticeParams struct {
+	ServerID          string `db:"server_id" json:"server_id"`
+	TrackingBotNotice int16  `db:"tracking_bot_notice" json:"tracking_bot_notice"`
+}
+
+func (q *Queries) SetTrackingBotNotice(ctx context.Context, arg SetTrackingBotNoticeParams) error {
+	_, err := q.db.Exec(ctx, setTrackingBotNotice, arg.ServerID, arg.TrackingBotNotice)
+	return err
+}
+
 const syncServerTotalMembers = `-- name: SyncServerTotalMembers :exec
 UPDATE servers SET total_members = $2 WHERE server_id = $1 AND stats_self_managed = false
 `
@@ -2460,7 +2565,10 @@ func (q *Queries) UpdateServerOnlineMembers(ctx context.Context, arg UpdateServe
 }
 
 const updateServerSettings = `-- name: UpdateServerSettings :exec
-UPDATE servers SET short = $1, long = $2, extra_links = $3, state = $4, tags = $5, nsfw = $6, captcha_opt_out = $7, login_required_for_invite = $8, show_emojis = $9
+UPDATE servers SET short = $1, long = $2, extra_links = $3,
+    state = CASE WHEN tracking_bot_hidden_state IS NULL THEN $4 ELSE state END,
+    tracking_bot_hidden_state = CASE WHEN tracking_bot_hidden_state IS NULL THEN NULL ELSE $4 END,
+    tags = $5, nsfw = $6, captcha_opt_out = $7, login_required_for_invite = $8, show_emojis = $9
 WHERE server_id = $10
 `
 

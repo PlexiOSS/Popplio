@@ -10,7 +10,7 @@ import (
 )
 
 func registerCommands() {
-	register(
+	arcadiaBot.register(
 		cmdRegister(),
 		cmdHelp(),
 		cmdExplainMe(),
@@ -23,25 +23,32 @@ func registerCommands() {
 		cmdUnclaim(),
 		cmdApprove(),
 		cmdDeny(),
-		cmdAnalytics(),
-		cmdInfo(),
-		cmdLeaderboard(),
 		cmdRefresh(),
-		cmdGetBotRoles(),
 		cmdRPC(),
 		cmdRPCList(),
+		cmdStaffInfo(),
 	)
 
 	registerStaffRoleCommands()
+
+	omiBot.register(
+		cmdHelp(),
+		cmdKb(),
+		cmdTicket(),
+		cmdInfo(),
+		cmdAnalytics(),
+		cmdLeaderboard(),
+		cmdGetBotRoles(),
+	)
+
 	registerModerationCommands()
-	registerHelpLinkCommands()
 }
 
 func cmdRegister() *Command {
 	return &Command{
 		Name:        "register",
 		Category:    "Owner",
-		Description: "Register application commands",
+		Description: "Register the slash commands for Arcadia and Omi",
 		OwnerOnly:   true,
 		Run: func(c *Ctx) error {
 			if err := SyncCommands(); err != nil {

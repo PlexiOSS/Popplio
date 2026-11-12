@@ -30,9 +30,9 @@ func errStatus(status int, message string) Error {
 }
 
 type response struct {
-	status int
-	json   any
-	text   *string
+	status  int
+	json    any
+	text    *string
 	stream  io.ReadCloser
 	noBody  bool
 	cookies []*http.Cookie

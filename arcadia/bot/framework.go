@@ -8,12 +8,15 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
+	"popplio/cmdsync"
 	"popplio/perms"
 	"popplio/state"
 
@@ -41,10 +44,26 @@ type Ctx struct {
 	// Options are the named options of a slash invocation.
 	Options map[string]string
 
+	// bot is the bot the command was invoked through.
+	bot *Bot
+
 	// slash is set for slash invocations.
 	slash *events.ApplicationCommandInteractionCreate
 	// replied tracks whether the interaction has been answered.
 	replied bool
+}
+
+// Discord performs actions as the bot the command was invoked through.
+func (c *Ctx) Discord() impls.Discord {
+	return impls.With(c.client())
+}
+
+func (c *Ctx) client() bot.Client {
+	if c.bot == nil {
+		return dclient.Get()
+	}
+
+	return c.bot.client()
 }
 
 // Option reads a named option, falling back to the positional prefix argument at
@@ -124,7 +143,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 		return c.slash.CreateMessage(msg)
 	}
 
-	_, err := dclient.Get().Rest().CreateMessage(c.ChannelID, msg)
+	_, err := c.client().Rest().CreateMessage(c.ChannelID, msg)
 	return err
 }
 
@@ -136,7 +155,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 // the invocation and then resolves the message id either way.
 func (c *Ctx) SendTracked(msg discord.MessageCreate) (snowflake.ID, error) {
 	if c.slash == nil {
-		sent, err := dclient.Get().Rest().CreateMessage(c.ChannelID, msg)
+		sent, err := c.client().Rest().CreateMessage(c.ChannelID, msg)
 
 		if err != nil {
 			return 0, err
@@ -149,7 +168,7 @@ func (c *Ctx) SendTracked(msg discord.MessageCreate) (snowflake.ID, error) {
 		return 0, err
 	}
 
-	sent, err := dclient.Get().Rest().GetInteractionResponse(c.slash.ApplicationID(), c.slash.Token())
+	sent, err := c.client().Rest().GetInteractionResponse(c.slash.ApplicationID(), c.slash.Token())
 
 	if err != nil {
 		return 0, err
@@ -188,48 +207,106 @@ type Command struct {
 	OwnerOnly bool
 }
 
-// registry holds every registered command by name.
-var registry = map[string]*Command{}
+// Bot is one Discord bot that runs commands from this package. Omi runs the
+// public commands in the main and testing servers, and Arcadia runs the staff
+// commands in the staff and testing servers.
+type Bot struct {
+	Name   string
+	client func() bot.Client
+	guilds func() []snowflake.ID
+	prefix func() string
 
-// ordered keeps registration order for the help renderer.
-var ordered []*Command
+	registry   map[string]*Command
+	ordered    []*Command
+	categories []string
+}
 
-func register(cmds ...*Command) {
+func newBot(name string, client func() bot.Client, guilds func() []snowflake.ID, prefix func() string) *Bot {
+	return &Bot{Name: name, client: client, guilds: guilds, prefix: prefix, registry: map[string]*Command{}}
+}
+
+var arcadiaBot = newBot("arcadia", dclient.Get,
+	func() []snowflake.ID { return []snowflake.ID{state.Config.Servers.Staff, state.Config.Servers.Testing} },
+	func() string {
+		if state.Config.Arcadia.PrefixCommands {
+			return state.Config.Arcadia.Prefix
+		}
+
+		return "/"
+	},
+)
+
+var omiBot = newBot("omi", func() bot.Client { return state.Discord },
+	func() []snowflake.ID { return []snowflake.ID{state.Config.Servers.Main, state.Config.Servers.Testing} },
+	func() string { return "/" },
+)
+
+func (b *Bot) register(cmds ...*Command) {
 	for _, cmd := range cmds {
-		registry[cmd.Name] = cmd
-		ordered = append(ordered, cmd)
+		b.registry[cmd.Name] = cmd
+		b.ordered = append(b.ordered, cmd)
 	}
 }
 
-// Listener registers the commands and returns the staff bot's event listener.
-//
-// It is built before the gateway connects so no early event is missed; the
-// caller hands it to dclient.Setup.
+func (b *Bot) reset() {
+	b.registry = map[string]*Command{}
+	b.ordered = nil
+	b.categories = nil
+}
+
+var registerOnce sync.Once
+
+func ensureRegistered() {
+	registerOnce.Do(func() {
+		registerCommands()
+		arcadiaBot.indexCategories()
+		omiBot.indexCategories()
+	})
+}
+
+// Listener returns Arcadia's event listener. It is built before the gateway
+// connects so no early event is missed; the caller hands it to dclient.Setup.
 func Listener(ctx context.Context) bot.EventListener {
-	registerCommands()
-	indexCategories()
+	ensureRegistered()
 
 	adapter := &events.ListenerAdapter{
 		OnGuildsReady:                   func(e *events.GuildsReady) { onGuildsReady(ctx, e) },
-		OnGuildMemberJoin:               onGuildMemberJoin,
-		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, e) },
+		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, arcadiaBot, e) },
 		OnComponentInteraction:          func(e *events.ComponentInteractionCreate) { onComponent(ctx, e) },
 		OnModalSubmit:                   func(e *events.ModalSubmitInteractionCreate) { onModalSubmit(ctx, e) },
 	}
 
-	// Slash commands are the primary interface. The message listener is only
-	// attached when prefix commands or auto-mod are enabled, because reading
-	// message content needs the privileged Message Content intent.
-	if state.Config.Arcadia.PrefixCommands || state.Config.Arcadia.AutoMod {
+	if state.Config.Arcadia.PrefixCommands {
 		adapter.OnMessageCreate = func(e *events.MessageCreate) { onMessageCreate(ctx, e) }
 	}
 
 	return adapter
 }
 
-// prefix is the configured command prefix for the current environment.
-func prefix() string {
-	return state.Config.Arcadia.Prefix
+// OmiListener returns the event listener added to Omi's client: the public
+// commands, auto-mod and the main server's join announcements.
+func OmiListener(ctx context.Context) bot.EventListener {
+	ensureRegistered()
+
+	adapter := &events.ListenerAdapter{
+		OnGuildsReady: func(*events.GuildsReady) {
+			if err := SyncOmiCommands(); err != nil {
+				state.Logger.Error("Failed to sync Omi's application commands", zap.Error(err))
+			}
+		},
+		OnGuildMemberJoin:               onGuildMemberJoin,
+		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, omiBot, e) },
+	}
+
+	if state.Config.Arcadia.AutoMod {
+		adapter.OnMessageCreate = func(e *events.MessageCreate) {
+			if !e.Message.Author.Bot {
+				scanMessage(ctx, e)
+			}
+		}
+	}
+
+	return adapter
 }
 
 func onMessageCreate(ctx context.Context, e *events.MessageCreate) {
@@ -237,15 +314,7 @@ func onMessageCreate(ctx context.Context, e *events.MessageCreate) {
 		return
 	}
 
-	if state.Config.Arcadia.AutoMod {
-		scanMessage(ctx, e)
-	}
-
-	if !state.Config.Arcadia.PrefixCommands {
-		return
-	}
-
-	p := prefix()
+	p := arcadiaBot.prefix()
 
 	if !strings.HasPrefix(e.Message.Content, p) {
 		return
@@ -257,7 +326,7 @@ func onMessageCreate(ctx context.Context, e *events.MessageCreate) {
 		return
 	}
 
-	cmd, ok := registry[strings.ToLower(fields[0])]
+	cmd, ok := arcadiaBot.registry[strings.ToLower(fields[0])]
 
 	if !ok {
 		return
@@ -269,6 +338,7 @@ func onMessageCreate(ctx context.Context, e *events.MessageCreate) {
 		ChannelID: e.ChannelID,
 		Args:      fields[1:],
 		Options:   map[string]string{},
+		bot:       arcadiaBot,
 	}
 
 	if e.GuildID != nil {
@@ -278,10 +348,10 @@ func onMessageCreate(ctx context.Context, e *events.MessageCreate) {
 	invoke(cmd, c)
 }
 
-func onSlashCommand(ctx context.Context, e *events.ApplicationCommandInteractionCreate) {
+func onSlashCommand(ctx context.Context, b *Bot, e *events.ApplicationCommandInteractionCreate) {
 	data := e.SlashCommandInteractionData()
 
-	cmd, ok := registry[data.CommandName()]
+	cmd, ok := b.registry[data.CommandName()]
 
 	if !ok {
 		return
@@ -292,6 +362,7 @@ func onSlashCommand(ctx context.Context, e *events.ApplicationCommandInteraction
 		Author:    e.User(),
 		ChannelID: e.Channel().ID(),
 		Options:   map[string]string{},
+		bot:       b,
 		slash:     e,
 	}
 
@@ -315,8 +386,6 @@ func onSlashCommand(ctx context.Context, e *events.ApplicationCommandInteraction
 		}
 	}
 
-	// A subcommand arrives as the option name; mirror it into Args so the
-	// prefix and slash paths dispatch identically.
 	if sub := data.SubCommandName; sub != nil {
 		c.Args = append(c.Args, *sub)
 	}
@@ -326,7 +395,6 @@ func onSlashCommand(ctx context.Context, e *events.ApplicationCommandInteraction
 
 // invoke runs a command through its checks, logging like poise's pre/post hooks.
 func invoke(cmd *Command, c *Ctx) {
-	// Subcommand dispatch on the first positional argument.
 	if len(cmd.Subcommands) > 0 && len(c.Args) > 0 {
 		for _, sub := range cmd.Subcommands {
 			if strings.EqualFold(sub.Name, c.Args[0]) {
@@ -375,27 +443,11 @@ func isOwner(userID snowflake.ID) bool {
 	return perms.IsConfigOwner(userID.String())
 }
 
-// commandGuilds are the guilds the slash commands are published to.
-//
-// Registration is per-guild rather than global because the commands are staff
-// tooling that no other server should see, and because guild commands take
-// effect immediately instead of Discord's ~1 hour global propagation. The full
-// set goes to all three: the per-command guards already decide where each one is
-// actually usable, so a command registered in the wrong guild is rejected with
-// its normal message rather than silently missing.
-func commandGuilds() []snowflake.ID {
-	return []snowflake.ID{
-		state.Config.Servers.Main,
-		state.Config.Servers.Staff,
-		state.Config.Servers.Testing,
-	}
-}
+// buildCommands renders a bot's registry into Discord's application command shape.
+func (b *Bot) buildCommands() []discord.ApplicationCommandCreate {
+	cmds := make([]discord.ApplicationCommandCreate, 0, len(b.ordered))
 
-// buildCommands renders the registry into Discord's application command shape.
-func buildCommands() []discord.ApplicationCommandCreate {
-	cmds := make([]discord.ApplicationCommandCreate, 0, len(ordered))
-
-	for _, cmd := range ordered {
+	for _, cmd := range b.ordered {
 		create := discord.SlashCommandCreate{
 			Name:        cmd.Name,
 			Description: truncate(cmd.Description, 100),
@@ -416,80 +468,51 @@ func buildCommands() []discord.ApplicationCommandCreate {
 	return cmds
 }
 
-// SyncCommands publishes the slash commands to every staff guild and clears any
-// application-wide copy of them.
-func SyncCommands() error {
-	cmds := buildCommands()
+// sync makes the bot's commands in Discord match exactly what it registers:
+// its commands in its own guilds, none anywhere else and none globally, so a
+// renamed or moved command never lingers.
+func (b *Bot) sync() error {
+	client := b.client()
 
-	for _, guildID := range commandGuilds() {
-		if guildID == 0 {
-			continue
-		}
-
-		_, err := dclient.Get().Rest().SetGuildCommands(dclient.Get().ApplicationID(), guildID, cmds)
-
-		if err != nil {
-			return fmt.Errorf("failed to register commands in guild %s: %w", guildID, err)
-		}
-
-		state.Logger.Info("Registered slash commands", zap.String("guildID", guildID.String()), zap.Int("count", len(cmds)))
+	if client == nil {
+		return fmt.Errorf("%s is not connected", b.Name)
 	}
 
-	return pruneGlobalCommands(cmds)
+	cmds := b.buildCommands()
+	guilds := map[snowflake.ID][]discord.ApplicationCommandCreate{}
+
+	for _, id := range b.guilds() {
+		guilds[id] = cmds
+	}
+
+	return cmdsync.Sync(client, cmdsync.Plan{Name: b.Name, Guilds: guilds})
 }
 
-// pruneGlobalCommands deletes the global registration of any command that is
-// also registered per guild.
-//
-// Discord delivers a global command to every guild the application is in and
-// does not let a guild command of the same name stand in for it: both are listed
-// side by side, so a command registered both ways shows up twice in the picker
-// in every server. Everything here goes out per guild (see commandGuilds), which
-// makes a global copy a leftover — from a deployment that registered globally —
-// and the reason the commands were doubled.
-//
-// Global commands whose names this bot does not register are left alone and only
-// logged: they are not ours to delete, and they are not what doubles anything.
-func pruneGlobalCommands(registered []discord.ApplicationCommandCreate) error {
-	appID := dclient.Get().ApplicationID()
+// SyncCommands syncs both bots' commands.
+func SyncCommands() error {
+	ensureRegistered()
 
-	existing, err := dclient.Get().Rest().GetGlobalCommands(appID, false)
+	var errs []error
 
-	if err != nil {
-		return fmt.Errorf("failed to read the global commands: %w", err)
+	if dclient.Ready() {
+		errs = append(errs, arcadiaBot.sync())
 	}
 
-	if len(existing) == 0 {
-		return nil
+	if state.Discord != nil {
+		errs = append(errs, omiBot.sync())
 	}
 
-	ours := make(map[string]struct{}, len(registered))
+	return errors.Join(errs...)
+}
 
-	for _, cmd := range registered {
-		ours[cmd.CommandName()] = struct{}{}
-	}
+func SyncArcadiaCommands() error {
+	ensureRegistered()
+	return arcadiaBot.sync()
+}
 
-	var foreign []string
-
-	for _, cmd := range existing {
-		if _, mine := ours[cmd.Name()]; !mine {
-			foreign = append(foreign, cmd.Name())
-			continue
-		}
-
-		if err := dclient.Get().Rest().DeleteGlobalCommand(appID, cmd.ID()); err != nil {
-			return fmt.Errorf("failed to remove the global copy of /%s: %w", cmd.Name(), err)
-		}
-
-		state.Logger.Info("Removed a duplicate global slash command", zap.String("command", cmd.Name()))
-	}
-
-	if len(foreign) > 0 {
-		state.Logger.Warn("The application has global slash commands this bot does not register; they appear in every server it is in",
-			zap.Strings("commands", foreign))
-	}
-
-	return nil
+func SyncOmiCommands() error {
+	ensureRegistered()
+	return omiBot.sync()
 }
 
 func truncate(s string, max int) string {
@@ -504,28 +527,18 @@ func truncate(s string, max int) string {
 	return s[:max]
 }
 
-// categories is the sorted set of command categories, computed once at
-// registration rather than on every help invocation.
-var categories []string
+func (b *Bot) indexCategories() {
+	seen := make(map[string]struct{}, len(b.ordered))
+	b.categories = b.categories[:0]
 
-// helpCategories groups the registered commands for the help renderer.
-func helpCategories() []string {
-	return categories
-}
-
-// indexCategories fills categories from the registered commands.
-func indexCategories() {
-	seen := make(map[string]struct{}, len(ordered))
-	categories = categories[:0]
-
-	for _, cmd := range ordered {
+	for _, cmd := range b.ordered {
 		if _, ok := seen[cmd.Category]; ok {
 			continue
 		}
 
 		seen[cmd.Category] = struct{}{}
-		categories = append(categories, cmd.Category)
+		b.categories = append(b.categories, cmd.Category)
 	}
 
-	sort.Strings(categories)
+	sort.Strings(b.categories)
 }

@@ -31,6 +31,13 @@ func All() []Task {
 			Run:         ServerSync,
 		},
 		{
+			Name:        "trackingbotcheck",
+			Description: "Checks the tracking bot is still in every listed server, warns owners when it isn't, and hides a public listing from browse and search after 14 days until the bot is back",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         TrackingBotCheck,
+		},
+		{
 			Name:        "teamcleanup",
 			Description: "Removes team members who've left their server or lost Administrator, via REST polling instead of the privileged Server Members intent",
 			Enabled:     true,

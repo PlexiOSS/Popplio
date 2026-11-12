@@ -25,7 +25,7 @@ func cmdHelp() *Command {
 			name := c.Option("command", 0)
 
 			if name != "" {
-				cmd, ok := registry[strings.ToLower(name)]
+				cmd, ok := c.bot.registry[strings.ToLower(name)]
 
 				if !ok {
 					return c.Fail(fmt.Sprintf("No such command: %s", name))
@@ -33,7 +33,7 @@ func cmdHelp() *Command {
 
 				var sb strings.Builder
 
-				fmt.Fprintf(&sb, "**%s%s**\n%s", prefix(), cmd.Name, cmd.Description)
+				fmt.Fprintf(&sb, "**%s%s**\n%s", c.bot.prefix(), cmd.Name, cmd.Description)
 
 				for _, sub := range cmd.Subcommands {
 					fmt.Fprintf(&sb, "\n- ``%s %s``: %s", cmd.Name, sub.Name, sub.Description)
@@ -46,15 +46,15 @@ func cmdHelp() *Command {
 
 			sb.WriteString("**Commands**\n")
 
-			for _, category := range helpCategories() {
+			for _, category := range c.bot.categories {
 				fmt.Fprintf(&sb, "\n__%s__\n", category)
 
-				for _, cmd := range ordered {
+				for _, cmd := range c.bot.ordered {
 					if cmd.Category != category {
 						continue
 					}
 
-					fmt.Fprintf(&sb, "``%s%s``: %s\n", prefix(), cmd.Name, cmd.Description)
+					fmt.Fprintf(&sb, "``%s%s``: %s\n", c.bot.prefix(), cmd.Name, cmd.Description)
 				}
 			}
 

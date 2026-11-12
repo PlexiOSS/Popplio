@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-11-11
+
+### Added
+
+- Listed servers now have to keep the tracking bot. An hourly
+  `trackingbotcheck` task in Infernoplex, plus its join and leave events,
+  records when the bot goes missing from an approved or certified server
+  (`servers.tracking_bot_missing_since`) and notifies the owners. After 14
+  days a public listing is switched to unlisted, hidden from browse and
+  search, and the owners are told. When the bot is back the listing returns
+  to the visibility the owner chose, and they're told it's listed again.
+  Private, unlisted and defunct listings are never changed. If an owner
+  changes the visibility while the listing is hidden, the choice is kept
+  for when the bot returns. Migration
+  `20261112110000_tracking_bot_presence.sql` adds the three columns.
+- `GET /servers/{id}` returns `tracking_bot_missing_since` and
+  `tracking_bot_hidden`, plus `tracking_bot_invite_url` for people who
+  manage the listing while the bot is missing.
+- Omi, Arcadia and Omniplex Servers rotate their Discord status every 5
+  minutes. Omi shows the number of listed bots and servers, `/help`, a
+  custom "Find your next bot" status and the vote leaderboard. Arcadia
+  shows how many bots and servers are waiting in the review queue, and
+  Omniplex Servers shows the number of listed servers, `/vote and /bump`
+  and how to list a server. The new `botstatus` package does this.
+
+### Changed
+
+- Omi, the main Omniplex bot, now runs the public commands, and Arcadia
+  keeps only the staff ones. Omi has `/help`, `/kb`, `/ticket`, `/info`,
+  `/analytics`, `/leaderboard`, `/getbotroles` and the moderation commands
+  (`/kick`, `/ban`, `/timeout`, `/warn`, `/purge`, `/lock`, `/unlock`,
+  `/modlogs`) in the main and testing servers. Moderation actions show as
+  Omi in Discord's audit log. Arcadia keeps the review queue, staff
+  management, RPC and owner commands, in the staff and testing servers
+  only. Auto-mod and the main server's join announcements (and the bot
+  role for new bots) moved to Omi as well, so Omi's application needs the
+  Message Content intent turned on when `arcadia.auto_mod` is enabled, and
+  Arcadia no longer asks for it unless prefix commands are on.
+- Every bot cleans up its slash commands on startup. Omi, Arcadia and
+  Infernoplex each set their commands to exactly what they register: their
+  own servers get the current commands, global commands are replaced, and
+  any server they're in that has leftover commands from an older version
+  is cleared. A moved or renamed command no longer lingers in Discord's
+  picker. The shared logic is in the new `cmdsync` package.
+
 ## [1.27.0] - 2026-11-11
 
 ### Added

@@ -123,3 +123,10 @@ LEFT JOIN b ON b.month = m.month
 LEFT JOIN s ON s.month = m.month
 LEFT JOIN u ON u.month = m.month
 ORDER BY m.month;
+
+-- name: GetBotStatusCounts :one
+SELECT
+    (SELECT COUNT(*) FROM bots WHERE type IN ('approved', 'certified'))::bigint AS listed_bots,
+    (SELECT COUNT(*) FROM servers WHERE type IN ('approved', 'certified'))::bigint AS listed_servers,
+    (SELECT COUNT(*) FROM bots WHERE type = 'pending')::bigint AS pending_bots,
+    (SELECT COUNT(*) FROM servers WHERE type = 'pending')::bigint AS pending_servers;
