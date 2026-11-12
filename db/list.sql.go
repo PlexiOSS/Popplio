@@ -11,6 +11,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getBotStatusCounts = `-- name: GetBotStatusCounts :one
+SELECT
+    (SELECT COUNT(*) FROM bots WHERE type IN ('approved', 'certified'))::bigint AS listed_bots,
+    (SELECT COUNT(*) FROM servers WHERE type IN ('approved', 'certified'))::bigint AS listed_servers,
+    (SELECT COUNT(*) FROM bots WHERE type = 'pending')::bigint AS pending_bots,
+    (SELECT COUNT(*) FROM servers WHERE type = 'pending')::bigint AS pending_servers
+`
+
+type GetBotStatusCountsRow struct {
+	ListedBots     int64 `db:"listed_bots" json:"listed_bots"`
+	ListedServers  int64 `db:"listed_servers" json:"listed_servers"`
+	PendingBots    int64 `db:"pending_bots" json:"pending_bots"`
+	PendingServers int64 `db:"pending_servers" json:"pending_servers"`
+}
+
+func (q *Queries) GetBotStatusCounts(ctx context.Context) (GetBotStatusCountsRow, error) {
+	row := q.db.QueryRow(ctx, getBotStatusCounts)
+	var i GetBotStatusCountsRow
+	err := row.Scan(
+		&i.ListedBots,
+		&i.ListedServers,
+		&i.PendingBots,
+		&i.PendingServers,
+	)
+	return i, err
+}
+
 const getCertifiedBotIDs = `-- name: GetCertifiedBotIDs :many
 SELECT bot_id FROM bots WHERE type = 'certified' ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `

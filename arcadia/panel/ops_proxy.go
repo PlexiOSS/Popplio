@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"popplio/clientip"
 	"popplio/arcadia/types"
+	"popplio/clientip"
 	"popplio/db"
 	"popplio/state"
 )

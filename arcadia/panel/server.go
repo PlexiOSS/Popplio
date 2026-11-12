@@ -13,10 +13,9 @@ import (
 	"strconv"
 	"time"
 
-	"popplio/clientip"
 	"popplio/arcadia/types"
+	"popplio/clientip"
 	"popplio/state"
-
 
 	"go.uber.org/zap"
 )

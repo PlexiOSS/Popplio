@@ -33,7 +33,7 @@ import (
 const maxTimeout = 28 * 24 * time.Hour
 
 func registerModerationCommands() {
-	register(cmdKick(), cmdBan(), cmdTimeout(), cmdWarn(), cmdPurge(), cmdLock(), cmdUnlock(), cmdModlogs())
+	omiBot.register(cmdKick(), cmdBan(), cmdTimeout(), cmdWarn(), cmdPurge(), cmdLock(), cmdUnlock(), cmdModlogs())
 }
 
 // modCase is one row written to mod_cases: a durable, queryable moderation
@@ -73,7 +73,7 @@ func logPurge(c *Ctx, channelID snowflake.ID, count int, filterUser snowflake.ID
 		fields = append(fields, discord.EmbedField{Name: "Filtered To", Value: fmt.Sprintf("<@%s>", filterUser), Inline: impls.InlineTrue()})
 	}
 
-	return impls.SendModLog(discord.MessageCreate{
+	return c.Discord().SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title:  "Messages Purged",
 			Fields: fields,
@@ -151,7 +151,7 @@ func checkModerationTarget(ctx context.Context, actorRank int32, targetUserID st
 // taken, since the moderation action itself already succeeded by the time
 // this runs.
 func logModeration(c *Ctx, action string, target snowflake.ID, reason string) error {
-	return impls.SendModLog(discord.MessageCreate{
+	return c.Discord().SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title: action,
 			Fields: []discord.EmbedField{
@@ -187,7 +187,7 @@ func cmdKick() *Command {
 				return err
 			}
 
-			if err := impls.KickMember(c.GuildID, target, reason); err != nil {
+			if err := c.Discord().KickMember(c.GuildID, target, reason); err != nil {
 				return err
 			}
 
@@ -238,7 +238,7 @@ func cmdBan() *Command {
 				return err
 			}
 
-			if err := impls.BanMember(c.GuildID, target, time.Duration(deleteDays)*24*time.Hour, reason); err != nil {
+			if err := c.Discord().BanMember(c.GuildID, target, time.Duration(deleteDays)*24*time.Hour, reason); err != nil {
 				return err
 			}
 
@@ -287,7 +287,7 @@ func cmdTimeout() *Command {
 
 			until := time.Now().Add(duration)
 
-			if err := impls.TimeoutMember(c.GuildID, target, until, reason); err != nil {
+			if err := c.Discord().TimeoutMember(c.GuildID, target, until, reason); err != nil {
 				return err
 			}
 
@@ -329,7 +329,7 @@ func cmdWarn() *Command {
 
 			// Best-effort: a member with DMs closed still gets warned and logged,
 			// they just don't hear about it directly.
-			_ = impls.SendDM(target, discord.MessageCreate{
+			_ = c.Discord().SendDM(target, discord.MessageCreate{
 				Embeds: []discord.Embed{{
 					Title:       "You've received a formal warning",
 					Description: reason,

@@ -70,7 +70,7 @@ func intents() gateway.Intents {
 		gateway.IntentGuildPresences |
 		gateway.IntentGuildModeration
 
-	if state.Config.Arcadia.PrefixCommands || state.Config.Arcadia.AutoMod {
+	if state.Config.Arcadia.PrefixCommands {
 		i |= gateway.IntentGuildMessages | gateway.IntentMessageContent
 	}
 

@@ -331,7 +331,7 @@ SELECT server_id, name, avatar, total_members, online_members, short, type, stat
 FROM servers WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND spotlighted_until IS NOT NULL AND spotlighted_until > NOW() ORDER BY spotlighted_until DESC LIMIT 9;
 
 -- name: GetServerByID :one
-SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at, hidden_stats
+SELECT server_id, name, avatar, total_members, online_members, short, type, approval_note, state, tags, vanity_ref, extra_links, team_owner, invite_clicks, clicks, nsfw, approximate_votes, vote_banned, premium, start_premium_period, premium_period_length, captcha_opt_out, created_at, claimed_by, last_claimed, login_required_for_invite, show_emojis, emojis, stickers, emojis_synced_at, supporter_badge, boosted_until, featured_until, spotlighted_until, vote_blitz_until, discord_nsfw_level, nsfw_channel_count, moderation_flagged, moderation_categories, premium_tier, boost_count, auto_votes_opt_out, highlighted_until, card_theme, card_color, bumped_at, hidden_stats, tracking_bot_missing_since, tracking_bot_hidden_state
 FROM servers
 WHERE server_id = $1;
 
@@ -355,7 +355,10 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 UPDATE servers SET moderation_flagged = $2, moderation_categories = $3 WHERE server_id = $1;
 
 -- name: UpdateServerSettings :exec
-UPDATE servers SET short = $1, long = $2, extra_links = $3, state = $4, tags = $5, nsfw = $6, captcha_opt_out = $7, login_required_for_invite = $8, show_emojis = $9
+UPDATE servers SET short = $1, long = $2, extra_links = $3,
+    state = CASE WHEN tracking_bot_hidden_state IS NULL THEN $4 ELSE state END,
+    tracking_bot_hidden_state = CASE WHEN tracking_bot_hidden_state IS NULL THEN NULL ELSE $4 END,
+    tags = $5, nsfw = $6, captcha_opt_out = $7, login_required_for_invite = $8, show_emojis = $9
 WHERE server_id = $10;
 
 -- name: UpdateServerStatsMeta :exec
@@ -415,3 +418,25 @@ UPDATE servers SET hidden_stats = $2 WHERE server_id = $1;
 
 -- name: GetServerListingExtras :one
 SELECT hidden_stats, (SELECT COALESCE(SUM(v.views), 0) FROM entity_views_daily v WHERE v.target_type = 'server' AND v.target_id = servers.server_id AND v.day > CURRENT_DATE - 30)::int AS views_30d FROM servers WHERE server_id = $1;
+
+-- name: ListTrackingBotServers :many
+SELECT server_id, name, state, tracking_bot_missing_since, tracking_bot_hidden_state, tracking_bot_notice
+FROM servers
+WHERE type = 'approved' OR type = 'certified';
+
+-- name: MarkTrackingBotMissing :execrows
+UPDATE servers SET tracking_bot_missing_since = NOW(), tracking_bot_notice = 0
+WHERE server_id = $1 AND tracking_bot_missing_since IS NULL AND (type = 'approved' OR type = 'certified');
+
+-- name: SetTrackingBotNotice :exec
+UPDATE servers SET tracking_bot_notice = $2 WHERE server_id = $1;
+
+-- name: HideServerForTrackingBot :execrows
+UPDATE servers SET tracking_bot_hidden_state = state, state = 'unlisted'
+WHERE server_id = $1 AND tracking_bot_missing_since IS NOT NULL AND tracking_bot_hidden_state IS NULL AND state = 'public';
+
+-- name: ClearTrackingBotMissing :one
+UPDATE servers s SET state = COALESCE(s.tracking_bot_hidden_state, s.state), tracking_bot_hidden_state = NULL, tracking_bot_missing_since = NULL, tracking_bot_notice = 0
+FROM (SELECT p.server_id, p.tracking_bot_notice FROM servers p WHERE p.server_id = $1 FOR UPDATE) prev
+WHERE s.server_id = prev.server_id AND s.tracking_bot_missing_since IS NOT NULL
+RETURNING s.name, prev.tracking_bot_notice AS previous_notice;

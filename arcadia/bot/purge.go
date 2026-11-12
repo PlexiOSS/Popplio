@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"popplio/arcadia/impls"
 	"popplio/perms"
 	"popplio/state"
 
@@ -60,7 +59,7 @@ func cmdPurge() *Command {
 				fetchLimit = 100
 			}
 
-			msgs, err := impls.GetRecentMessages(c.ChannelID, fetchLimit)
+			msgs, err := c.Discord().GetRecentMessages(c.ChannelID, fetchLimit)
 
 			if err != nil {
 				return err
@@ -93,10 +92,10 @@ func cmdPurge() *Command {
 
 			if len(ids) == 1 {
 				// The bulk-delete endpoint 400s on a single id.
-				if err := impls.DeleteMessage(c.ChannelID, ids[0], reason); err != nil {
+				if err := c.Discord().DeleteMessage(c.ChannelID, ids[0], reason); err != nil {
 					return err
 				}
-			} else if err := impls.PurgeMessages(c.ChannelID, ids, reason); err != nil {
+			} else if err := c.Discord().PurgeMessages(c.ChannelID, ids, reason); err != nil {
 				return err
 			}
 

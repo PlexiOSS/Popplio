@@ -146,13 +146,10 @@ func TestChunkMessage(t *testing.T) {
 // The commands are registered under names the help renderer and Discord both
 // use, so a clash with an existing command would silently shadow one of them.
 func TestStaffCommandsRegisterCleanly(t *testing.T) {
-	registry = map[string]*Command{}
-	ordered = nil
-
-	registerCommands()
+	freshRegistry()
 
 	for _, name := range []string{"staffroles", "staffperms", "permissions"} {
-		cmd, ok := registry[name]
+		cmd, ok := arcadiaBot.registry[name]
 
 		if !ok {
 			t.Fatalf("%s is not registered", name)
@@ -171,7 +168,7 @@ func TestStaffCommandsRegisterCleanly(t *testing.T) {
 
 	// Discord rejects a command whose description is over 100 characters, and
 	// truncate() only protects the top level.
-	for _, cmd := range ordered {
+	for _, cmd := range append(append([]*Command{}, arcadiaBot.ordered...), omiBot.ordered...) {
 		for _, sub := range cmd.Subcommands {
 			if len(sub.Description) > 100 {
 				t.Errorf("%s %s has a %d character description", cmd.Name, sub.Name, len(sub.Description))
@@ -185,10 +182,7 @@ func TestStaffCommandsRegisterCleanly(t *testing.T) {
 // nothing to show for it but a line in the startup log. The registration payload
 // is checked here so that a bad option order fails the build instead.
 func TestCommandOptionsRegisterInAValidOrder(t *testing.T) {
-	registry = map[string]*Command{}
-	ordered = nil
-
-	registerCommands()
+	freshRegistry()
 
 	var check func(path string, options []discord.ApplicationCommandOption)
 
@@ -227,7 +221,7 @@ func TestCommandOptionsRegisterInAValidOrder(t *testing.T) {
 		}
 	}
 
-	for _, cmd := range buildCommands() {
+	for _, cmd := range append(arcadiaBot.buildCommands(), omiBot.buildCommands()...) {
 		slash, ok := cmd.(discord.SlashCommandCreate)
 
 		if !ok {
@@ -241,13 +235,10 @@ func TestCommandOptionsRegisterInAValidOrder(t *testing.T) {
 // The interactive editor is what these commands are mostly for, and Discord
 // lists subcommands in the order they are registered.
 func TestEditIsTheFirstSubcommand(t *testing.T) {
-	registry = map[string]*Command{}
-	ordered = nil
-
-	registerCommands()
+	freshRegistry()
 
 	for _, name := range []string{"staffroles", "staffperms"} {
-		cmd, ok := registry[name]
+		cmd, ok := arcadiaBot.registry[name]
 
 		if !ok {
 			t.Fatalf("%s is not registered", name)
@@ -256,5 +247,44 @@ func TestEditIsTheFirstSubcommand(t *testing.T) {
 		if len(cmd.Subcommands) == 0 || cmd.Subcommands[0].Name != "edit" {
 			t.Errorf("/%s should offer edit first, got %q", name, cmd.Subcommands[0].Name)
 		}
+	}
+}
+
+func freshRegistry() {
+	arcadiaBot.reset()
+	omiBot.reset()
+	registerCommands()
+}
+
+func TestCommandsSplitBetweenBots(t *testing.T) {
+	freshRegistry()
+
+	omi := []string{"help", "kb", "ticket", "info", "analytics", "leaderboard", "getbotroles", "kick", "ban", "timeout", "warn", "purge", "lock", "unlock", "modlogs"}
+	arcadia := []string{"help", "register", "queue", "claim", "unclaim", "approve", "deny", "staff", "staffinfo", "staffguide", "staffroles", "staffperms", "permissions", "rpc", "rpclist", "refresh", "invite", "invite_db", "explainme"}
+
+	for _, name := range omi {
+		if _, ok := omiBot.registry[name]; !ok {
+			t.Errorf("Omi should have /%s", name)
+		}
+	}
+
+	for _, name := range arcadia {
+		if _, ok := arcadiaBot.registry[name]; !ok {
+			t.Errorf("Arcadia should have /%s", name)
+		}
+	}
+
+	for name := range omiBot.registry {
+		if name == "help" {
+			continue
+		}
+
+		if _, both := arcadiaBot.registry[name]; both {
+			t.Errorf("/%s is registered on both bots", name)
+		}
+	}
+
+	if len(omiBot.registry) != len(omi) || len(arcadiaBot.registry) != len(arcadia) {
+		t.Errorf("unexpected command counts: omi %d, arcadia %d", len(omiBot.registry), len(arcadiaBot.registry))
 	}
 }

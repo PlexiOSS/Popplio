@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
 	"popplio/state"
 
+	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
@@ -96,20 +96,21 @@ func scanMessage(ctx context.Context, e *events.MessageCreate) {
 		return
 	}
 
-	takeAutoModAction(ctx, guildID, e.ChannelID, msg, reason)
+	takeAutoModAction(ctx, e.Client(), guildID, e.ChannelID, msg, reason)
 }
 
 // takeAutoModAction deletes the offending message, DMs a warning, records a
 // mod_cases row, and posts to the mod-logs channel — all attributed to the
 // bot itself, never to a staff member, since no staff member acted.
-func takeAutoModAction(ctx context.Context, guildID, channelID snowflake.ID, msg discord.Message, reason string) {
-	botID := dclient.Get().ApplicationID()
+func takeAutoModAction(ctx context.Context, client bot.Client, guildID, channelID snowflake.ID, msg discord.Message, reason string) {
+	botID := client.ApplicationID()
+	d := impls.With(client)
 
-	if err := dclient.Get().Rest().DeleteMessage(channelID, msg.ID); err != nil {
+	if err := client.Rest().DeleteMessage(channelID, msg.ID); err != nil {
 		state.Logger.Error("Automod failed to delete message", zap.Error(err))
 	}
 
-	_ = impls.SendDM(msg.Author.ID, discord.MessageCreate{
+	_ = d.SendDM(msg.Author.ID, discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title:       "Automated warning",
 			Description: fmt.Sprintf("Your message in <#%s> was removed: %s.", channelID, reason),
@@ -124,12 +125,12 @@ func takeAutoModAction(ctx context.Context, guildID, channelID snowflake.ID, msg
 		state.Logger.Error("Failed to record automod mod case", zap.Error(err))
 	}
 
-	err := impls.SendModLog(discord.MessageCreate{
+	err := d.SendModLog(discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title: "Auto-mod Action",
 			Fields: []discord.EmbedField{
 				{Name: "User", Value: fmt.Sprintf("<@%s> (%s)", msg.Author.ID, msg.Author.ID), Inline: impls.InlineTrue()},
-				{Name: "Staff", Value: "Automated (Arcadia)", Inline: impls.InlineTrue()},
+				{Name: "Staff", Value: "Automated (Omi)", Inline: impls.InlineTrue()},
 				{Name: "Reason", Value: reason, Inline: impls.InlineFalse()},
 				{Name: "Channel", Value: fmt.Sprintf("<#%s>", channelID), Inline: impls.InlineTrue()},
 			},

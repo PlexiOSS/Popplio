@@ -165,18 +165,18 @@ func cmdGetBotRoles() *Command {
 				return fmt.Errorf("You are not the owner/additional owner of any approved or certified bots")
 			}
 
-			if !impls.MemberOnGuild(state.Config.Servers.Main, c.Author.ID) {
+			if !c.Discord().MemberOnGuild(state.Config.Servers.Main, c.Author.ID) {
 				return fmt.Errorf("You are not in the server")
 			}
 
-			err = impls.AddRole(state.Config.Servers.Main, c.Author.ID, state.Config.Roles.BotDeveloper, "Autorole due to bots owned")
+			err = c.Discord().AddRole(state.Config.Servers.Main, c.Author.ID, state.Config.Roles.BotDeveloper, "Autorole due to bots owned")
 
 			if err != nil {
 				return err
 			}
 
 			if hasCertified {
-				err = impls.AddRole(state.Config.Servers.Main, c.Author.ID, state.Config.Roles.CertifiedDeveloper, "Autorole due to bots owned")
+				err = c.Discord().AddRole(state.Config.Servers.Main, c.Author.ID, state.Config.Roles.CertifiedDeveloper, "Autorole due to bots owned")
 
 				if err != nil {
 					return err
@@ -185,7 +185,7 @@ func cmdGetBotRoles() *Command {
 				return c.Ok("You are the owner/additional owner of a certified bot! Giving you certified role")
 			}
 
-			err = impls.RemoveRole(state.Config.Servers.Main, c.Author.ID, state.Config.Roles.CertifiedDeveloper, "Autorole due to bots owned")
+			err = c.Discord().RemoveRole(state.Config.Servers.Main, c.Author.ID, state.Config.Roles.CertifiedDeveloper, "Autorole due to bots owned")
 
 			if err != nil {
 				return err

@@ -837,7 +837,10 @@ CREATE TABLE public.servers (
     card_theme boolean DEFAULT false NOT NULL,
     card_color text,
     bumped_at timestamp with time zone,
-    vote_channel_id text
+    vote_channel_id text,
+    tracking_bot_missing_since timestamp with time zone,
+    tracking_bot_hidden_state text,
+    tracking_bot_notice smallint DEFAULT 0 NOT NULL
 );
 
 

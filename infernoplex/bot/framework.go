@@ -5,6 +5,7 @@ package bot
 import (
 	"context"
 	"fmt"
+	"popplio/cmdsync"
 	"sync"
 
 	"popplio/infernoplex/dclient"
@@ -159,9 +160,18 @@ func Listener(ctx context.Context) bot.EventListener {
 	registerCommands()
 
 	return &events.ListenerAdapter{
-		OnReady:                         func(e *events.Ready) { onReady(ctx, e) },
-		OnGuildReady:                    func(e *events.GuildReady) { onGuildMemberCount(ctx, e.Guild) },
-		OnGuildJoin:                     func(e *events.GuildJoin) { onGuildMemberCount(ctx, e.Guild) },
+		OnReady: func(e *events.Ready) { onReady(ctx, e) },
+		OnGuildsReady: func(*events.GuildsReady) {
+			if err := SyncCommands(); err != nil {
+				state.Logger.Error("Failed to sync Infernoplex application commands", zap.Error(err))
+			}
+		},
+		OnGuildReady: func(e *events.GuildReady) { onGuildMemberCount(ctx, e.Guild) },
+		OnGuildJoin: func(e *events.GuildJoin) {
+			onGuildMemberCount(ctx, e.Guild)
+			onTrackingBotJoin(ctx, e.GuildID)
+		},
+		OnGuildLeave:                    func(e *events.GuildLeave) { onTrackingBotLeave(ctx, e.GuildID) },
 		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, e) },
 		OnComponentInteraction:          func(e *events.ComponentInteractionCreate) { onComponent(ctx, e) },
 		OnModalSubmit:                   func(e *events.ModalSubmitInteractionCreate) { onModalSubmit(ctx, e) },
@@ -263,16 +273,10 @@ func buildCommands() []discord.ApplicationCommandCreate {
 	return cmds
 }
 
+// SyncCommands sets the global commands to exactly what is registered and
+// removes any guild-only commands left in servers from older versions.
 func SyncCommands() error {
-	cmds := buildCommands()
-
-	if _, err := dclient.Get().Rest().SetGlobalCommands(dclient.Get().ApplicationID(), cmds); err != nil {
-		return fmt.Errorf("failed to register global commands: %w", err)
-	}
-
-	state.Logger.Info("Registered global slash commands", zap.Int("count", len(cmds)))
-
-	return nil
+	return cmdsync.Sync(dclient.Get(), cmdsync.Plan{Name: "infernoplex", Global: buildCommands()})
 }
 
 func truncate(s string, max int) string {

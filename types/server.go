@@ -37,64 +37,67 @@ type IndexServer struct {
 	CardColor        string             `db:"-" json:"card_color" description:"The server's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set" ci:"internal"`
 }
 
-// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users+stats_self_managed+last_stats_post+moderation_checked_at+vote_channel_id
+// @ci table=servers, ignore_fields=invite+unique_clicks+blacklisted_users+stats_self_managed+last_stats_post+moderation_checked_at+vote_channel_id+tracking_bot_hidden_state+tracking_bot_notice
 type Server struct {
-	ServerID               string             `db:"server_id" json:"server_id" description:"The server's ID"`
-	Name                   string             `db:"name" json:"name" description:"The server's name"`
-	Avatar                 string             `db:"avatar" json:"avatar" description:"The server's icon URL, empty if the server has no icon set or the tracking bot hasn't synced it yet"`
-	TotalMembers           int                `db:"total_members" json:"total_members" description:"The server's total member count"`
-	OnlineMembers          int                `db:"online_members" json:"online_members" description:"The server's online member count"`
-	PremiumTier            int                `db:"premium_tier" json:"premium_tier" description:"The server's Discord boost level (0 to 3), synced periodically by the tracking bot"`
-	BoostCount             int                `db:"boost_count" json:"boost_count" description:"How many boosts the server has, synced periodically by the tracking bot"`
-	Short                  string             `db:"short" json:"short" description:"The server's short description"`
-	Long                   string             `db:"-" json:"long" description:"The server's long description in raw format (HTML/markdown etc. based on the servers settings). May not be included in responses (e.g. long is not set in include)" skip:"long" ci:"internal"` // Must be parsed internally
-	Type                   string             `db:"type" json:"type" description:"The server's type (e.g. pending/approved/certified/denied etc.)"`
-	Note                   pgtype.Text        `db:"approval_note" json:"approval_note" description:"The note for the server's approval"`
-	State                  string             `db:"state" json:"state" description:"The server's state (public, private, unlisted, defunct)"`
-	Tags                   []string           `db:"tags" json:"tags" description:"The server's tags"`
-	VanityRef              pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
-	Vanity                 string             `db:"-" json:"vanity" description:"The server's vanity URL" ci:"internal"` // Must be parsed internally
-	ExtraLinks             []Link             `db:"extra_links" json:"extra_links" description:"The server's links that it wishes to advertise"`
-	TeamOwnerID            pgtype.UUID        `db:"team_owner" json:"-"`
-	TeamOwner              *Team              `db:"-" json:"team_owner" description:"If the server is in a team, who owns the server." ci:"internal"` // Must be parsed internally
-	InviteClicks           int                `db:"invite_clicks" json:"invite_clicks" description:"The server's invite click count (via users inviting the server from IBL)"`
-	Clicks                 int                `db:"clicks" json:"clicks" description:"The server's total click count"`
-	UniqueClicks           int64              `db:"-" json:"unique_clicks" description:"The server's unique click count based on SHA256 hashed IPs" ci:"internal"` // Must be parsed internally
-	NSFW                   bool               `db:"nsfw" json:"nsfw" description:"Whether the serber is NSFW or not"`
-	ApproximateVotes       int                `db:"approximate_votes" json:"approximate_votes" description:"The bot's approximate vote count, used for home page listing etc."`
-	Votes                  int                `db:"-" json:"votes" description:"The server's vote count" ci:"internal"` // Votes are retrieved from entity_votes
-	AutoVotes              int                `db:"-" json:"auto_votes" description:"How many of this month's upvotes came from Auto-vote" ci:"internal"`
-	VoteBanned             bool               `db:"vote_banned" json:"vote_banned" description:"Whether the server is vote banned or not"`
-	Premium                bool               `db:"premium" json:"premium" description:"Whether the server is a premium server or not"`
-	StartPeriod            pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
-	PremiumPeriodLength    time.Duration      `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the server in nanoseconds"`
-	CaptchaOptOut          bool               `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the server should have captchas shown if the user has captcha_sponsor_enabled"`
-	Views30d               int                `db:"-" json:"views_30d" description:"Views in the last 30 days, counting each visitor once per listing per day" ci:"internal"`
-	HiddenStats            []string           `db:"hidden_stats" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing"`
-	AutoVotesOptOut        bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
-	HighlightedUntil       pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the server's card has an accent glow until this time"`
-	CardTheme              bool               `db:"card_theme" json:"card_theme" description:"Whether the server has bought the Card Theme, which unlocks card_color"`
-	BumpedAt               pgtype.Timestamptz `db:"bumped_at" json:"bumped_at" description:"When the server was last bumped with /bump, null if never"`
-	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at" description:"The server's creation date"`
-	ClaimedBy              pgtype.Text        `db:"claimed_by" json:"claimed_by" description:"The user who claimed the server"`
-	LastClaimed            pgtype.Timestamptz `db:"last_claimed" json:"last_claimed" description:"The server's last claimed date"`
-	LoginRequiredForInvite bool               `db:"login_required_for_invite" json:"login_required_for_invite" description:"Whether the server requires a login to be invited to it"`
-	ShowEmojis             bool               `db:"show_emojis" json:"show_emojis" description:"Whether the server owner has opted in to showing this server's emojis and stickers on its listing page"`
-	Emojis                 []Emoji            `db:"emojis" json:"emojis" description:"The server's custom emojis, synced periodically by the tracking bot while it's in the server. Always empty unless show_emojis is true"`
-	Stickers               []Sticker          `db:"stickers" json:"stickers" description:"The server's stickers, synced the same way as emojis. Always empty unless show_emojis is true"`
-	EmojisSyncedAt         pgtype.Timestamptz `db:"emojis_synced_at" json:"emojis_synced_at" description:"The last time emojis/stickers were synced. Null if never synced (e.g. the tracking bot has never been in this server)"`
-	SupporterBadge         bool               `db:"supporter_badge" json:"supporter_badge" description:"Whether the server's owner has purchased the cosmetic supporter badge from the shop"`
-	BoostedUntil           pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
-	FeaturedUntil          pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
-	SpotlightedUntil       pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the server appears in the home page's Spotlight section until this time"`
-	VoteBlitzUntil         pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the server's vote cooldown is halved until this time"`
-	DiscordNSFWLevel       int                `db:"discord_nsfw_level" json:"discord_nsfw_level" description:"Discord's own guild-level NSFW classification, synced periodically by the tracking bot (0=default, 1=explicit, 2=safe, 3=age-restricted)"`
-	NSFWChannelCount       int                `db:"nsfw_channel_count" json:"nsfw_channel_count" description:"How many of the server's channels currently have Discord's own age-restricted flag set, synced periodically by the tracking bot. Compare against nsfw to catch a server with gated NSFW content that isn't tagged nsfw, or vice versa"`
-	ModerationFlagged      bool               `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the server's short/long description at submission time. A signal for reviewers, not a verdict"`
-	ModerationCategories   []string           `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
-	AssetVersions          map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
-	Highlighted            bool               `db:"-" json:"highlighted" description:"Whether the server has an active Highlighted Card from the shop" ci:"internal"`
-	CardColor              string             `db:"card_color" json:"card_color" description:"The server's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set"`
+	ServerID                string             `db:"server_id" json:"server_id" description:"The server's ID"`
+	Name                    string             `db:"name" json:"name" description:"The server's name"`
+	Avatar                  string             `db:"avatar" json:"avatar" description:"The server's icon URL, empty if the server has no icon set or the tracking bot hasn't synced it yet"`
+	TotalMembers            int                `db:"total_members" json:"total_members" description:"The server's total member count"`
+	OnlineMembers           int                `db:"online_members" json:"online_members" description:"The server's online member count"`
+	PremiumTier             int                `db:"premium_tier" json:"premium_tier" description:"The server's Discord boost level (0 to 3), synced periodically by the tracking bot"`
+	BoostCount              int                `db:"boost_count" json:"boost_count" description:"How many boosts the server has, synced periodically by the tracking bot"`
+	Short                   string             `db:"short" json:"short" description:"The server's short description"`
+	Long                    string             `db:"-" json:"long" description:"The server's long description in raw format (HTML/markdown etc. based on the servers settings). May not be included in responses (e.g. long is not set in include)" skip:"long" ci:"internal"` // Must be parsed internally
+	Type                    string             `db:"type" json:"type" description:"The server's type (e.g. pending/approved/certified/denied etc.)"`
+	Note                    pgtype.Text        `db:"approval_note" json:"approval_note" description:"The note for the server's approval"`
+	State                   string             `db:"state" json:"state" description:"The server's state (public, private, unlisted, defunct)"`
+	Tags                    []string           `db:"tags" json:"tags" description:"The server's tags"`
+	VanityRef               pgtype.UUID        `db:"vanity_ref" json:"vanity_ref"`
+	Vanity                  string             `db:"-" json:"vanity" description:"The server's vanity URL" ci:"internal"` // Must be parsed internally
+	ExtraLinks              []Link             `db:"extra_links" json:"extra_links" description:"The server's links that it wishes to advertise"`
+	TeamOwnerID             pgtype.UUID        `db:"team_owner" json:"-"`
+	TeamOwner               *Team              `db:"-" json:"team_owner" description:"If the server is in a team, who owns the server." ci:"internal"` // Must be parsed internally
+	InviteClicks            int                `db:"invite_clicks" json:"invite_clicks" description:"The server's invite click count (via users inviting the server from IBL)"`
+	Clicks                  int                `db:"clicks" json:"clicks" description:"The server's total click count"`
+	UniqueClicks            int64              `db:"-" json:"unique_clicks" description:"The server's unique click count based on SHA256 hashed IPs" ci:"internal"` // Must be parsed internally
+	NSFW                    bool               `db:"nsfw" json:"nsfw" description:"Whether the serber is NSFW or not"`
+	ApproximateVotes        int                `db:"approximate_votes" json:"approximate_votes" description:"The bot's approximate vote count, used for home page listing etc."`
+	Votes                   int                `db:"-" json:"votes" description:"The server's vote count" ci:"internal"` // Votes are retrieved from entity_votes
+	AutoVotes               int                `db:"-" json:"auto_votes" description:"How many of this month's upvotes came from Auto-vote" ci:"internal"`
+	VoteBanned              bool               `db:"vote_banned" json:"vote_banned" description:"Whether the server is vote banned or not"`
+	Premium                 bool               `db:"premium" json:"premium" description:"Whether the server is a premium server or not"`
+	StartPeriod             pgtype.Timestamptz `db:"start_premium_period" json:"start_premium_period"`
+	PremiumPeriodLength     time.Duration      `db:"premium_period_length" json:"premium_period_length" description:"The period of premium for the server in nanoseconds"`
+	CaptchaOptOut           bool               `db:"captcha_opt_out" json:"captcha_opt_out" description:"Whether the server should have captchas shown if the user has captcha_sponsor_enabled"`
+	Views30d                int                `db:"-" json:"views_30d" description:"Views in the last 30 days, counting each visitor once per listing per day" ci:"internal"`
+	HiddenStats             []string           `db:"hidden_stats" json:"hidden_stats" description:"Stats the owner chose to hide. Hidden stats are returned as zero unless you manage this listing"`
+	AutoVotesOptOut         bool               `db:"auto_votes_opt_out" json:"auto_votes_opt_out" description:"Whether the server refuses automatic votes from auto-vote subscribers"`
+	HighlightedUntil        pgtype.Timestamptz `db:"highlighted_until" json:"highlighted_until" description:"If set and in the future, the server's card has an accent glow until this time"`
+	CardTheme               bool               `db:"card_theme" json:"card_theme" description:"Whether the server has bought the Card Theme, which unlocks card_color"`
+	BumpedAt                pgtype.Timestamptz `db:"bumped_at" json:"bumped_at" description:"When the server was last bumped with /bump, null if never"`
+	CreatedAt               pgtype.Timestamptz `db:"created_at" json:"created_at" description:"The server's creation date"`
+	ClaimedBy               pgtype.Text        `db:"claimed_by" json:"claimed_by" description:"The user who claimed the server"`
+	LastClaimed             pgtype.Timestamptz `db:"last_claimed" json:"last_claimed" description:"The server's last claimed date"`
+	LoginRequiredForInvite  bool               `db:"login_required_for_invite" json:"login_required_for_invite" description:"Whether the server requires a login to be invited to it"`
+	ShowEmojis              bool               `db:"show_emojis" json:"show_emojis" description:"Whether the server owner has opted in to showing this server's emojis and stickers on its listing page"`
+	Emojis                  []Emoji            `db:"emojis" json:"emojis" description:"The server's custom emojis, synced periodically by the tracking bot while it's in the server. Always empty unless show_emojis is true"`
+	Stickers                []Sticker          `db:"stickers" json:"stickers" description:"The server's stickers, synced the same way as emojis. Always empty unless show_emojis is true"`
+	EmojisSyncedAt          pgtype.Timestamptz `db:"emojis_synced_at" json:"emojis_synced_at" description:"The last time emojis/stickers were synced. Null if never synced (e.g. the tracking bot has never been in this server)"`
+	SupporterBadge          bool               `db:"supporter_badge" json:"supporter_badge" description:"Whether the server's owner has purchased the cosmetic supporter badge from the shop"`
+	BoostedUntil            pgtype.Timestamptz `db:"boosted_until" json:"boosted_until" description:"If set and in the future, the server gets priority placement in listings until this time"`
+	FeaturedUntil           pgtype.Timestamptz `db:"featured_until" json:"featured_until" description:"If set and in the future, the server appears in the home page's Featured section until this time"`
+	SpotlightedUntil        pgtype.Timestamptz `db:"spotlighted_until" json:"spotlighted_until" description:"If set and in the future, the server appears in the home page's Spotlight section until this time"`
+	VoteBlitzUntil          pgtype.Timestamptz `db:"vote_blitz_until" json:"vote_blitz_until" description:"If set and in the future, the server's vote cooldown is halved until this time"`
+	DiscordNSFWLevel        int                `db:"discord_nsfw_level" json:"discord_nsfw_level" description:"Discord's own guild-level NSFW classification, synced periodically by the tracking bot (0=default, 1=explicit, 2=safe, 3=age-restricted)"`
+	NSFWChannelCount        int                `db:"nsfw_channel_count" json:"nsfw_channel_count" description:"How many of the server's channels currently have Discord's own age-restricted flag set, synced periodically by the tracking bot. Compare against nsfw to catch a server with gated NSFW content that isn't tagged nsfw, or vice versa"`
+	ModerationFlagged       bool               `db:"moderation_flagged" json:"moderation_flagged" description:"Whether OpenAI's moderation endpoint flagged the server's short/long description at submission time. A signal for reviewers, not a verdict"`
+	ModerationCategories    []string           `db:"moderation_categories" json:"moderation_categories" description:"Which moderation categories were flagged (e.g. sexual, harassment), empty if not flagged or moderation wasn't run"`
+	TrackingBotMissingSince pgtype.Timestamptz `db:"tracking_bot_missing_since" json:"tracking_bot_missing_since" description:"When Omniplex noticed the tracking bot is no longer in this server, null while it is. After 14 days a public listing is hidden from browse and search until the bot is back"`
+	TrackingBotHidden       bool               `db:"-" json:"tracking_bot_hidden" description:"Whether the listing is currently hidden from browse and search because the tracking bot is missing" ci:"internal"`
+	TrackingBotInviteURL    string             `db:"-" json:"tracking_bot_invite_url,omitempty" description:"An invite link for the tracking bot, only sent to people who manage this listing while the bot is missing" ci:"internal"`
+	AssetVersions           map[string]string  `db:"-" json:"asset_versions" description:"Content versions of uploaded CDN assets by kind (avatar/banner). Append as ?v= to the asset URL. A missing kind means unknown, not absent" ci:"internal"`
+	Highlighted             bool               `db:"-" json:"highlighted" description:"Whether the server has an active Highlighted Card from the shop" ci:"internal"`
+	CardColor               string             `db:"card_color" json:"card_color" description:"The server's Card Theme colour as #rrggbb, empty when it has no Card Theme or no colour set"`
 }
 
 type ServerEmojiPreview struct {

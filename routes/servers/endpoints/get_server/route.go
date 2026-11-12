@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	srvassets "popplio/routes/servers/assets"
 	"strings"
 	"time"
 
@@ -47,9 +48,9 @@ func Docs() *docs.Doc {
 			{
 				Name:        "target",
 				Description: "No longer used. Views and invite clicks are recorded with POST /servers/{id}/views and POST /servers/{id}/invite-clicks.",
-				Required: false,
-				In:       "query",
-				Schema:   docs.IdSchema,
+				Required:    false,
+				In:          "query",
+				Schema:      docs.IdSchema,
 			},
 			{
 				Name:        "include",
@@ -99,53 +100,55 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	server := types.Server{
-		ServerID:               row.ServerID,
-		Name:                   row.Name,
-		Avatar:                 row.Avatar,
-		TotalMembers:           int(row.TotalMembers),
-		OnlineMembers:          int(row.OnlineMembers),
-		PremiumTier:            int(row.PremiumTier),
-		BoostCount:             int(row.BoostCount),
-		Short:                  row.Short,
-		Type:                   row.Type,
-		Note:                   pgtype.Text{String: row.ApprovalNote, Valid: true},
-		State:                  row.State,
-		Tags:                   row.Tags,
-		VanityRef:              row.VanityRef,
-		ExtraLinks:             extraLinks,
-		TeamOwnerID:            row.TeamOwner,
-		InviteClicks:           int(row.InviteClicks),
-		Clicks:                 int(row.Clicks),
-		NSFW:                   row.Nsfw,
-		ApproximateVotes:       int(row.ApproximateVotes),
-		VoteBanned:             row.VoteBanned,
-		Premium:                row.Premium,
-		StartPeriod:            row.StartPremiumPeriod,
-		PremiumPeriodLength:    row.PremiumPeriodLength,
-		CaptchaOptOut:          row.CaptchaOptOut,
-		AutoVotesOptOut:        row.AutoVotesOptOut,
-		HiddenStats:            row.HiddenStats,
-		HighlightedUntil:       row.HighlightedUntil,
-		CardTheme:              row.CardTheme,
-		BumpedAt:               row.BumpedAt,
-		Highlighted:            row.HighlightedUntil.Valid && row.HighlightedUntil.Time.After(time.Now()),
-		CreatedAt:              row.CreatedAt,
-		ClaimedBy:              row.ClaimedBy,
-		LastClaimed:            row.LastClaimed,
-		LoginRequiredForInvite: row.LoginRequiredForInvite,
-		ShowEmojis:             row.ShowEmojis,
-		Emojis:                 row.Emojis,
-		Stickers:               row.Stickers,
-		EmojisSyncedAt:         row.EmojisSyncedAt,
-		SupporterBadge:         row.SupporterBadge,
-		BoostedUntil:           row.BoostedUntil,
-		FeaturedUntil:          row.FeaturedUntil,
-		SpotlightedUntil:       row.SpotlightedUntil,
-		VoteBlitzUntil:         row.VoteBlitzUntil,
-		DiscordNSFWLevel:       int(row.DiscordNsfwLevel),
-		NSFWChannelCount:       int(row.NsfwChannelCount),
-		ModerationFlagged:      row.ModerationFlagged,
-		ModerationCategories:   row.ModerationCategories,
+		ServerID:                row.ServerID,
+		Name:                    row.Name,
+		Avatar:                  row.Avatar,
+		TotalMembers:            int(row.TotalMembers),
+		OnlineMembers:           int(row.OnlineMembers),
+		PremiumTier:             int(row.PremiumTier),
+		BoostCount:              int(row.BoostCount),
+		Short:                   row.Short,
+		Type:                    row.Type,
+		Note:                    pgtype.Text{String: row.ApprovalNote, Valid: true},
+		State:                   listingState(row.State, row.TrackingBotHiddenState),
+		Tags:                    row.Tags,
+		VanityRef:               row.VanityRef,
+		ExtraLinks:              extraLinks,
+		TeamOwnerID:             row.TeamOwner,
+		InviteClicks:            int(row.InviteClicks),
+		Clicks:                  int(row.Clicks),
+		NSFW:                    row.Nsfw,
+		ApproximateVotes:        int(row.ApproximateVotes),
+		VoteBanned:              row.VoteBanned,
+		Premium:                 row.Premium,
+		StartPeriod:             row.StartPremiumPeriod,
+		PremiumPeriodLength:     row.PremiumPeriodLength,
+		CaptchaOptOut:           row.CaptchaOptOut,
+		AutoVotesOptOut:         row.AutoVotesOptOut,
+		HiddenStats:             row.HiddenStats,
+		TrackingBotMissingSince: row.TrackingBotMissingSince,
+		TrackingBotHidden:       row.TrackingBotHiddenState.Valid,
+		HighlightedUntil:        row.HighlightedUntil,
+		CardTheme:               row.CardTheme,
+		BumpedAt:                row.BumpedAt,
+		Highlighted:             row.HighlightedUntil.Valid && row.HighlightedUntil.Time.After(time.Now()),
+		CreatedAt:               row.CreatedAt,
+		ClaimedBy:               row.ClaimedBy,
+		LastClaimed:             row.LastClaimed,
+		LoginRequiredForInvite:  row.LoginRequiredForInvite,
+		ShowEmojis:              row.ShowEmojis,
+		Emojis:                  row.Emojis,
+		Stickers:                row.Stickers,
+		EmojisSyncedAt:          row.EmojisSyncedAt,
+		SupporterBadge:          row.SupporterBadge,
+		BoostedUntil:            row.BoostedUntil,
+		FeaturedUntil:           row.FeaturedUntil,
+		SpotlightedUntil:        row.SpotlightedUntil,
+		VoteBlitzUntil:          row.VoteBlitzUntil,
+		DiscordNSFWLevel:        int(row.DiscordNsfwLevel),
+		NSFWChannelCount:        int(row.NsfwChannelCount),
+		ModerationFlagged:       row.ModerationFlagged,
+		ModerationCategories:    row.ModerationCategories,
 	}
 
 	teamRow, err := q.GetTeamByID(d.Context, uuidutil.Encode(server.TeamOwnerID.Bytes))
@@ -275,11 +278,25 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 
 	server.Views30d = int(recentViews)
 
-	if len(server.HiddenStats) > 0 && !listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeServer, server.ServerID) {
+	manager := listing.CanViewUnlisted(d.Context, d.Auth, api.TargetTypeServer, server.ServerID)
+
+	if len(server.HiddenStats) > 0 && !manager {
 		listing.HideServerStats(&server)
+	}
+
+	if manager && server.TrackingBotMissingSince.Valid {
+		server.TrackingBotInviteURL = srvassets.CheckBotGuildPresence(d.Context, server.ServerID).InviteURL
 	}
 
 	return uapi.HttpResponse{
 		Json: server,
 	}
+}
+
+func listingState(current string, hidden pgtype.Text) string {
+	if hidden.Valid {
+		return hidden.String
+	}
+
+	return current
 }

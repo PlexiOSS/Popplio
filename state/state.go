@@ -159,7 +159,7 @@ func Setup() {
 			sharding.WithShardCount(2),
 			sharding.WithAutoScaling(true),
 			sharding.WithGatewayConfigOpts(
-				gateway.WithIntents(gateway.IntentGuilds, gateway.IntentGuildPresences, gateway.IntentGuildMembers),
+				gateway.WithIntents(omiIntents()),
 				gateway.WithCompress(true),
 				BotPresence(SiteHost()),
 			),
@@ -355,4 +355,14 @@ func setupPaypalWebhook() {
 	}
 
 	PaypalWebhookID = wh.ID
+}
+
+func omiIntents() gateway.Intents {
+	i := gateway.IntentGuilds | gateway.IntentGuildPresences | gateway.IntentGuildMembers
+
+	if Config.Arcadia.AutoMod {
+		i |= gateway.IntentGuildMessages | gateway.IntentMessageContent
+	}
+
+	return i
 }

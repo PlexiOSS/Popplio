@@ -12,10 +12,6 @@ import (
 // the Knowledge Base, ticket support, and the staff hierarchy pages, rather
 // than staff retyping the same links by hand in chat every time.
 
-func registerHelpLinkCommands() {
-	register(cmdKb(), cmdTicket(), cmdStaffInfo())
-}
-
 // frontendURL is always the production site, even from a dev/staging
 // instance of this bot the staff server it answers in is shared across
 // environments, and a link should always send someone somewhere real.
