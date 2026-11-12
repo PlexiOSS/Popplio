@@ -64,12 +64,22 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		UpdatedAt:  row.UpdatedAt.Time,
 	}
 
+	assets.ApplySyncState(&tmpl, row.IconVersion, row.SourceUpdatedAt, row.SyncedAt, row.OutOfDate, row.Unavailable)
+
 	if err := json.Unmarshal(row.Channels, &tmpl.Channels); err != nil {
 		state.Logger.Error("Error unmarshaling template channels", zap.Error(err), zap.String("id", id))
 	}
 
 	if err := json.Unmarshal(row.Roles, &tmpl.Roles); err != nil {
 		state.Logger.Error("Error unmarshaling template roles", zap.Error(err), zap.String("id", id))
+	}
+
+	tmpl.RoleCount = len(tmpl.Roles)
+
+	for _, c := range tmpl.Channels {
+		if c.Type != 4 {
+			tmpl.ChannelCount++
+		}
 	}
 
 	counts, err := db.New(state.Pool).GetServerTemplateReactionCounts(d.Context, id)

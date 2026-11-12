@@ -4,7 +4,9 @@ package add_server_template
 
 import (
 	"encoding/json"
+	"github.com/PlexiOSS/Keel/ratelimit"
 	"net/http"
+	"time"
 
 	"popplio/api/resp"
 	"popplio/db"
@@ -49,6 +51,20 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	limit, err := ratelimit.Ratelimit{
+		Expiry:      time.Hour,
+		MaxRequests: 10,
+		Bucket:      "server_templates",
+	}.Limit(d.Context, r)
+
+	if err != nil {
+		return resp.Err("Error while ratelimiting", err)
+	}
+
+	if limit.Exceeded {
+		return resp.RateLimited(limit)
+	}
+
 	var payload CreateServerTemplate
 
 	hresp, ok := uapi.MarshalReq(r, &payload)
@@ -92,16 +108,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error encoding template roles", err)
 	}
 
+	sourceGuild, sourceUpdated := assets.SourceParams(meta)
+
 	id, err := q.InsertServerTemplate(d.Context, db.InsertServerTemplateParams{
-		Code:       payload.Code,
-		Name:       meta.Name,
-		Short:      payload.Short,
-		Tags:       payload.Tags,
-		Nsfw:       payload.NSFW,
-		Owner:      d.Auth.ID,
-		UsageCount: meta.UsageCount,
-		Channels:   channelsJSON,
-		Roles:      rolesJSON,
+		Code:            payload.Code,
+		Name:            meta.Name,
+		Short:           payload.Short,
+		Tags:            payload.Tags,
+		Nsfw:            payload.NSFW,
+		Owner:           d.Auth.ID,
+		UsageCount:      meta.UsageCount,
+		Channels:        channelsJSON,
+		Roles:           rolesJSON,
+		SourceGuildID:   sourceGuild,
+		SourceUpdatedAt: sourceUpdated,
+		OutOfDate:       meta.OutOfDate,
 	})
 
 	if err != nil {

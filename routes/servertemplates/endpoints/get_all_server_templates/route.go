@@ -103,6 +103,10 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			UpdatedAt:  row.UpdatedAt.Time,
 		}
 
+		assets.ApplySyncState(&templates[i], row.IconVersion, row.SourceUpdatedAt, row.SyncedAt, row.OutOfDate, row.Unavailable)
+		templates[i].ChannelCount = int(row.ChannelCount)
+		templates[i].RoleCount = int(row.RoleCount)
+
 		if err := assets.ResolveServerTemplate(d.Context, &templates[i]); err != nil {
 			return resp.ErrDetail("Error resolving server template", err, zap.String("id", templates[i].ID))
 		}

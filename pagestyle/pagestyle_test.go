@@ -230,3 +230,21 @@ func TestPageStylePass(t *testing.T) {
 		t.Fatalf("update after the pass ran out = %v, want ErrNotPremium", err)
 	}
 }
+
+func TestValidGradient(t *testing.T) {
+	cases := map[string]bool{
+		"aurora":                  true,
+		"custom:#1e1b4b:#0f172a":  true,
+		"custom:#1E1B4B:#0f172a":  false,
+		"custom:#1e1b4b":          false,
+		"custom:#1e1b4b:#0f172a;": false,
+		"custom:red:blue":         false,
+		"rainbow":                 false,
+	}
+
+	for id, want := range cases {
+		if got := ValidGradient(id); got != want {
+			t.Errorf("ValidGradient(%q) = %v, want %v", id, got, want)
+		}
+	}
+}

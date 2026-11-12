@@ -15,6 +15,8 @@ import (
 
 const discordUserAgent = "Popplio (Omniplex API, +https://omniplex.gg)"
 
+var ErrTemplateGone = errors.New("that doesn't look like a valid, existing template code")
+
 // rawDiscordTemplate is Discord's actual `GET /guilds/templates/{code}`
 // response shape (the parts this cares about, at least) -- much richer
 // than DiscordTemplateMeta below. serialized_source_guild carries a full
@@ -26,6 +28,9 @@ type rawDiscordTemplate struct {
 	Name                  string `json:"name"`
 	Description           string `json:"description"`
 	UsageCount            int32  `json:"usage_count"`
+	SourceGuildID         string `json:"source_guild_id"`
+	UpdatedAt             string `json:"updated_at"`
+	IsDirty               *bool  `json:"is_dirty"`
 	SerializedSourceGuild struct {
 		Roles []struct {
 			ID    int    `json:"id"`
@@ -50,6 +55,9 @@ type DiscordTemplateMeta struct {
 	Name        string                  `json:"name"`
 	Description string                  `json:"description"`
 	UsageCount  int32                   `json:"usage_count"`
+	SourceGuild string                  `json:"source_guild_id"`
+	UpdatedAt   *time.Time              `json:"updated_at"`
+	OutOfDate   bool                    `json:"out_of_date"`
 	Channels    []types.TemplateChannel `json:"channels"`
 	Roles       []types.TemplateRole    `json:"roles"`
 }
@@ -81,8 +89,10 @@ func FetchDiscordTemplate(ctx context.Context, code string) (*DiscordTemplateMet
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
 		return nil, errors.New("we're being rate limited by discord, please try again in a moment")
+	case resp.StatusCode == http.StatusNotFound:
+		return nil, ErrTemplateGone
 	case resp.StatusCode != http.StatusOK:
-		return nil, errors.New("that doesn't look like a valid, existing template code")
+		return nil, fmt.Errorf("discord returned %d for that template, please try again in a moment", resp.StatusCode)
 	}
 
 	var raw rawDiscordTemplate
@@ -92,7 +102,7 @@ func FetchDiscordTemplate(ctx context.Context, code string) (*DiscordTemplateMet
 	}
 
 	if raw.Name == "" {
-		return nil, errors.New("that doesn't look like a valid, existing template code")
+		return nil, ErrTemplateGone
 	}
 
 	channels := make([]types.TemplateChannel, len(raw.SerializedSourceGuild.Channels))
@@ -116,11 +126,20 @@ func FetchDiscordTemplate(ctx context.Context, code string) (*DiscordTemplateMet
 		roles = append(roles, types.TemplateRole{ID: r.ID, Name: r.Name, Color: r.Color})
 	}
 
+	var updatedAt *time.Time
+
+	if t, err := time.Parse(time.RFC3339, raw.UpdatedAt); err == nil {
+		updatedAt = &t
+	}
+
 	return &DiscordTemplateMeta{
 		Code:        raw.Code,
 		Name:        raw.Name,
 		Description: raw.Description,
 		UsageCount:  raw.UsageCount,
+		SourceGuild: raw.SourceGuildID,
+		UpdatedAt:   updatedAt,
+		OutOfDate:   raw.IsDirty != nil && *raw.IsDirty,
 		Channels:    channels,
 		Roles:       roles,
 	}, nil

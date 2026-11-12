@@ -117,7 +117,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if payload.CardColor != nil {
-		if err := q.SetServerCardColor(d.Context, db.SetServerCardColorParams{ServerID: id, CardColor: pgtype.Text{String: *payload.CardColor, Valid: *payload.CardColor != ""}}); err != nil {
+		if _, err := q.SetServerCardColor(d.Context, db.SetServerCardColorParams{ServerID: id, CardColor: pgtype.Text{String: *payload.CardColor, Valid: *payload.CardColor != ""}}); err != nil {
 			return resp.Err("Failed to update card colour", err, zap.String("userID", d.Auth.ID), zap.String("serverID", id))
 		}
 	}

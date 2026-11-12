@@ -3,6 +3,7 @@ package create_ticket_message
 import (
 	"encoding/json"
 	"errors"
+	"github.com/PlexiOSS/Keel/ratelimit"
 	"net/http"
 	"time"
 
@@ -43,6 +44,20 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	limit, err := ratelimit.Ratelimit{
+		Expiry:      5 * time.Minute,
+		MaxRequests: 30,
+		Bucket:      "ticket_messages",
+	}.Limit(d.Context, r)
+
+	if err != nil {
+		return resp.Err("Error while ratelimiting", err)
+	}
+
+	if limit.Exceeded {
+		return resp.RateLimited(limit)
+	}
+
 	ticketID := chi.URLParam(r, "id")
 
 	if ticketID == "" {

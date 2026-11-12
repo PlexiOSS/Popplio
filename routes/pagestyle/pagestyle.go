@@ -5,9 +5,11 @@ package pagestyle
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"popplio/api"
 	"popplio/api/resp"
+	"popplio/db"
 	ps "popplio/pagestyle"
 	"popplio/perms"
 	"popplio/state"
@@ -17,11 +19,13 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
-	updateMessages = uapi.CompileValidationErrors(types.PageStyleUpdate{})
-	submitMessages = uapi.CompileValidationErrors(types.PageImageSubmit{})
+	updateMessages    = uapi.CompileValidationErrors(types.PageStyleUpdate{})
+	submitMessages    = uapi.CompileValidationErrors(types.PageImageSubmit{})
+	cardColorMessages = uapi.CompileValidationErrors(types.CardColorUpdate{})
 )
 
 func idParam(targetType string) []docs.Parameter {
@@ -41,7 +45,7 @@ func errResponse(targetType string, err error) uapi.HttpResponse {
 	case errors.Is(err, ps.ErrNotPremium):
 		return resp.BadRequest("Page styles need premium or a Page Style pass from the Credit shop. Get one for this " + targetType + " to customise its page.")
 	case errors.Is(err, ps.ErrBadGradient):
-		return resp.BadRequest("That gradient isn't one of the presets")
+		return resp.BadRequest("That gradient isn't one of the presets or a pair of custom colours")
 	case errors.Is(err, ps.ErrBadAccent):
 		return resp.BadRequest("That accent colour is too dark or too light to read on both light and dark mode. Pick something in between.")
 	}
@@ -183,6 +187,61 @@ func Mount(r *chi.Mux, targetType, prefix string, perm perms.Perm) {
 			}
 
 			return uapi.DefaultResponse(http.StatusNoContent)
+		},
+		Auth:    authTypes,
+		ExtData: ext,
+	}.Route(r)
+
+	authTypes, ext = auth(targetType, perm)
+
+	uapi.Route{
+		Pattern: prefix + "/{id}/card-color",
+		OpId:    "put_" + targetType + "_card_color",
+		Method:  uapi.PUT,
+		Docs: func() *docs.Doc {
+			return &docs.Doc{
+				Summary:     "Set " + targetType + " card colour",
+				Description: "Sets the colour that tints the " + targetType + "'s card, or resets it with an empty colour. Needs the Card Theme from the shop. Returns 204 on success.",
+				Params:      idParam(targetType),
+				Req:         types.CardColorUpdate{},
+				Resp:        types.ApiError{},
+			}
+		},
+		Handler: func(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+			var payload types.CardColorUpdate
+
+			if hresp, ok := uapi.MarshalReq(r, &payload); !ok {
+				return hresp
+			}
+
+			if err := state.Validator.Struct(payload); err != nil {
+				return uapi.ValidatorErrorResponse(cardColorMessages, err.(validator.ValidationErrors))
+			}
+
+			id := chi.URLParam(r, "id")
+			color := pgtype.Text{String: strings.ToLower(payload.Color), Valid: payload.Color != ""}
+			q := db.New(state.Pool)
+
+			var (
+				n   int64
+				err error
+			)
+
+			if targetType == api.TargetTypeBot {
+				n, err = q.SetBotCardColor(d.Context, db.SetBotCardColorParams{BotID: id, CardColor: color})
+			} else {
+				n, err = q.SetServerCardColor(d.Context, db.SetServerCardColorParams{ServerID: id, CardColor: color})
+			}
+
+			if err != nil {
+				return resp.Err("Failed to save the card colour", err)
+			}
+
+			if n == 0 {
+				return resp.BadRequest("Card colours need the Card Theme from the shop. Get it for this " + targetType + " first.")
+			}
+
+			return resp.NoContent()
 		},
 		Auth:    authTypes,
 		ExtData: ext,

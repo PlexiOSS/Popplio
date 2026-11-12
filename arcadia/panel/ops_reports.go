@@ -12,7 +12,6 @@ import (
 	"popplio/db"
 	"popplio/notifications"
 	"popplio/perms"
-	"popplio/reports"
 	"popplio/state"
 	ptypes "popplio/types"
 
@@ -21,24 +20,40 @@ import (
 	"go.uber.org/zap"
 )
 
-func toPanelReport(ctx context.Context, r db.Report) types.Report {
-	name, url := r.TargetID, ""
+const reportsPerPage = 20
 
-	if info, err := reports.GetTargetInfo(ctx, state.Pool, r.TargetType, r.TargetID); err == nil {
-		name, url = info.Name, info.URL
+var reportPaths = map[string]string{
+	"bot":    "/bots/",
+	"server": "/servers/",
+	"pack":   "/packs/",
+	"team":   "/teams/",
+}
+
+func toPanelReport(r db.ListReportsPageRow) types.Report {
+	name := r.TargetName
+
+	if name == "" {
+		name = r.TargetID
+	}
+
+	url := ""
+
+	if path, ok := reportPaths[r.TargetType]; ok {
+		url = state.Config.Sites.Frontend + path + r.TargetID
 	}
 
 	out := types.Report{
-		ID:          impls.UUIDString(r.ID),
-		TargetType:  r.TargetType,
-		TargetID:    r.TargetID,
-		TargetName:  name,
-		TargetURL:   url,
-		ReporterID:  r.ReporterID,
-		Reason:      r.Reason,
-		Description: r.Description,
-		Status:      r.Status,
-		CreatedAt:   types.NewTimestamp(r.CreatedAt.Time),
+		ID:           impls.UUIDString(r.ID),
+		TargetType:   r.TargetType,
+		TargetID:     r.TargetID,
+		TargetName:   name,
+		TargetURL:    url,
+		TargetAvatar: r.TargetAvatar,
+		ReporterID:   r.ReporterID,
+		Reason:       r.Reason,
+		Description:  r.Description,
+		Status:       r.Status,
+		CreatedAt:    types.NewTimestamp(r.CreatedAt.Time),
 	}
 
 	if r.ResolvedBy.Valid {
@@ -76,16 +91,23 @@ func (s *Server) updateReports(ctx context.Context, q *types.QUpdateReports) (re
 			status = pgtype.Text{String: *q.Action.List.Status, Valid: true}
 		}
 
-		reportRows, err := db.New(state.Pool).ListReports(ctx, status)
+		page := max(q.Action.List.Page, 1)
+
+		rows, err := db.New(state.Pool).ListReportsPage(ctx, db.ListReportsPageParams{
+			Status: status,
+			Limit:  reportsPerPage,
+			Offset: int32((page - 1) * reportsPerPage),
+		})
 
 		if err != nil {
 			return response{}, newError(err)
 		}
 
-		out := make([]types.Report, 0, len(reportRows))
+		out := types.ReportPage{Reports: make([]types.Report, 0, len(rows)), PerPage: reportsPerPage}
 
-		for _, row := range reportRows {
-			out = append(out, toPanelReport(ctx, row))
+		for _, row := range rows {
+			out.Reports = append(out.Reports, toPanelReport(row))
+			out.Total = int(row.Total)
 		}
 
 		return writeJSON(http.StatusOK, out), nil

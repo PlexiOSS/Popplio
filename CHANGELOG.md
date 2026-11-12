@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-11-11
+
+### Added
+
+- Auto-vote abuse limits:
+  - Auto-vote subscriptions record the paying card's Stripe fingerprint.
+    A card can pay for Auto-vote on up to 3 accounts. On any account after
+    that, automatic votes are skipped with a reason the user sees in their
+    dashboard, and staff get a message in the staff logs channel.
+  - A new hourly `auto_vote_watch` task files a report for staff when most
+    of a bot's or server's upvotes in the last day were automatic (at least
+    10, and at least half), well above its share over the week before.
+    Reports come from `system:autovote`, one open report per listing.
+- Server templates stay in sync with Discord. A new `template_sync` task
+  refreshes each template's name, usage count, channels and roles about
+  once a day, and `POST /users/{uid}/server-templates/{id}/sync` lets the
+  owner do it straight away. Templates also record when they last changed
+  on Discord and whether the source server has unsynced changes
+  (`source_updated_at`, `out_of_date`, `synced_at`).
+- A template that's deleted on Discord is marked `unavailable` and hidden
+  from `GET /server-templates/@all` (its owner still sees it with
+  `?owner=`). It comes back on the next sync if the template exists again.
+- Server templates can have a custom icon: `PUT
+  /users/{uid}/server-templates/{id}/icon` stores the version of an icon
+  uploaded through the website, and `icon_version` is returned on
+  templates.
+- Template list responses include `channel_count` and `role_count`.
+- Page styles accept a custom two-colour gradient as
+  `custom:#rrggbb:#rrggbb`, alongside the presets.
+- `PUT /{bots|servers}/{id}/card-color` sets or resets a listing's card
+  colour on its own, so it no longer has to be saved with the whole
+  details form. It needs the Card Theme, and says so if it hasn't been
+  bought.
+
+### Changed
+
+- `cmd/updatecdn.py` clears the Discord user cache straight from the
+  database (from `DATABASE_URL`) instead of calling `DELETE
+  /platform/user/{id}`, which now needs a session.
+- The panel's report list (`UpdateReports` `List`) is paged, 20 at a time,
+  and returns `{reports, total, per_page}` instead of every report at
+  once. Each report includes the target's name and avatar from one query:
+  bots show their Discord display name instead of their ID.
+- `GET /{target_type}/{target_id}/sessions` marks the session making the
+  request with `current: true`.
+- New sign-in sessions are named like "Chrome on Windows" instead of
+  "Chrome (on Windows 157.0.0.0) [mobile: false]", where the number was the
+  browser's version, not the system's.
+
 ### Security
 
 - `DELETE /platform/user/{id}` needed no sign-in, so anyone could clear the
@@ -23,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (data export, payments, profile edits and so on). Those routes now refuse
   limited sessions, and routes where sign-in is optional treat them as
   signed out.
+- Creating reports, ticket messages, packs, themes and server templates is
+  now rate limited (reports 10 an hour, ticket messages 30 every 5 minutes,
+  packs 5 an hour, themes and templates 10 an hour).
 
 ## [1.26.1] - 2026-11-11
 

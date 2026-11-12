@@ -179,15 +179,28 @@ SELECT user_id, stripe_customer_id, stripe_subscription_id, status, current_peri
 FROM auto_vote_subscriptions ORDER BY created_at DESC
 `
 
-func (q *Queries) ListAllAutoVoteSubscriptions(ctx context.Context) ([]AutoVoteSubscription, error) {
+type ListAllAutoVoteSubscriptionsRow struct {
+	UserID               string             `db:"user_id" json:"user_id"`
+	StripeCustomerID     string             `db:"stripe_customer_id" json:"stripe_customer_id"`
+	StripeSubscriptionID string             `db:"stripe_subscription_id" json:"stripe_subscription_id"`
+	Status               string             `db:"status" json:"status"`
+	CurrentPeriodEnd     pgtype.Timestamptz `db:"current_period_end" json:"current_period_end"`
+	CancelAtPeriodEnd    bool               `db:"cancel_at_period_end" json:"cancel_at_period_end"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ExtraSlots           int32              `db:"extra_slots" json:"extra_slots"`
+	BillingInterval      string             `db:"billing_interval" json:"billing_interval"`
+}
+
+func (q *Queries) ListAllAutoVoteSubscriptions(ctx context.Context) ([]ListAllAutoVoteSubscriptionsRow, error) {
 	rows, err := q.db.Query(ctx, listAllAutoVoteSubscriptions)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AutoVoteSubscription
+	var items []ListAllAutoVoteSubscriptionsRow
 	for rows.Next() {
-		var i AutoVoteSubscription
+		var i ListAllAutoVoteSubscriptionsRow
 		if err := rows.Scan(
 			&i.UserID,
 			&i.StripeCustomerID,
@@ -247,6 +260,85 @@ func (q *Queries) ListAllAutoVoteTargets(ctx context.Context) ([]AutoVoteTarget,
 	return items, nil
 }
 
+const listAutoVoteAccountsOnCard = `-- name: ListAutoVoteAccountsOnCard :many
+SELECT user_id FROM auto_vote_subscriptions
+WHERE card_fingerprint = $1 AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > NOW())
+ORDER BY created_at, user_id
+`
+
+func (q *Queries) ListAutoVoteAccountsOnCard(ctx context.Context, cardFingerprint pgtype.Text) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAutoVoteAccountsOnCard, cardFingerprint)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAutoVoteShareSpikes = `-- name: ListAutoVoteShareSpikes :many
+SELECT target_type, target_id, auto_day, total_day, auto_before, total_before, auto_voters FROM (
+    SELECT target_type, target_id,
+        COUNT(*) FILTER (WHERE auto AND created_at > NOW() - INTERVAL '1 day')::int AS auto_day,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day')::int AS total_day,
+        COUNT(*) FILTER (WHERE auto AND created_at <= NOW() - INTERVAL '1 day')::int AS auto_before,
+        COUNT(*) FILTER (WHERE created_at <= NOW() - INTERVAL '1 day')::int AS total_before,
+        COUNT(DISTINCT author) FILTER (WHERE auto AND created_at > NOW() - INTERVAL '1 day')::int AS auto_voters
+    FROM entity_votes
+    WHERE upvote AND NOT void AND created_at > NOW() - INTERVAL '8 days' AND target_type IN ('bot', 'server')
+    GROUP BY target_type, target_id
+) v
+WHERE auto_day >= $1::int
+`
+
+type ListAutoVoteShareSpikesRow struct {
+	TargetType  string `db:"target_type" json:"target_type"`
+	TargetID    string `db:"target_id" json:"target_id"`
+	AutoDay     int32  `db:"auto_day" json:"auto_day"`
+	TotalDay    int32  `db:"total_day" json:"total_day"`
+	AutoBefore  int32  `db:"auto_before" json:"auto_before"`
+	TotalBefore int32  `db:"total_before" json:"total_before"`
+	AutoVoters  int32  `db:"auto_voters" json:"auto_voters"`
+}
+
+func (q *Queries) ListAutoVoteShareSpikes(ctx context.Context, minAuto int32) ([]ListAutoVoteShareSpikesRow, error) {
+	rows, err := q.db.Query(ctx, listAutoVoteShareSpikes, minAuto)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAutoVoteShareSpikesRow
+	for rows.Next() {
+		var i ListAutoVoteShareSpikesRow
+		if err := rows.Scan(
+			&i.TargetType,
+			&i.TargetID,
+			&i.AutoDay,
+			&i.TotalDay,
+			&i.AutoBefore,
+			&i.TotalBefore,
+			&i.AutoVoters,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAutoVoteTargets = `-- name: ListAutoVoteTargets :many
 SELECT user_id, target_type, target_id, days, start_minute, end_minute, timezone, last_voted_at, last_skip_reason, created_at, paused
 FROM auto_vote_targets WHERE user_id = $1 ORDER BY created_at
@@ -277,6 +369,35 @@ func (q *Queries) ListAutoVoteTargets(ctx context.Context, userID string) ([]Aut
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAutoVoteUsersOverCardLimit = `-- name: ListAutoVoteUsersOverCardLimit :many
+SELECT user_id FROM (
+    SELECT user_id, ROW_NUMBER() OVER (PARTITION BY card_fingerprint ORDER BY created_at, user_id) AS position
+    FROM auto_vote_subscriptions
+    WHERE card_fingerprint IS NOT NULL AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > NOW())
+) ranked
+WHERE position > $1::int
+`
+
+func (q *Queries) ListAutoVoteUsersOverCardLimit(ctx context.Context, maxAccounts int32) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAutoVoteUsersOverCardLimit, maxAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -419,6 +540,24 @@ type MarkAutoVoteTargetVotedParams struct {
 func (q *Queries) MarkAutoVoteTargetVoted(ctx context.Context, arg MarkAutoVoteTargetVotedParams) error {
 	_, err := q.db.Exec(ctx, markAutoVoteTargetVoted, arg.UserID, arg.TargetType, arg.TargetID)
 	return err
+}
+
+const setAutoVoteCardFingerprint = `-- name: SetAutoVoteCardFingerprint :execrows
+UPDATE auto_vote_subscriptions SET card_fingerprint = $2, updated_at = NOW()
+WHERE stripe_subscription_id = $1 AND card_fingerprint IS DISTINCT FROM $2
+`
+
+type SetAutoVoteCardFingerprintParams struct {
+	StripeSubscriptionID string      `db:"stripe_subscription_id" json:"stripe_subscription_id"`
+	CardFingerprint      pgtype.Text `db:"card_fingerprint" json:"card_fingerprint"`
+}
+
+func (q *Queries) SetAutoVoteCardFingerprint(ctx context.Context, arg SetAutoVoteCardFingerprintParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAutoVoteCardFingerprint, arg.StripeSubscriptionID, arg.CardFingerprint)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setAutoVoteExtraSlots = `-- name: SetAutoVoteExtraSlots :exec

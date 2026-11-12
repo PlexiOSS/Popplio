@@ -144,6 +144,30 @@ func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) erro
 	return err
 }
 
+const insertSystemReport = `-- name: InsertSystemReport :execrows
+INSERT INTO reports (target_type, target_id, reporter_id, reason, description) VALUES ($1, $2, $3, 'tos_violation', $4) ON CONFLICT DO NOTHING
+`
+
+type InsertSystemReportParams struct {
+	TargetType  string `db:"target_type" json:"target_type"`
+	TargetID    string `db:"target_id" json:"target_id"`
+	ReporterID  string `db:"reporter_id" json:"reporter_id"`
+	Description string `db:"description" json:"description"`
+}
+
+func (q *Queries) InsertSystemReport(ctx context.Context, arg InsertSystemReportParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSystemReport,
+		arg.TargetType,
+		arg.TargetID,
+		arg.ReporterID,
+		arg.Description,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listReports = `-- name: ListReports :many
 SELECT id, target_type, target_id, reporter_id, reason, description, status, resolved_by, resolution_note, created_at, resolved_at
 FROM reports
@@ -172,6 +196,83 @@ func (q *Queries) ListReports(ctx context.Context, status pgtype.Text) ([]Report
 			&i.ResolutionNote,
 			&i.CreatedAt,
 			&i.ResolvedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReportsPage = `-- name: ListReportsPage :many
+SELECT r.id, r.target_type, r.target_id, r.reporter_id, r.reason, r.description, r.status, r.resolved_by, r.resolution_note, r.created_at, r.resolved_at,
+    COALESCE(CASE r.target_type
+        WHEN 'bot' THEN (SELECT NULLIF(c.display_name, '') FROM internal_user_cache__discord c WHERE c.id = r.target_id)
+        WHEN 'server' THEN (SELECT s.name FROM servers s WHERE s.server_id = r.target_id)
+        WHEN 'pack' THEN (SELECT p.name FROM packs p WHERE p.url = r.target_id)
+        WHEN 'team' THEN (SELECT t.name FROM teams t WHERE t.id::text = r.target_id)
+    END, CASE WHEN r.target_type = 'bot' THEN (SELECT c.username FROM internal_user_cache__discord c WHERE c.id = r.target_id) END, '')::text AS target_name,
+    COALESCE(CASE r.target_type
+        WHEN 'bot' THEN (SELECT c.avatar FROM internal_user_cache__discord c WHERE c.id = r.target_id)
+        WHEN 'server' THEN (SELECT s.avatar FROM servers s WHERE s.server_id = r.target_id)
+    END, '')::text AS target_avatar,
+    COUNT(*) OVER ()::int AS total
+FROM reports r
+WHERE $1::text IS NULL OR r.status = $1
+ORDER BY r.created_at DESC
+LIMIT $3::int OFFSET $2::int
+`
+
+type ListReportsPageParams struct {
+	Status pgtype.Text `db:"status" json:"status"`
+	Offset int32       `db:"offset" json:"offset"`
+	Limit  int32       `db:"limit" json:"limit"`
+}
+
+type ListReportsPageRow struct {
+	ID             pgtype.UUID        `db:"id" json:"id"`
+	TargetType     string             `db:"target_type" json:"target_type"`
+	TargetID       string             `db:"target_id" json:"target_id"`
+	ReporterID     string             `db:"reporter_id" json:"reporter_id"`
+	Reason         string             `db:"reason" json:"reason"`
+	Description    string             `db:"description" json:"description"`
+	Status         string             `db:"status" json:"status"`
+	ResolvedBy     pgtype.Text        `db:"resolved_by" json:"resolved_by"`
+	ResolutionNote pgtype.Text        `db:"resolution_note" json:"resolution_note"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ResolvedAt     pgtype.Timestamptz `db:"resolved_at" json:"resolved_at"`
+	TargetName     string             `db:"target_name" json:"target_name"`
+	TargetAvatar   string             `db:"target_avatar" json:"target_avatar"`
+	Total          int32              `db:"total" json:"total"`
+}
+
+func (q *Queries) ListReportsPage(ctx context.Context, arg ListReportsPageParams) ([]ListReportsPageRow, error) {
+	rows, err := q.db.Query(ctx, listReportsPage, arg.Status, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReportsPageRow
+	for rows.Next() {
+		var i ListReportsPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetType,
+			&i.TargetID,
+			&i.ReporterID,
+			&i.Reason,
+			&i.Description,
+			&i.Status,
+			&i.ResolvedBy,
+			&i.ResolutionNote,
+			&i.CreatedAt,
+			&i.ResolvedAt,
+			&i.TargetName,
+			&i.TargetAvatar,
+			&i.Total,
 		); err != nil {
 			return nil, err
 		}

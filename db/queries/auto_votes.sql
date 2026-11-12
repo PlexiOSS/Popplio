@@ -115,3 +115,34 @@ ORDER BY votes DESC;
 
 -- name: MarkAutoVoteSummarySent :exec
 UPDATE auto_vote_settings SET last_summary_at = NOW() WHERE user_id = $1;
+
+-- name: SetAutoVoteCardFingerprint :execrows
+UPDATE auto_vote_subscriptions SET card_fingerprint = $2, updated_at = NOW()
+WHERE stripe_subscription_id = $1 AND card_fingerprint IS DISTINCT FROM $2;
+
+-- name: ListAutoVoteAccountsOnCard :many
+SELECT user_id FROM auto_vote_subscriptions
+WHERE card_fingerprint = $1 AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > NOW())
+ORDER BY created_at, user_id;
+
+-- name: ListAutoVoteUsersOverCardLimit :many
+SELECT user_id FROM (
+    SELECT user_id, ROW_NUMBER() OVER (PARTITION BY card_fingerprint ORDER BY created_at, user_id) AS position
+    FROM auto_vote_subscriptions
+    WHERE card_fingerprint IS NOT NULL AND status IN ('active', 'trialing') AND (current_period_end IS NULL OR current_period_end > NOW())
+) ranked
+WHERE position > sqlc.arg(max_accounts)::int;
+
+-- name: ListAutoVoteShareSpikes :many
+SELECT target_type, target_id, auto_day, total_day, auto_before, total_before, auto_voters FROM (
+    SELECT target_type, target_id,
+        COUNT(*) FILTER (WHERE auto AND created_at > NOW() - INTERVAL '1 day')::int AS auto_day,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day')::int AS total_day,
+        COUNT(*) FILTER (WHERE auto AND created_at <= NOW() - INTERVAL '1 day')::int AS auto_before,
+        COUNT(*) FILTER (WHERE created_at <= NOW() - INTERVAL '1 day')::int AS total_before,
+        COUNT(DISTINCT author) FILTER (WHERE auto AND created_at > NOW() - INTERVAL '1 day')::int AS auto_voters
+    FROM entity_votes
+    WHERE upvote AND NOT void AND created_at > NOW() - INTERVAL '8 days' AND target_type IN ('bot', 'server')
+    GROUP BY target_type, target_id
+) v
+WHERE auto_day >= sqlc.arg(min_auto)::int;

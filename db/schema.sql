@@ -768,7 +768,13 @@ CREATE TABLE public.server_templates (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     channels jsonb DEFAULT '[]'::jsonb NOT NULL,
-    roles jsonb DEFAULT '[]'::jsonb NOT NULL
+    roles jsonb DEFAULT '[]'::jsonb NOT NULL,
+    icon_version text,
+    source_guild_id text,
+    source_updated_at timestamp with time zone,
+    out_of_date boolean DEFAULT false NOT NULL,
+    unavailable boolean DEFAULT false NOT NULL,
+    synced_at timestamp with time zone
 );
 
 
@@ -2628,9 +2634,14 @@ CREATE TABLE public.auto_vote_subscriptions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     extra_slots integer DEFAULT 0 NOT NULL,
     billing_interval text DEFAULT 'month' NOT NULL,
+    card_fingerprint text,
     CONSTRAINT auto_vote_subscriptions_extra_slots_check CHECK ((extra_slots >= 0)),
     CONSTRAINT auto_vote_subscriptions_billing_interval_check CHECK ((billing_interval = ANY (ARRAY['month'::text, 'year'::text])))
 );
+
+CREATE INDEX auto_vote_subscriptions_card_idx ON public.auto_vote_subscriptions (card_fingerprint) WHERE card_fingerprint IS NOT NULL;
+
+CREATE INDEX entity_votes_auto_created_idx ON public.entity_votes (created_at) WHERE upvote AND NOT void;
 
 CREATE TABLE public.auto_vote_targets (
     user_id text NOT NULL,

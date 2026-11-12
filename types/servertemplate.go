@@ -8,21 +8,29 @@ import (
 
 // @ci table=server_templates
 type ServerTemplate struct {
-	ID         string                  `db:"id" json:"id"`
-	Code       string                  `db:"code" json:"code" description:"The Discord server template code"`
-	Name       string                  `db:"name" json:"name" description:"The template's name, pulled from Discord at submission time"`
-	Short      string                  `db:"short" json:"short" description:"The submitter's description of the template"`
-	Tags       []string                `db:"tags" json:"tags" description:"The template's tags"`
-	NSFW       bool                    `db:"nsfw" json:"nsfw" description:"Whether the template is for an NSFW-oriented server"`
-	OwnerID    string                  `db:"owner" json:"-"`
-	Owner      *dovetypes.PlatformUser `db:"-" json:"owner" description:"The user who submitted the template" ci:"internal"` // OwnerID must be resolved internally
-	UsageCount int                     `db:"usage_count" json:"usage_count" description:"Discord's own reported usage count, as of submission time"`
-	CreatedAt  time.Time               `db:"created_at" json:"created_at"`
-	UpdatedAt  time.Time               `db:"updated_at" json:"updated_at"`
-	Channels   []TemplateChannel       `db:"channels" json:"channels" description:"A preview of the template's channels, captured from Discord at submission time. Empty on list responses -- only the single-template fetch populates this"`
-	Roles      []TemplateRole          `db:"roles" json:"roles" description:"A preview of the template's roles (excluding @everyone), captured from Discord at submission time. Empty on list responses -- only the single-template fetch populates this"`
-	Likes      int                     `db:"-" json:"likes" description:"How many people liked the template" ci:"internal"`
-	Dislikes   int                     `db:"-" json:"dislikes" description:"How many people disliked the template" ci:"internal"`
+	ID              string                  `db:"id" json:"id"`
+	Code            string                  `db:"code" json:"code" description:"The Discord server template code"`
+	Name            string                  `db:"name" json:"name" description:"The template's name, pulled from Discord at submission time"`
+	Short           string                  `db:"short" json:"short" description:"The submitter's description of the template"`
+	Tags            []string                `db:"tags" json:"tags" description:"The template's tags"`
+	NSFW            bool                    `db:"nsfw" json:"nsfw" description:"Whether the template is for an NSFW-oriented server"`
+	OwnerID         string                  `db:"owner" json:"-"`
+	Owner           *dovetypes.PlatformUser `db:"-" json:"owner" description:"The user who submitted the template" ci:"internal"` // OwnerID must be resolved internally
+	UsageCount      int                     `db:"usage_count" json:"usage_count" description:"Discord's own reported usage count, as of the last sync"`
+	CreatedAt       time.Time               `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time               `db:"updated_at" json:"updated_at"`
+	Channels        []TemplateChannel       `db:"channels" json:"channels" description:"A preview of the template's channels, captured from Discord at submission time. Empty on list responses -- only the single-template fetch populates this"`
+	Roles           []TemplateRole          `db:"roles" json:"roles" description:"A preview of the template's roles (excluding @everyone), captured from Discord at submission time. Empty on list responses -- only the single-template fetch populates this"`
+	IconVersion     *string                 `db:"icon_version" json:"icon_version" description:"The version of the template's custom icon, used to build its CDN URL. Null when it has none"`
+	SourceGuildID   *string                 `db:"source_guild_id" json:"-"`
+	SourceUpdatedAt *time.Time              `db:"source_updated_at" json:"source_updated_at" description:"When the template was last updated on Discord"`
+	OutOfDate       bool                    `db:"out_of_date" json:"out_of_date" description:"Whether the source server has changes that haven't been synced into the template on Discord yet"`
+	Unavailable     bool                    `db:"unavailable" json:"unavailable" description:"Whether the template no longer exists on Discord. Unavailable templates are hidden from browse"`
+	SyncedAt        *time.Time              `db:"synced_at" json:"synced_at" description:"When Omniplex last refreshed the template from Discord"`
+	ChannelCount    int                     `db:"-" json:"channel_count" description:"How many channels (not counting categories) the template has" ci:"internal"`
+	RoleCount       int                     `db:"-" json:"role_count" description:"How many roles (not counting @everyone) the template has" ci:"internal"`
+	Likes           int                     `db:"-" json:"likes" description:"How many people liked the template" ci:"internal"`
+	Dislikes        int                     `db:"-" json:"dislikes" description:"How many people disliked the template" ci:"internal"`
 }
 
 type TemplateChannel struct {

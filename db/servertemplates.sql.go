@@ -37,6 +37,7 @@ const countServerTemplatesFiltered = `-- name: CountServerTemplatesFiltered :one
 SELECT COUNT(*) FROM server_templates
 WHERE (cardinality($1::text[]) = 0 OR tags && $1::text[])
 AND ($2::text = '' OR owner = $2)
+AND ($2::text <> '' OR NOT unavailable)
 `
 
 type CountServerTemplatesFilteredParams struct {
@@ -61,16 +62,37 @@ func (q *Queries) DeleteServerTemplate(ctx context.Context, id string) error {
 }
 
 const getServerTemplateByID = `-- name: GetServerTemplateByID :one
-SELECT id, code, name, short, tags, nsfw, owner, usage_count, created_at, updated_at, channels, roles
+SELECT id, code, name, short, tags, nsfw, owner, usage_count, created_at, updated_at, channels, roles,
+    icon_version, source_updated_at, out_of_date, unavailable, synced_at
 FROM server_templates WHERE id = $1
 `
+
+type GetServerTemplateByIDRow struct {
+	ID              string             `db:"id" json:"id"`
+	Code            string             `db:"code" json:"code"`
+	Name            string             `db:"name" json:"name"`
+	Short           string             `db:"short" json:"short"`
+	Tags            []string           `db:"tags" json:"tags"`
+	Nsfw            bool               `db:"nsfw" json:"nsfw"`
+	Owner           string             `db:"owner" json:"owner"`
+	UsageCount      int32              `db:"usage_count" json:"usage_count"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Channels        []byte             `db:"channels" json:"channels"`
+	Roles           []byte             `db:"roles" json:"roles"`
+	IconVersion     pgtype.Text        `db:"icon_version" json:"icon_version"`
+	SourceUpdatedAt pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	OutOfDate       bool               `db:"out_of_date" json:"out_of_date"`
+	Unavailable     bool               `db:"unavailable" json:"unavailable"`
+	SyncedAt        pgtype.Timestamptz `db:"synced_at" json:"synced_at"`
+}
 
 // The single-fetch (detail page) query only -- channels/roles are a
 // meaningful chunk of JSON per row, so the list query below deliberately
 // doesn't select them; a browse grid has no use for them.
-func (q *Queries) GetServerTemplateByID(ctx context.Context, id string) (ServerTemplate, error) {
+func (q *Queries) GetServerTemplateByID(ctx context.Context, id string) (GetServerTemplateByIDRow, error) {
 	row := q.db.QueryRow(ctx, getServerTemplateByID, id)
-	var i ServerTemplate
+	var i GetServerTemplateByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Code,
@@ -84,7 +106,28 @@ func (q *Queries) GetServerTemplateByID(ctx context.Context, id string) (ServerT
 		&i.UpdatedAt,
 		&i.Channels,
 		&i.Roles,
+		&i.IconVersion,
+		&i.SourceUpdatedAt,
+		&i.OutOfDate,
+		&i.Unavailable,
+		&i.SyncedAt,
 	)
+	return i, err
+}
+
+const getServerTemplateCode = `-- name: GetServerTemplateCode :one
+SELECT owner, code FROM server_templates WHERE id = $1
+`
+
+type GetServerTemplateCodeRow struct {
+	Owner string `db:"owner" json:"owner"`
+	Code  string `db:"code" json:"code"`
+}
+
+func (q *Queries) GetServerTemplateCode(ctx context.Context, id string) (GetServerTemplateCodeRow, error) {
+	row := q.db.QueryRow(ctx, getServerTemplateCode, id)
+	var i GetServerTemplateCodeRow
+	err := row.Scan(&i.Owner, &i.Code)
 	return i, err
 }
 
@@ -100,10 +143,14 @@ func (q *Queries) GetServerTemplateOwner(ctx context.Context, id string) (string
 }
 
 const getServerTemplatesPaged = `-- name: GetServerTemplatesPaged :many
-SELECT id, code, name, short, tags, nsfw, owner, usage_count, created_at, updated_at
+SELECT id, code, name, short, tags, nsfw, owner, usage_count, created_at, updated_at,
+    icon_version, source_updated_at, out_of_date, unavailable, synced_at,
+    (SELECT COUNT(*) FROM jsonb_array_elements(channels) c WHERE (c->>'type')::int <> 4)::int AS channel_count,
+    jsonb_array_length(roles)::int AS role_count
 FROM server_templates
 WHERE (cardinality($3::text[]) = 0 OR tags && $3::text[])
 AND ($4::text = '' OR owner = $4)
+AND ($4::text <> '' OR NOT unavailable)
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -116,16 +163,23 @@ type GetServerTemplatesPagedParams struct {
 }
 
 type GetServerTemplatesPagedRow struct {
-	ID         string             `db:"id" json:"id"`
-	Code       string             `db:"code" json:"code"`
-	Name       string             `db:"name" json:"name"`
-	Short      string             `db:"short" json:"short"`
-	Tags       []string           `db:"tags" json:"tags"`
-	Nsfw       bool               `db:"nsfw" json:"nsfw"`
-	Owner      string             `db:"owner" json:"owner"`
-	UsageCount int32              `db:"usage_count" json:"usage_count"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID              string             `db:"id" json:"id"`
+	Code            string             `db:"code" json:"code"`
+	Name            string             `db:"name" json:"name"`
+	Short           string             `db:"short" json:"short"`
+	Tags            []string           `db:"tags" json:"tags"`
+	Nsfw            bool               `db:"nsfw" json:"nsfw"`
+	Owner           string             `db:"owner" json:"owner"`
+	UsageCount      int32              `db:"usage_count" json:"usage_count"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	IconVersion     pgtype.Text        `db:"icon_version" json:"icon_version"`
+	SourceUpdatedAt pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	OutOfDate       bool               `db:"out_of_date" json:"out_of_date"`
+	Unavailable     bool               `db:"unavailable" json:"unavailable"`
+	SyncedAt        pgtype.Timestamptz `db:"synced_at" json:"synced_at"`
+	ChannelCount    int32              `db:"channel_count" json:"channel_count"`
+	RoleCount       int32              `db:"role_count" json:"role_count"`
 }
 
 func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemplatesPagedParams) ([]GetServerTemplatesPagedRow, error) {
@@ -153,6 +207,13 @@ func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemp
 			&i.UsageCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IconVersion,
+			&i.SourceUpdatedAt,
+			&i.OutOfDate,
+			&i.Unavailable,
+			&i.SyncedAt,
+			&i.ChannelCount,
+			&i.RoleCount,
 		); err != nil {
 			return nil, err
 		}
@@ -165,21 +226,24 @@ func (q *Queries) GetServerTemplatesPaged(ctx context.Context, arg GetServerTemp
 }
 
 const insertServerTemplate = `-- name: InsertServerTemplate :one
-INSERT INTO server_templates (code, name, short, tags, nsfw, owner, usage_count, channels, roles)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO server_templates (code, name, short, tags, nsfw, owner, usage_count, channels, roles, source_guild_id, source_updated_at, out_of_date, synced_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
 RETURNING id
 `
 
 type InsertServerTemplateParams struct {
-	Code       string   `db:"code" json:"code"`
-	Name       string   `db:"name" json:"name"`
-	Short      string   `db:"short" json:"short"`
-	Tags       []string `db:"tags" json:"tags"`
-	Nsfw       bool     `db:"nsfw" json:"nsfw"`
-	Owner      string   `db:"owner" json:"owner"`
-	UsageCount int32    `db:"usage_count" json:"usage_count"`
-	Channels   []byte   `db:"channels" json:"channels"`
-	Roles      []byte   `db:"roles" json:"roles"`
+	Code            string             `db:"code" json:"code"`
+	Name            string             `db:"name" json:"name"`
+	Short           string             `db:"short" json:"short"`
+	Tags            []string           `db:"tags" json:"tags"`
+	Nsfw            bool               `db:"nsfw" json:"nsfw"`
+	Owner           string             `db:"owner" json:"owner"`
+	UsageCount      int32              `db:"usage_count" json:"usage_count"`
+	Channels        []byte             `db:"channels" json:"channels"`
+	Roles           []byte             `db:"roles" json:"roles"`
+	SourceGuildID   pgtype.Text        `db:"source_guild_id" json:"source_guild_id"`
+	SourceUpdatedAt pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	OutOfDate       bool               `db:"out_of_date" json:"out_of_date"`
 }
 
 func (q *Queries) InsertServerTemplate(ctx context.Context, arg InsertServerTemplateParams) (string, error) {
@@ -193,10 +257,100 @@ func (q *Queries) InsertServerTemplate(ctx context.Context, arg InsertServerTemp
 		arg.UsageCount,
 		arg.Channels,
 		arg.Roles,
+		arg.SourceGuildID,
+		arg.SourceUpdatedAt,
+		arg.OutOfDate,
 	)
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listServerTemplatesToSync = `-- name: ListServerTemplatesToSync :many
+SELECT id, code FROM server_templates
+WHERE synced_at IS NULL OR synced_at < now() - interval '1 day'
+ORDER BY synced_at NULLS FIRST
+LIMIT $1
+`
+
+type ListServerTemplatesToSyncRow struct {
+	ID   string `db:"id" json:"id"`
+	Code string `db:"code" json:"code"`
+}
+
+func (q *Queries) ListServerTemplatesToSync(ctx context.Context, limit int32) ([]ListServerTemplatesToSyncRow, error) {
+	rows, err := q.db.Query(ctx, listServerTemplatesToSync, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerTemplatesToSyncRow
+	for rows.Next() {
+		var i ListServerTemplatesToSyncRow
+		if err := rows.Scan(&i.ID, &i.Code); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markServerTemplateUnavailable = `-- name: MarkServerTemplateUnavailable :exec
+UPDATE server_templates SET unavailable = true, synced_at = now() WHERE id = $1
+`
+
+func (q *Queries) MarkServerTemplateUnavailable(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, markServerTemplateUnavailable, id)
+	return err
+}
+
+const setServerTemplateIcon = `-- name: SetServerTemplateIcon :exec
+UPDATE server_templates SET icon_version = $2, updated_at = now() WHERE id = $1
+`
+
+type SetServerTemplateIconParams struct {
+	ID          string      `db:"id" json:"id"`
+	IconVersion pgtype.Text `db:"icon_version" json:"icon_version"`
+}
+
+func (q *Queries) SetServerTemplateIcon(ctx context.Context, arg SetServerTemplateIconParams) error {
+	_, err := q.db.Exec(ctx, setServerTemplateIcon, arg.ID, arg.IconVersion)
+	return err
+}
+
+const syncServerTemplate = `-- name: SyncServerTemplate :exec
+UPDATE server_templates
+SET name = $2, usage_count = $3, channels = $4, roles = $5, source_guild_id = $6,
+    source_updated_at = $7, out_of_date = $8, unavailable = false, synced_at = now()
+WHERE id = $1
+`
+
+type SyncServerTemplateParams struct {
+	ID              string             `db:"id" json:"id"`
+	Name            string             `db:"name" json:"name"`
+	UsageCount      int32              `db:"usage_count" json:"usage_count"`
+	Channels        []byte             `db:"channels" json:"channels"`
+	Roles           []byte             `db:"roles" json:"roles"`
+	SourceGuildID   pgtype.Text        `db:"source_guild_id" json:"source_guild_id"`
+	SourceUpdatedAt pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	OutOfDate       bool               `db:"out_of_date" json:"out_of_date"`
+}
+
+func (q *Queries) SyncServerTemplate(ctx context.Context, arg SyncServerTemplateParams) error {
+	_, err := q.db.Exec(ctx, syncServerTemplate,
+		arg.ID,
+		arg.Name,
+		arg.UsageCount,
+		arg.Channels,
+		arg.Roles,
+		arg.SourceGuildID,
+		arg.SourceUpdatedAt,
+		arg.OutOfDate,
+	)
+	return err
 }
 
 const updateServerTemplate = `-- name: UpdateServerTemplate :exec
@@ -212,11 +366,6 @@ type UpdateServerTemplateParams struct {
 	Nsfw  bool     `db:"nsfw" json:"nsfw"`
 }
 
-// Deliberately omits name -- it's pulled from Discord's own template
-// metadata at submission time (see add_server_template), not
-// independently settable, so it isn't part of what an owner can edit
-// here. channels/roles are excluded too; re-syncing those from Discord
-// is a separate, larger feature.
 func (q *Queries) UpdateServerTemplate(ctx context.Context, arg UpdateServerTemplateParams) error {
 	_, err := q.db.Exec(ctx, updateServerTemplate,
 		arg.ID,

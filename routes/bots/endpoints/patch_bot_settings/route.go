@@ -122,7 +122,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	if payload.CardColor != nil {
-		if err := db.New(state.Pool).SetBotCardColor(d.Context, db.SetBotCardColorParams{BotID: id, CardColor: pgtype.Text{String: *payload.CardColor, Valid: *payload.CardColor != ""}}); err != nil {
+		if _, err := db.New(state.Pool).SetBotCardColor(d.Context, db.SetBotCardColorParams{BotID: id, CardColor: pgtype.Text{String: *payload.CardColor, Valid: *payload.CardColor != ""}}); err != nil {
 			return resp.Err("Failed to update card colour", err, zap.String("userID", d.Auth.ID), zap.String("botID", id))
 		}
 	}

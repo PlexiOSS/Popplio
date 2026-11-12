@@ -3,9 +3,11 @@
 package add_pack
 
 import (
+	"github.com/PlexiOSS/Keel/ratelimit"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	"popplio/api/resp"
@@ -58,6 +60,20 @@ func Docs() *docs.Doc {
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
+	limit, err := ratelimit.Ratelimit{
+		Expiry:      time.Hour,
+		MaxRequests: 5,
+		Bucket:      "packs",
+	}.Limit(d.Context, r)
+
+	if err != nil {
+		return resp.Err("Error while ratelimiting", err)
+	}
+
+	if limit.Exceeded {
+		return resp.RateLimited(limit)
+	}
+
 	var payload CreatePack
 
 	hresp, ok := uapi.MarshalReq(r, &payload)
@@ -66,7 +82,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return hresp
 	}
 
-	err := state.Validator.Struct(payload)
+	err = state.Validator.Struct(payload)
 
 	if err != nil {
 		errors := err.(validator.ValidationErrors)
