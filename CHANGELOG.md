@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-11-12
+
+### Changed
+
+- Listed bots' online status now comes from Arcadia's servers first.
+  Arcadia is in the 27 old cache servers, which hold most listed bots, so
+  `bot_presence_sync` reads their status from Arcadia's cache and only asks
+  japi.rest about bots neither Omi nor Arcadia can see. Arcadia now loads
+  every member of its servers on connect, so a bot missing from the online
+  list reads as offline rather than unknown.
+
 ## [1.28.0] - 2026-11-11
 
 ### Added
