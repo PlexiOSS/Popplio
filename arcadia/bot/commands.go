@@ -27,6 +27,7 @@ func registerCommands() {
 		cmdRPC(),
 		cmdRPCList(),
 		cmdStaffInfo(),
+		cmdLeaderboard(),
 	)
 
 	registerStaffRoleCommands()
@@ -37,7 +38,7 @@ func registerCommands() {
 		cmdTicket(),
 		cmdInfo(),
 		cmdAnalytics(),
-		cmdLeaderboard(),
+		cmdVoteLeaderboard(),
 		cmdGetBotRoles(),
 	)
 

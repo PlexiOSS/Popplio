@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"popplio/state"
-
-	"github.com/disgoorg/disgo/discord"
 )
 
 // Self-serve commands anyone (not just staff) can use to point themselves at
@@ -17,26 +15,6 @@ import (
 // environments, and a link should always send someone somewhere real.
 func frontendURL() string {
 	return state.Config.Sites.Frontend
-}
-
-func cmdKb() *Command {
-	return &Command{
-		Name:        "kb",
-		Category:    "Help",
-		Description: "Get a link to the Knowledge Base",
-		Options: []discord.ApplicationCommandOption{
-			discord.ApplicationCommandOptionString{Name: "topic", Description: "What you're looking for help with"},
-		},
-		Run: func(c *Ctx) error {
-			topic := c.Option("topic", 0)
-
-			if topic == "" {
-				return c.Say(fmt.Sprintf("Check out the Knowledge Base: %s/kb", frontendURL()))
-			}
-
-			return c.Say(fmt.Sprintf("Try searching for **%s** on the Knowledge Base: %s/kb", topic, frontendURL()))
-		},
-	}
 }
 
 func cmdTicket() *Command {

@@ -227,3 +227,17 @@ UNION
 SELECT p.url as id, 'pack' as type, 'pack' as entity
 FROM packs p
 WHERE p.owner = sqlc.arg('user_id')::text;
+
+-- name: GetTopVotedBots :many
+SELECT bot_id, approximate_votes
+FROM bots
+WHERE (type = 'approved' OR type = 'certified') AND approximate_votes > 0
+ORDER BY approximate_votes DESC, servers DESC, bot_id
+LIMIT $1;
+
+-- name: GetTopVotedServers :many
+SELECT server_id, name, approximate_votes
+FROM servers
+WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND approximate_votes > 0
+ORDER BY approximate_votes DESC, total_members DESC, server_id
+LIMIT $1;

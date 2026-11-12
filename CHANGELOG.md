@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Omi's `/leaderboard` shows this month's most voted bots, most voted
+  servers and top voters, with buttons to switch between them and a link
+  to the full list on the website. New `GetTopVotedBots` and
+  `GetTopVotedServers` queries back it.
+
+### Changed
+
+- Omi answers in plain text instead of an embed, and its errors are only
+  shown to the person who ran the command. Its replies never ping anyone.
+  Arcadia still answers in embeds. `/analytics` and `/info` keep theirs,
+  since they're tables of numbers.
+- Omi's `/kb` finds the answer instead of just linking the Knowledge Base.
+  Typing a topic suggests matching articles. The reply shows the article's
+  title, description, opening paragraph and sections, with a button to
+  read it and dropdowns for other matches, the rest of its category, or
+  another category. `/kb` with no topic shows the common questions and
+  lets you browse by category. Someone else using the dropdowns gets their
+  own private copy instead of changing yours. It reads the website's
+  `/api/kb` index, cached for 10 minutes, so it needs the matching website
+  release.
+- The reviewer leaderboard moved from Omi to Arcadia as `/reviewers`.
+
 ## [1.30.0] - 2026-11-12
 
 ### Fixed
