@@ -44,6 +44,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 		bot.WithCacheConfigOpts(
 			cache.WithCaches(cache.FlagGuilds | cache.FlagMembers | cache.FlagPresences | cache.FlagRoles),
 		),
+		bot.WithMemberChunkingFilter(bot.MemberChunkingFilterAll),
 		bot.WithEventListeners(listeners...),
 	}
 

@@ -55,7 +55,7 @@ func All() []Task {
 		},
 		{
 			Name:        "bot_presence_sync",
-			Description: "Fetching listed bots' Discord presence from japi.rest for bots our own gateway can't see",
+			Description: "Recording listed bots' Discord presence from Arcadia's servers, and from japi.rest for bots neither Omi nor Arcadia can see",
 			Enabled:     true,
 			Interval:    5 * time.Minute,
 			Run:         BotPresenceSync,
