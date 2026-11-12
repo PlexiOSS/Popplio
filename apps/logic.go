@@ -77,15 +77,15 @@ func grantCertOwnerRoles(ownerIDs []string) {
 			continue
 		}
 
-		if _, ok := state.Discord.Caches().Member(state.Config.Servers.Main, uid); !ok {
+		if _, ok := state.Discord.Caches.Member(state.Config.Servers.Main, uid); !ok {
 			continue
 		}
 
-		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, uid, state.Config.Roles.BotDeveloper, rest.WithReason("Owner of a certified listing")); err != nil {
+		if err := state.Discord.Rest.AddMemberRole(state.Config.Servers.Main, uid, state.Config.Roles.BotDeveloper, rest.WithReason("Owner of a certified listing")); err != nil {
 			state.Logger.Warn("Failed to grant BotDeveloper role to cert owner", zap.String("owner_id", ownerID), zap.Error(err))
 		}
 
-		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, uid, state.Config.Roles.CertifiedDeveloper, rest.WithReason("Owner of a certified listing")); err != nil {
+		if err := state.Discord.Rest.AddMemberRole(state.Config.Servers.Main, uid, state.Config.Roles.CertifiedDeveloper, rest.WithReason("Owner of a certified listing")); err != nil {
 			state.Logger.Warn("Failed to grant CertifiedDeveloper role to cert owner", zap.String("owner_id", ownerID), zap.Error(err))
 		}
 	}
@@ -156,7 +156,7 @@ func extraLogicResubmit(d uapi.RouteData, p types.Position, answers map[string]s
 		return fmt.Errorf("error getting discord user: %w", err)
 	}
 
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 		Content: state.Config.Meta.UrgentMentions,
 		Embeds: []discord.Embed{
 			{
@@ -280,7 +280,7 @@ func reviewLogicBanAppeal(d uapi.RouteData, resp types.AppResponse, reason strin
 			return "", fmt.Errorf("error parsing user ID: %w", err)
 		}
 
-		err = state.Discord.Rest().DeleteBan(
+		err = state.Discord.Rest.DeleteBan(
 			state.Config.Servers.Main,
 			userId,
 			rest.WithReason("Ban appeal accepted by "+d.Auth.ID+" | "+reason),
@@ -330,7 +330,7 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 			return "", fmt.Errorf("error setting bot type to certified: %w", err)
 		}
 
-		if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, botIdSnow, state.Config.Roles.CertBot); err != nil {
+		if err := state.Discord.Rest.AddMemberRole(state.Config.Servers.Main, botIdSnow, state.Config.Roles.CertBot); err != nil {
 			state.Logger.Warn("Failed to give certified bot role to bot", zap.String("bot_id", botID), zap.Error(err))
 		}
 
@@ -340,7 +340,7 @@ func reviewLogicCert(d uapi.RouteData, resp types.AppResponse, reason string, ap
 			grantCertOwnerRoles(ownerIDs)
 		}
 
-		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
+		_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 			Embeds: []discord.Embed{
 				{
 					Title:       "Bot Certified!",
@@ -408,7 +408,7 @@ func reviewLogicCertServer(d uapi.RouteData, resp types.AppResponse, reason stri
 			grantCertOwnerRoles(ownerIDs)
 		}
 
-		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
+		_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 			Embeds: []discord.Embed{
 				{
 					Title:       "Server Certified!",
@@ -453,7 +453,7 @@ func reviewLogicStaff(d uapi.RouteData, resp types.AppResponse, reason string, a
 		return "", fmt.Errorf("error parsing user ID: %w", err)
 	}
 
-	if err := state.Discord.Rest().AddMemberRole(state.Config.Servers.Main, userId, state.Config.Roles.AwaitingStaff); err != nil {
+	if err := state.Discord.Rest.AddMemberRole(state.Config.Servers.Main, userId, state.Config.Roles.AwaitingStaff); err != nil {
 		state.Logger.Warn("Could not give the approved staff applicant the awaiting staff role, a manager needs to give it by hand", zap.Error(err), zap.String("userID", resp.UserID))
 		return "Couldn't give them the Awaiting Staff role, most likely because they aren't in the Discord server yet. Give it to them by hand once they join.", nil
 	}

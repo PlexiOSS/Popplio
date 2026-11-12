@@ -147,7 +147,7 @@ func Announce(userID, targetType, targetID string, res *Result, auto bool) {
 			description += " (auto-vote)"
 		}
 
-		_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.VoteLogs, discord.MessageCreate{
+		_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.VoteLogs, discord.MessageCreate{
 			Embeds: []discord.Embed{
 				{
 					URL: res.Entity.URL,

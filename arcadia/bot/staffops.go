@@ -39,9 +39,9 @@ func cmdStaff() *Command {
 				Run: func(c *Ctx) error {
 					var sb strings.Builder
 
-					dclient.Get().Caches().GuildsForEach(func(guild discord.Guild) {
+					for guild := range dclient.Get().Caches.Guilds() {
 						fmt.Fprintf(&sb, "%s (%s)\n", guild.Name, guild.ID)
-					})
+					}
 
 					if sb.Len() == 0 {
 						return c.Say("Unknown")
@@ -69,7 +69,7 @@ func cmdStaff() *Command {
 						return err
 					}
 
-					if err := dclient.Get().Rest().LeaveGuild(guildID); err != nil {
+					if err := dclient.Get().Rest.LeaveGuild(guildID); err != nil {
 						return err
 					}
 
@@ -213,7 +213,7 @@ func cmdRefresh() *Command {
 				return err
 			}
 
-			if _, ok := dclient.Get().Caches().Guild(state.Config.Servers.Main); !ok {
+			if _, ok := dclient.Get().Caches.Guild(state.Config.Servers.Main); !ok {
 				return fmt.Errorf("Failed to get guild")
 			}
 

@@ -4,6 +4,7 @@ package assets
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -16,10 +17,10 @@ func TestIsMissingAccess(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{"value 403", rest.NewError(nil, nil, &http.Response{StatusCode: http.StatusForbidden}, nil), true},
-		{"value 404", rest.NewError(nil, nil, &http.Response{StatusCode: http.StatusNotFound}, nil), true},
-		{"pointer 404", &rest.Error{Response: &http.Response{StatusCode: http.StatusNotFound}}, true},
-		{"value 500", rest.NewError(nil, nil, &http.Response{StatusCode: http.StatusInternalServerError}, nil), false},
+		{"403", &rest.Error{Response: &http.Response{StatusCode: http.StatusForbidden}}, true},
+		{"404", &rest.Error{Response: &http.Response{StatusCode: http.StatusNotFound}}, true},
+		{"wrapped 404", fmt.Errorf("get: %w", &rest.Error{Response: &http.Response{StatusCode: http.StatusNotFound}}), true},
+		{"500", &rest.Error{Response: &http.Response{StatusCode: http.StatusInternalServerError}}, false},
 		{"unrelated", errors.New("boom"), false},
 	}
 

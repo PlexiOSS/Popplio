@@ -72,7 +72,7 @@ func PageOutput(text string) {
 }
 
 // Creates a new discord token, returning the session once it has recieved READY event
-func NewDiscordSession(token string) (bot.Client, error) {
+func NewDiscordSession(token string) (*bot.Client, error) {
 	fmt.Println("[NewDiscordSession] Creating new discord session and waiting for READY event...")
 
 	var readyChan = make(chan struct{})
@@ -82,7 +82,7 @@ func NewDiscordSession(token string) (bot.Client, error) {
 		sharding.WithAutoScaling(true),
 		sharding.WithGatewayConfigOpts(
 			gateway.WithIntents(gateway.IntentGuilds, gateway.IntentGuildPresences, gateway.IntentGuildMembers),
-			gateway.WithCompress(true),
+			gateway.WithCompression(gateway.CompressionZlibPayload),
 		),
 	),
 		bot.WithCacheConfigOpts(

@@ -80,7 +80,7 @@ func collectCorrespondingRoles(posByID map[string]cachedPosition, positionIDs []
 }
 
 func guildMemberPresent(guildID, user snowflake.ID) bool {
-	if _, ok := dclient.Get().Caches().Guild(guildID); !ok {
+	if _, ok := dclient.Get().Caches.Guild(guildID); !ok {
 		state.Logger.Warn("Failed to get guild", zap.String("guildID", guildID.String()))
 		return false
 	}

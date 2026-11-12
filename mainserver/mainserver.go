@@ -19,11 +19,11 @@ func IsMember(userID string) (bool, error) {
 		return false, err
 	}
 
-	if _, ok := state.Discord.Caches().Member(state.Config.Servers.Main, id); ok {
+	if _, ok := state.Discord.Caches.Member(state.Config.Servers.Main, id); ok {
 		return true, nil
 	}
 
-	_, err = state.Discord.Rest().GetMember(state.Config.Servers.Main, id)
+	_, err = state.Discord.Rest.GetMember(state.Config.Servers.Main, id)
 
 	if err == nil {
 		return true, nil
@@ -37,12 +37,6 @@ func IsMember(userID string) (bool, error) {
 }
 
 func isNotFound(err error) bool {
-	var value rest.Error
-
-	if errors.As(err, &value) {
-		return value.Response != nil && value.Response.StatusCode == http.StatusNotFound
-	}
-
 	var ptr *rest.Error
 
 	if errors.As(err, &ptr) && ptr != nil {
@@ -59,7 +53,7 @@ func CachedMember(userID string) bool {
 		return false
 	}
 
-	_, ok := state.Discord.Caches().Member(state.Config.Servers.Main, id)
+	_, ok := state.Discord.Caches.Member(state.Config.Servers.Main, id)
 
 	return ok
 }

@@ -75,7 +75,7 @@ func handleQueueButton(c *Ctx, e *events.ComponentInteractionCreate, id, message
 		delete(queueSessions, messageID)
 		sessionsMu.Unlock()
 
-		if err := dclient.Get().Rest().DeleteMessage(e.Channel().ID(), e.Message.ID); err != nil {
+		if err := dclient.Get().Rest.DeleteMessage(e.Channel().ID(), e.Message.ID); err != nil {
 			state.Logger.Error("Failed to delete queue message", zap.Error(err))
 		}
 
@@ -103,7 +103,7 @@ func handleQueueButton(c *Ctx, e *events.ComponentInteractionCreate, id, message
 		return
 	}
 
-	_, err = dclient.Get().Rest().UpdateMessage(e.Channel().ID(), e.Message.ID, discord.MessageUpdate{
+	_, err = dclient.Get().Rest.UpdateMessage(e.Channel().ID(), e.Message.ID, discord.MessageUpdate{
 		Content:    &msg.Content,
 		Embeds:     &msg.Embeds,
 		Components: &msg.Components,
@@ -134,9 +134,9 @@ func handleClaimButton(c *Ctx, e *events.ComponentInteractionCreate, id, message
 	}
 
 	// Remove the buttons after a press.
-	empty := []discord.ContainerComponent{}
+	empty := []discord.LayoutComponent{}
 
-	if _, err := dclient.Get().Rest().UpdateMessage(e.Channel().ID(), e.Message.ID, discord.MessageUpdate{Components: &empty}); err != nil {
+	if _, err := dclient.Get().Rest.UpdateMessage(e.Channel().ID(), e.Message.ID, discord.MessageUpdate{Components: &empty}); err != nil {
 		state.Logger.Error("Failed to clear claim buttons", zap.Error(err))
 	}
 
@@ -211,7 +211,7 @@ func cmdRPC() *Command {
 			}
 			sessionsMu.Unlock()
 
-			components := make([]discord.ContainerComponent, 0, len(variant.Fields()))
+			components := make([]discord.LayoutComponent, 0, len(variant.Fields()))
 
 			for _, field := range variant.Fields() {
 				style := discord.TextInputStyleShort
@@ -220,9 +220,9 @@ func cmdRPC() *Command {
 					style = discord.TextInputStyleParagraph
 				}
 
-				components = append(components, discord.ActionRowComponent{
-					discord.NewTextInput(field.ID, style, field.Label).WithPlaceholder(field.Placeholder),
-				})
+				components = append(components, discord.NewLabel(field.Label,
+					discord.NewTextInput(field.ID, style).WithPlaceholder(field.Placeholder),
+				))
 			}
 
 			c.replied = true

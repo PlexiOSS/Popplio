@@ -21,7 +21,7 @@ func onReady(_ context.Context, e *events.Ready) {
 	loadOwners()
 }
 
-func onGuildMemberCount(ctx context.Context, guild discord.Guild) {
+func onGuildMemberCount(ctx context.Context, guild discord.CacheGuild) {
 	if guild.MemberCount <= 0 {
 		return
 	}

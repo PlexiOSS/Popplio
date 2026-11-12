@@ -3,7 +3,6 @@ WORKDIR /src
 ENV CGO_ENABLED=0
 COPY go.mod go.sum go.work go.work.sum ./
 COPY cmd/kitehelper/go.mod cmd/kitehelper/go.sum ./cmd/kitehelper/
-COPY third_party ./third_party
 RUN go mod download
 COPY . .
 RUN mkdir /out \

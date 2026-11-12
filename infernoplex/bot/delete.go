@@ -52,7 +52,7 @@ func cmdDelete() *Command {
 
 			guildName := c.GuildID.String()
 
-			if guild, ok := dclient.Get().Caches().Guild(c.GuildID); ok {
+			if guild, ok := dclient.Get().Caches.Guild(c.GuildID); ok {
 				guildName = guild.Name
 			}
 
@@ -61,7 +61,7 @@ func cmdDelete() *Command {
 					Title:       "Confirm Server Deletion?",
 					Description: fmt.Sprintf("Are you sure you want to delete **%s** from Omniplex? This action is irreversible so think before acting!.", guildName),
 				}},
-				Components: []discord.ContainerComponent{
+				Components: []discord.LayoutComponent{
 					discord.NewActionRow(
 						discord.NewDangerButton("Confirm", "delete:confirm"),
 						discord.NewSecondaryButton("Cancel", "delete:cancel"),

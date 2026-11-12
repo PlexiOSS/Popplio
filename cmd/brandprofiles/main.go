@@ -11,7 +11,7 @@ import (
 
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/discord"
-	"github.com/disgoorg/json"
+	"github.com/disgoorg/omit"
 	"gopkg.in/yaml.v3"
 )
 
@@ -88,7 +88,7 @@ func apply(key, token, dir string, static, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	self, err := client.Rest().GetCurrentUser("")
+	self, err := client.Rest.GetCurrentUser("")
 	if err != nil {
 		return fmt.Errorf("fetching bot user: %w", err)
 	}
@@ -98,9 +98,9 @@ func apply(key, token, dir string, static, dryRun bool) error {
 		return nil
 	}
 
-	updated, err := client.Rest().UpdateCurrentUser(discord.UserUpdate{
-		Avatar: json.NewNullablePtr(*discord.NewIconRaw(avatarType, avatar)),
-		Banner: json.NewNullablePtr(*discord.NewIconRaw(discord.IconTypePNG, banner)),
+	updated, err := client.Rest.UpdateCurrentUser(discord.UserUpdate{
+		Avatar: omit.NewPtr(*discord.NewIconRaw(avatarType, avatar)),
+		Banner: omit.NewPtr(*discord.NewIconRaw(discord.IconTypePNG, banner)),
 	})
 	if err != nil {
 		return err

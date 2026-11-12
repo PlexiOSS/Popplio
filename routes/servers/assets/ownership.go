@@ -35,13 +35,7 @@ func trackingBotRest() rest.Rest {
 func isMissingAccess(err error) bool {
 	var resp *http.Response
 
-	var value rest.Error
-	var ptr *rest.Error
-
-	switch {
-	case errors.As(err, &value):
-		resp = value.Response
-	case errors.As(err, &ptr) && ptr != nil:
+	if ptr := (*rest.Error)(nil); errors.As(err, &ptr) && ptr != nil {
 		resp = ptr.Response
 	}
 

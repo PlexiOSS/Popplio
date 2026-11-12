@@ -115,10 +115,10 @@ func TestKbArticleViewOffersTheRestOfItsCategory(t *testing.T) {
 		t.Fatalf("second row is %T", v.components[1])
 	}
 
-	menu, ok := row.Components()[0].(discord.StringSelectMenuComponent)
+	menu, ok := row.Components[0].(discord.StringSelectMenuComponent)
 
 	if !ok || menu.CustomID != kbArticleID || menu.Placeholder != "More in Bots" || len(menu.Options) != 2 {
-		t.Fatalf("unexpected menu %+v", row.Components()[0])
+		t.Fatalf("unexpected menu %+v", row.Components[0])
 	}
 }
 
@@ -167,7 +167,7 @@ func TestVoteBoardView(t *testing.T) {
 	}
 
 	row := v.components[0].(discord.ActionRowComponent)
-	current := row.Components()[0].(discord.ButtonComponent)
+	current := row.Components[0].(discord.ButtonComponent)
 
 	if !current.Disabled || current.Style != discord.ButtonStylePrimary {
 		t.Fatalf("the shown board's button should be selected and disabled: %+v", current)

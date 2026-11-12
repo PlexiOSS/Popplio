@@ -123,7 +123,7 @@ func alertStaff(text string) {
 		return
 	}
 
-	if _, err := state.Discord.Rest().CreateMessage(state.Config.Channels.StaffLogs, discord.MessageCreate{
+	if _, err := state.Discord.Rest.CreateMessage(state.Config.Channels.StaffLogs, discord.MessageCreate{
 		Embeds: []discord.Embed{{Title: "Auto-vote abuse check", Description: text}},
 	}); err != nil {
 		state.Logger.Warn("Failed to alert staff about auto-vote", zap.Error(err))

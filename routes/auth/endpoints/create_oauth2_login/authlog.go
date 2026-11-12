@@ -55,7 +55,7 @@ func sendAuthLog(user oauthUser, req types.AuthorizeRequest, isNew bool) {
 		zap.String("channel_id", state.Config.Channels.AuthLogs.String()),
 	).Debug("sendAuthLog: Channel Info")
 
-	_, err := state.Discord.Rest().CreateMessage(state.Config.Channels.AuthLogs, discord.MessageCreate{
+	_, err := state.Discord.Rest.CreateMessage(state.Config.Channels.AuthLogs, discord.MessageCreate{
 		Embeds: []discord.Embed{
 			{
 				Title:  "User Login Attempt",

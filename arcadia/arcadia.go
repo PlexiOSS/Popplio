@@ -35,13 +35,13 @@ func Start(parent context.Context) *Arcadia {
 		state.Logger.Error("Staff bot failed to start; the panel will run without Discord", zap.Error(err))
 	} else {
 		brandemoji.LoadAsync(brandemoji.Arcadia, dclient.Get(), "arcadia")
-		botstatus.Run(ctx, "arcadia", func() discordbot.Client { return dclient.Get() }, botstatus.Arcadia)
+		botstatus.Run(ctx, "arcadia", func() *discordbot.Client { return dclient.Get() }, botstatus.Arcadia)
 	}
 
 	if state.Discord != nil {
 		state.Discord.AddEventListeners(bot.OmiListener(ctx))
 		go syncOmiWhenReady(ctx)
-		botstatus.Run(ctx, "omi", func() discordbot.Client { return state.Discord }, botstatus.Omi)
+		botstatus.Run(ctx, "omi", func() *discordbot.Client { return state.Discord }, botstatus.Omi)
 	}
 
 	go func() {
@@ -87,7 +87,7 @@ func syncOmiWhenReady(ctx context.Context) {
 	deadline := time.Now().Add(3 * time.Minute)
 
 	for {
-		if _, ok := state.Discord.Caches().Guild(state.Config.Servers.Main); ok {
+		if _, ok := state.Discord.Caches.Guild(state.Config.Servers.Main); ok {
 			break
 		}
 

@@ -79,7 +79,7 @@ func startUpdateBasicInfo(c *Ctx) error {
 			Title:       "Update Server Information",
 			Description: "Oh, hello there 👀\nI see you want to update your server listing on Omniplex! Let's get started!",
 		}},
-		Components: []discord.ContainerComponent{
+		Components: []discord.LayoutComponent{
 			discord.NewActionRow(
 				discord.NewPrimaryButton("Next", "update:next"),
 				discord.NewDangerButton("Cancel", "update:cancel"),
@@ -137,26 +137,26 @@ func handleUpdateComponent(ctx context.Context, e *events.ComponentInteractionCr
 		return
 	}
 
-	empty := []discord.ContainerComponent{}
+	empty := []discord.LayoutComponent{}
 	embeds := []discord.Embed{{
 		Title:       "Update Server Information",
 		Description: "Please follow the instructions given in the modal to continue! If you don't see a modal, please rerun the command",
 	}}
 
-	_, editErr := dclient.Get().Rest().UpdateMessage(e.Channel().ID(), e.Message.ID, discord.MessageUpdate{Embeds: &embeds, Components: &empty})
+	_, editErr := dclient.Get().Rest.UpdateMessage(e.Channel().ID(), e.Message.ID, discord.MessageUpdate{Embeds: &embeds, Components: &empty})
 	logFailedEdit("edit update message", editErr)
 
 	modal := discord.ModalCreate{
 		CustomID: "update:basic",
 		Title:    "Update Server Information",
-		Components: []discord.ContainerComponent{
-			discord.NewActionRow(
-				discord.NewTextInput("short", discord.TextInputStyleShort, "Short Description").
+		Components: []discord.LayoutComponent{
+			discord.NewLabel("Short Description",
+				discord.NewTextInput("short", discord.TextInputStyleShort).
 					WithPlaceholder("Something short and snazzy to brag about!").
 					WithMinLength(20).WithMaxLength(100).WithRequired(true),
 			),
-			discord.NewActionRow(
-				discord.NewTextInput("long", discord.TextInputStyleParagraph, "Long/Extended Description").
+			discord.NewLabel("Long/Extended Description",
+				discord.NewTextInput("long", discord.TextInputStyleParagraph).
 					WithPlaceholder("Both markdown and HTML are supported!").
 					WithMinLength(30).WithMaxLength(4000).WithRequired(true),
 			),

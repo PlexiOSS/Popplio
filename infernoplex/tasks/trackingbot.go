@@ -36,7 +36,7 @@ func TrackingBotCheck(ctx context.Context) error {
 			return false, err
 		}
 
-		_, err = dclient.Get().Rest().GetGuild(guildID, false)
+		_, err = dclient.Get().Rest.GetGuild(guildID, false)
 
 		if err == nil {
 			return true, nil
@@ -51,15 +51,9 @@ func TrackingBotCheck(ctx context.Context) error {
 }
 
 func noAccess(err error) bool {
-	var value rest.Error
-	var ptr *rest.Error
-
 	var resp *http.Response
 
-	switch {
-	case errors.As(err, &value):
-		resp = value.Response
-	case errors.As(err, &ptr) && ptr != nil:
+	if ptr := (*rest.Error)(nil); errors.As(err, &ptr) && ptr != nil {
 		resp = ptr.Response
 	}
 

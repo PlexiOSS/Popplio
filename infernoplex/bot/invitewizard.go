@@ -45,7 +45,7 @@ func startInviteWizard(c *Ctx, onResolved func(ctx context.Context, c *Ctx, invi
 				"- **Per-User Invite** - Omniplex will create an invite for this server for each user\n" +
 				"- **None** - This server will not be invitable. Useful, if you wish to use a whitelist form and manually send out invites",
 		}},
-		Components: []discord.ContainerComponent{
+		Components: []discord.LayoutComponent{
 			discord.NewActionRow(
 				discord.NewPrimaryButton("Invite URL", "invite:invite_url"),
 				discord.NewPrimaryButton("Per-User Invite", "invite:per_user"),
@@ -123,9 +123,9 @@ func handleInviteComponent(ctx context.Context, e *events.ComponentInteractionCr
 		modal := discord.ModalCreate{
 			CustomID: "invite:url",
 			Title:    "Invite URL Selection",
-			Components: []discord.ContainerComponent{
-				discord.NewActionRow(
-					discord.NewTextInput("invite_url", discord.TextInputStyleShort, "Enter Invite URL").
+			Components: []discord.LayoutComponent{
+				discord.NewLabel("Enter Invite URL",
+					discord.NewTextInput("invite_url", discord.TextInputStyleShort).
 						WithPlaceholder("Please enter the Invite URL you wish to use!").
 						WithMinLength(20).WithMaxLength(100).WithRequired(true),
 				),
@@ -138,19 +138,19 @@ func handleInviteComponent(ctx context.Context, e *events.ComponentInteractionCr
 		modal := discord.ModalCreate{
 			CustomID: "invite:peruser",
 			Title:    "Per-User Invite Selection",
-			Components: []discord.ContainerComponent{
-				discord.NewActionRow(
-					discord.NewTextInput("channel_id", discord.TextInputStyleShort, "Enter Channel ID").
+			Components: []discord.LayoutComponent{
+				discord.NewLabel("Enter Channel ID",
+					discord.NewTextInput("channel_id", discord.TextInputStyleShort).
 						WithPlaceholder("Please enter the Channel ID you wish to use!").
 						WithMinLength(18).WithMaxLength(18).WithRequired(true),
 				),
-				discord.NewActionRow(
-					discord.NewTextInput("max_uses", discord.TextInputStyleShort, "Max Uses").
+				discord.NewLabel("Max Uses",
+					discord.NewTextInput("max_uses", discord.TextInputStyleShort).
 						WithPlaceholder("How many times should a per-user invite be usable for. Use 1 if unsure").
 						WithMinLength(1).WithMaxLength(3).WithRequired(true),
 				),
-				discord.NewActionRow(
-					discord.NewTextInput("max_age", discord.TextInputStyleShort, "Max Age").
+				discord.NewLabel("Max Age",
+					discord.NewTextInput("max_age", discord.TextInputStyleShort).
 						WithPlaceholder("How long should the invite be valid for. Use 0 if unsure").
 						WithMinLength(1).WithMaxLength(3).WithRequired(true),
 				),
@@ -220,7 +220,7 @@ func handleInvitePerUserModal(ctx context.Context, e *events.ModalSubmitInteract
 		return
 	}
 
-	channel, err := dclient.Get().Rest().GetChannel(channelID)
+	channel, err := dclient.Get().Rest.GetChannel(channelID)
 
 	if err != nil {
 		c.Fail(fmt.Sprintf("Failed to fetch channel: %s", err))

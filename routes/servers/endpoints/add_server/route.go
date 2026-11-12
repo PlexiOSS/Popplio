@@ -274,7 +274,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		}
 	}
 
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Content: state.Config.Meta.UrgentMentions,
 		Embeds: []discord.Embed{
 			{

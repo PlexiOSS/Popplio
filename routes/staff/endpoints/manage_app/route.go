@@ -280,7 +280,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Send message to apps channel
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.Apps, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.Apps, discord.MessageCreate{
 		Embeds: embeds,
 	})
 

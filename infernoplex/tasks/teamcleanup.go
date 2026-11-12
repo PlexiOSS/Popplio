@@ -72,7 +72,7 @@ func TeamCleanup(ctx context.Context) error {
 				continue
 			}
 
-			member, err := dclient.Get().Rest().GetMember(guildID, userID)
+			member, err := dclient.Get().Rest.GetMember(guildID, userID)
 
 			if err != nil {
 				if isNotFoundError(err) {
@@ -93,7 +93,7 @@ func TeamCleanup(ctx context.Context) error {
 				continue
 			}
 
-			guild, err := dclient.Get().Rest().GetGuild(guildID, false)
+			guild, err := dclient.Get().Rest.GetGuild(guildID, false)
 
 			if err != nil {
 				state.Logger.Warn("Team cleanup: could not fetch guild, skipping",
@@ -126,7 +126,7 @@ func TeamCleanup(ctx context.Context) error {
 // network failures, the bot losing access) is transient or ambiguous and
 // must not be treated as evidence the user left.
 func isNotFoundError(err error) bool {
-	var restErr rest.Error
+	var restErr *rest.Error
 
 	if !errors.As(err, &restErr) {
 		return false

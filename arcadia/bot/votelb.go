@@ -180,7 +180,7 @@ func voteBoardView(kind string, rows []voteBoardRow) kbView {
 
 	return kbView{
 		content: sb.String(),
-		components: []discord.ContainerComponent{
+		components: []discord.LayoutComponent{
 			discord.NewActionRow(
 				button(voteBoardBots, "Bots"),
 				button(voteBoardServers, "Servers"),

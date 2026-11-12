@@ -44,7 +44,7 @@ func correspondingGuild(server types.CorrespondingServer) snowflake.ID {
 }
 
 func roleExists(guildID, roleID snowflake.ID) bool {
-	_, ok := dclient.Get().Caches().Role(guildID, roleID)
+	_, ok := dclient.Get().Caches.Role(guildID, roleID)
 	return ok
 }
 

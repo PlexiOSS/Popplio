@@ -5,6 +5,7 @@ package bot
 import (
 	"context"
 	"fmt"
+	"github.com/disgoorg/omit"
 	"popplio/cmdsync"
 	"sync"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
-	"github.com/disgoorg/json"
 	"github.com/disgoorg/snowflake/v2"
 	"go.uber.org/zap"
 )
@@ -67,7 +67,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 	switch {
 	case c.slash != nil:
 		if c.replied {
-			_, err := c.slash.Client().Rest().CreateFollowupMessage(c.slash.ApplicationID(), c.slash.Token(), msg)
+			_, err := c.slash.Client().Rest.CreateFollowupMessage(c.slash.ApplicationID(), c.slash.Token(), msg)
 			return err
 		}
 
@@ -76,7 +76,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 
 	case c.component != nil:
 		if c.replied {
-			_, err := c.component.Client().Rest().CreateFollowupMessage(c.component.ApplicationID(), c.component.Token(), msg)
+			_, err := c.component.Client().Rest.CreateFollowupMessage(c.component.ApplicationID(), c.component.Token(), msg)
 			return err
 		}
 
@@ -85,7 +85,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 
 	case c.modal != nil:
 		if c.replied {
-			_, err := c.modal.Client().Rest().CreateFollowupMessage(c.modal.ApplicationID(), c.modal.Token(), msg)
+			_, err := c.modal.Client().Rest.CreateFollowupMessage(c.modal.ApplicationID(), c.modal.Token(), msg)
 			return err
 		}
 
@@ -93,7 +93,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 		return c.modal.CreateMessage(msg)
 
 	default:
-		_, err := dclient.Get().Rest().CreateMessage(c.ChannelID, msg)
+		_, err := dclient.Get().Rest.CreateMessage(c.ChannelID, msg)
 		return err
 	}
 }
@@ -264,7 +264,7 @@ func buildCommands() []discord.ApplicationCommandCreate {
 		}
 
 		if cmd.AdminOnly {
-			create.DefaultMemberPermissions = json.NewNullablePtr(discord.PermissionAdministrator)
+			create.DefaultMemberPermissions = omit.NewPtr(discord.PermissionAdministrator)
 		}
 
 		cmds = append(cmds, create)
@@ -305,7 +305,7 @@ func isOwner(id snowflake.ID) bool {
 }
 
 func loadOwners() {
-	app, err := dclient.Get().Rest().GetBotApplicationInfo()
+	app, err := dclient.Get().Rest.GetBotApplicationInfo()
 
 	if err != nil {
 		state.Logger.Error("Failed to fetch Infernoplex application info for owner resolution", zap.Error(err))

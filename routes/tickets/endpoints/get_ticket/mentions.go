@@ -76,7 +76,7 @@ func resolveMentions(ctx context.Context, ticket *types.Ticket) *types.TicketMen
 		return out
 	}
 
-	caches := state.Discord.Caches()
+	caches := state.Discord.Caches
 	guilds := []snowflake.ID{state.Config.Servers.Main, state.Config.Servers.Staff, state.Config.Servers.Testing}
 
 	for id := range roles {

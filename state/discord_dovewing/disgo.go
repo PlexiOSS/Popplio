@@ -57,7 +57,7 @@ type DisgoState struct {
 }
 
 type DisgoStateConfig struct {
-	Client         bot.Client
+	Client         *bot.Client
 	PreferredGuild *snowflake.ID
 	BaseState      *dovewing.BaseState
 }
@@ -113,10 +113,10 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 	}
 
 	if d.config.PreferredGuild != nil {
-		member, ok := d.config.Client.Caches().Member(*d.config.PreferredGuild, id)
+		member, ok := d.config.Client.Caches.Member(*d.config.PreferredGuild, id)
 
 		if ok {
-			p, pOk := d.config.Client.Caches().Presence(*d.config.PreferredGuild, id)
+			p, pOk := d.config.Client.Caches.Presence(*d.config.PreferredGuild, id)
 
 			var status = discord.OnlineStatusOffline
 			if pOk {
@@ -143,15 +143,15 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 	}
 
 	var puser *dovetypes.PlatformUser
-	d.config.Client.Caches().GuildCache().ForEach(func(guild discord.Guild) {
+	for guild := range d.config.Client.Caches.Guilds() {
 		if puser != nil || err != nil {
-			return
+			break
 		}
 
-		member, ok := d.config.Client.Caches().Member(guild.ID, id)
+		member, ok := d.config.Client.Caches.Member(guild.ID, id)
 
 		if ok {
-			p, pOk := d.config.Client.Caches().Presence(guild.ID, id)
+			p, pOk := d.config.Client.Caches.Presence(guild.ID, id)
 
 			var status = discord.OnlineStatusOffline
 			if pOk {
@@ -176,7 +176,7 @@ func (d *DisgoState) PlatformSpecificCache(ctx context.Context, idStr string) (*
 			}
 			err = nil
 		}
-	})
+	}
 
 	return puser, err
 }
@@ -205,7 +205,7 @@ func (d *DisgoState) lookupDiscordUser(ctx context.Context, id snowflake.ID) (*d
 	done := make(chan discordLookup, 1)
 
 	go func() {
-		user, err := d.config.Client.Rest().GetUser(id)
+		user, err := d.config.Client.Rest.GetUser(id)
 		done <- discordLookup{user: user, err: err}
 	}()
 
@@ -271,7 +271,7 @@ func (d *DisgoState) GetUser(ctx context.Context, idStr string) (*dovetypes.Plat
 }
 
 func isDefinitiveMiss(err error) bool {
-	var restErr rest.Error
+	var restErr *rest.Error
 
 	if !errors.As(err, &restErr) || restErr.Response == nil {
 		return false

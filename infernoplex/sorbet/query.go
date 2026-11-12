@@ -142,11 +142,11 @@ func dispatchIsInGuild(q *QueryIsInGuild) result {
 		return result{status: http.StatusBadRequest, body: map[string]string{"message": fmt.Sprintf("Invalid guild ID: %v", err)}}
 	}
 
-	_, inGuild := dclient.Get().Caches().Guild(guildID)
+	_, inGuild := dclient.Get().Caches.Guild(guildID)
 
 	inviteURL := fmt.Sprintf(
 		"https://discord.com/oauth2/authorize?client_id=%s&scope=bot%%20applications.commands&guild_id=%s&disable_guild_select=true",
-		dclient.Get().ApplicationID(), guildID,
+		dclient.Get().ApplicationID, guildID,
 	)
 
 	return result{status: http.StatusOK, body: map[string]any{

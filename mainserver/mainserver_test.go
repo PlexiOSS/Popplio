@@ -20,11 +20,10 @@ func TestIsNotFound(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{"value 404 from disgo", rest.NewError(nil, nil, notFound, []byte(`{"code":10007,"message":"Unknown Member"}`)), true},
-		{"wrapped value 404", fmt.Errorf("get member: %w", rest.NewError(nil, nil, notFound, nil)), true},
-		{"pointer 404", &rest.Error{Response: notFound}, true},
-		{"value 403", rest.NewError(nil, nil, forbidden, nil), false},
-		{"no response", rest.Error{}, false},
+		{"404 from disgo", &rest.Error{Response: notFound, Code: 10007, Message: "Unknown Member"}, true},
+		{"wrapped 404", fmt.Errorf("get member: %w", &rest.Error{Response: notFound}), true},
+		{"403", &rest.Error{Response: forbidden}, false},
+		{"no response", &rest.Error{}, false},
 		{"unrelated error", errors.New("boom"), false},
 	}
 

@@ -51,14 +51,14 @@ func syncServerEmojisStickers(ctx context.Context) error {
 			continue
 		}
 
-		emojis, err := dclient.Get().Rest().GetEmojis(guildID)
+		emojis, err := dclient.Get().Rest.GetEmojis(guildID)
 
 		if err != nil {
 			state.Logger.Warn("Server sync: failed to fetch emojis, skipping", zap.Error(err), zap.String("server_id", serverID))
 			continue
 		}
 
-		stickers, err := dclient.Get().Rest().GetStickers(guildID)
+		stickers, err := dclient.Get().Rest.GetStickers(guildID)
 
 		if err != nil {
 			state.Logger.Warn("Server sync: failed to fetch stickers, skipping", zap.Error(err), zap.String("server_id", serverID))
@@ -141,7 +141,7 @@ func syncFromInvite(ctx context.Context, q *db.Queries, target syncTarget) error
 		return errors.New("no usable invite code")
 	}
 
-	inv, err := dclient.Get().Rest().GetInvite(match[1], rest.WithQueryParam("with_counts", true))
+	inv, err := dclient.Get().Rest.GetInvite(match[1], rest.WithQueryParam("with_counts", true))
 
 	if err != nil {
 		return err
@@ -203,7 +203,7 @@ func syncServerTarget(ctx context.Context, q *db.Queries, target syncTarget) boo
 		return false
 	}
 
-	guild, err := dclient.Get().Rest().GetGuild(guildID, true)
+	guild, err := dclient.Get().Rest.GetGuild(guildID, true)
 
 	if err != nil {
 		if target.statsSelfManaged {
@@ -226,7 +226,7 @@ func syncServerTarget(ctx context.Context, q *db.Queries, target syncTarget) boo
 
 	var nsfwChannelCount pgtype.Int4
 
-	if channels, err := dclient.Get().Rest().GetGuildChannels(guildID); err == nil {
+	if channels, err := dclient.Get().Rest.GetGuildChannels(guildID); err == nil {
 		nsfwChannelCount = pgtype.Int4{Int32: int32(countNSFWChannels(channels)), Valid: true}
 	} else {
 		state.Logger.Warn("Server sync: failed to fetch channels, leaving nsfw_channel_count untouched", zap.Error(err), zap.String("server_id", serverID))

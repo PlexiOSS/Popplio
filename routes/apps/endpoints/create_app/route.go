@@ -246,7 +246,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		channel = position.Channel()
 	}
 
-	_, err = state.Discord.Rest().CreateMessage(channel, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(channel, discord.MessageCreate{
 		Content: "<@&" + state.Config.Roles.Apps.String() + ">",
 		Embeds: []discord.Embed{
 			{

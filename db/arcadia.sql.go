@@ -401,6 +401,40 @@ func (q *Queries) GetAuthChainByToken(ctx context.Context, token string) (GetAut
 	return i, err
 }
 
+const getBotRoleStates = `-- name: GetBotRoleStates :many
+SELECT ids.id::text AS bot_id,
+    COALESCE(b.type, '')::text AS bot_type,
+    EXISTS (SELECT 1 FROM partners p WHERE p.bot_id = ids.id) AS partner
+FROM unnest($1::text[]) AS ids(id)
+LEFT JOIN bots b ON b.bot_id = ids.id
+`
+
+type GetBotRoleStatesRow struct {
+	BotID   string `db:"bot_id" json:"bot_id"`
+	BotType string `db:"bot_type" json:"bot_type"`
+	Partner bool   `db:"partner" json:"partner"`
+}
+
+func (q *Queries) GetBotRoleStates(ctx context.Context, ids []string) ([]GetBotRoleStatesRow, error) {
+	rows, err := q.db.Query(ctx, getBotRoleStates, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetBotRoleStatesRow
+	for rows.Next() {
+		var i GetBotRoleStatesRow
+		if err := rows.Scan(&i.BotID, &i.BotType, &i.Partner); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getBotsOwnersByIDs = `-- name: GetBotsOwnersByIDs :many
 SELECT bot_id, owner, team_owner FROM bots WHERE bot_id = ANY($1::text[])
 `

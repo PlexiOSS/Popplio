@@ -371,7 +371,7 @@ func announcePremium(perkData PerkData, hours int) {
 		mention = "<@" + perkData.For + ">"
 	}
 
-	if _, err := state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
+	if _, err := state.Discord.Rest.CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Content: brandemoji.Popplio.Get("premium", "💎") + " <@" + perkData.UserID + "> has bought " + mention + " (" + perkData.ForType + ") premium for " + strconv.Itoa(hours) + " hours.",
 	}); err != nil {
 		state.Logger.Warn("Failed to announce premium purchase in mod logs", zap.Error(err), zap.String("user_id", perkData.UserID), zap.String("for", perkData.For))

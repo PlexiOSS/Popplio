@@ -19,8 +19,8 @@ func (t *proxyAuthTransport) RoundTrip(req *http.Request) (*http.Response, error
 	return t.base.RoundTrip(req)
 }
 
-func ProxyRestOpts(token string) []rest.ConfigOpt {
-	return []rest.ConfigOpt{
+func ProxyRestOpts(token string) []rest.ClientConfigOpt {
+	return []rest.ClientConfigOpt{
 		rest.WithURL(Config.Meta.PopplioProxy + "/v10"),
 		rest.WithHTTPClient(&http.Client{
 			Transport: &proxyAuthTransport{token: token, base: http.DefaultTransport},

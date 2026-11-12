@@ -42,6 +42,7 @@ type Roles struct {
 	BotDeveloper       snowflake.ID   `yaml:"bot_developer" default:"758756147313246209" comment:"Bot Developer Role" validate:"required"`
 	CertifiedDeveloper snowflake.ID   `yaml:"certified_developer" default:"759468303344992266" comment:"Certified Developer Role" validate:"required"`
 	BotRole            snowflake.ID   `yaml:"bot_role" default:"758652296459976715" comment:"Role given to bots joining the main server" validate:"required"`
+	PartnerBot         snowflake.ID   `yaml:"partner_bot" default:"874062136639389716" comment:"Role given to partner bots in the main server. Skipped when unset" required:"false"`
 	BugHunters         snowflake.ID   `yaml:"bug_hunters" default:"1042546603795427398" comment:"Bug Hunters Role" validate:"required"`
 	TopReviewers       snowflake.ID   `yaml:"top_reviewers" default:"1239696066350420038" comment:"Top Reviewers Role" validate:"required"`
 }
