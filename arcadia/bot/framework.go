@@ -311,7 +311,10 @@ func OmiListener(ctx context.Context) bot.EventListener {
 				state.Logger.Error("Failed to sync Omi's application commands", zap.Error(err))
 			}
 		},
-		OnGuildMemberJoin:               onGuildMemberJoin,
+		OnGuildMemberJoin: onGuildMemberJoin,
+		OnGuildJoin: func(e *events.GuildJoin) {
+			guardOmiGuild(e.Client(), e.Guild.ID, e.Guild.Name)
+		},
 		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, omiBot, e) },
 		OnAutocompleteInteraction:       func(e *events.AutocompleteInteractionCreate) { onAutocomplete(ctx, omiBot, e) },
 		OnComponentInteraction: func(e *events.ComponentInteractionCreate) {

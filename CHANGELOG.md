@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and never removes them. The Partner Bots role is the new
   `roles.partner_bot` config key. Add it to the config to turn it on, and
   it's skipped while it's unset.
+- Omi only stays in our own servers, so it can be made public for
+  verification. When it's added to a server, and again each time it
+  starts, it leaves any server that isn't the main, staff or testing
+  server and doesn't have Arcadia in it, and posts a note in the staff
+  logs. Arcadia is private, so only we can add it to a server. If Omi
+  can't tell, for example because Arcadia is offline, it stays and logs a
+  warning instead of risking leaving one of ours.
 
 ### Changed
 

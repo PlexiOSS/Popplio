@@ -22,6 +22,7 @@ func TestRepliesAreEmbeds(t *testing.T) {
 		"framework.go":        true,
 		"kb.go":               true,
 		"votelb.go":           true,
+		"guildguard.go":       true,
 	}
 
 	for _, path := range files {

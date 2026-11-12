@@ -103,6 +103,8 @@ func syncOmiWhenReady(ctx context.Context) {
 		}
 	}
 
+	bot.SweepOmiGuilds()
+
 	if err := bot.SyncOmiCommands(); err != nil {
 		state.Logger.Error("Failed to sync Omi's application commands", zap.Error(err))
 	}
