@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-11-12
+
+### Fixed
+
+- Omi and Arcadia see the main, staff and testing servers again. Discord
+  started sending a new channel type that disgo v0.18.11 can't read, and
+  disgo dropped the whole server when it met one, so those servers never
+  reached the cache. Staff role sync, special role sync, Omi's command sync
+  and anything else reading those servers failed with "Failed to get
+  guild". disgo is now vendored in `third_party/disgo` with one change:
+  channels it can't read are skipped instead of failing the server. The
+  Dockerfile copies `third_party` before `go mod download`.
+
 ## [1.29.0] - 2026-11-12
 
 ### Changed

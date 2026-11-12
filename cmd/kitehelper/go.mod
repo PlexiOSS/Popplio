@@ -24,3 +24,5 @@ require (
 	golang.org/x/sys v0.24.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 )
+
+replace github.com/disgoorg/disgo => ../../third_party/disgo
