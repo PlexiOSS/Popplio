@@ -69,3 +69,5 @@ require (
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 )
+
+replace github.com/disgoorg/disgo => ./third_party/disgo
