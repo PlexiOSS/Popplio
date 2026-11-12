@@ -102,11 +102,11 @@ func scanMessage(ctx context.Context, e *events.MessageCreate) {
 // takeAutoModAction deletes the offending message, DMs a warning, records a
 // mod_cases row, and posts to the mod-logs channel — all attributed to the
 // bot itself, never to a staff member, since no staff member acted.
-func takeAutoModAction(ctx context.Context, client bot.Client, guildID, channelID snowflake.ID, msg discord.Message, reason string) {
-	botID := client.ApplicationID()
+func takeAutoModAction(ctx context.Context, client *bot.Client, guildID, channelID snowflake.ID, msg discord.Message, reason string) {
+	botID := client.ApplicationID
 	d := impls.With(client)
 
-	if err := client.Rest().DeleteMessage(channelID, msg.ID); err != nil {
+	if err := client.Rest.DeleteMessage(channelID, msg.ID); err != nil {
 		state.Logger.Error("Automod failed to delete message", zap.Error(err))
 	}
 

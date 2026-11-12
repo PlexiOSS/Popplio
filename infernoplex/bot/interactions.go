@@ -92,8 +92,8 @@ func ctxFromModal(ctx context.Context, e *events.ModalSubmitInteractionCreate) *
 }
 
 func clearComponents(channelID, messageID snowflake.ID) error {
-	empty := []discord.ContainerComponent{}
-	_, err := dclient.Get().Rest().UpdateMessage(channelID, messageID, discord.MessageUpdate{Components: &empty})
+	empty := []discord.LayoutComponent{}
+	_, err := dclient.Get().Rest.UpdateMessage(channelID, messageID, discord.MessageUpdate{Components: &empty})
 	return err
 }
 

@@ -10,7 +10,6 @@ import (
 	"popplio/boosters"
 	"popplio/state"
 
-	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 )
 
@@ -229,11 +228,11 @@ func discordMembers(r Rule) ([]string, error) {
 	ids := []string{}
 	seen := 0
 
-	state.Discord.Caches().MembersForEach(guild, func(m discord.Member) {
+	for m := range state.Discord.Caches.Members(guild) {
 		seen++
 
 		if m.User.Bot {
-			return
+			continue
 		}
 
 		switch r.Type {
@@ -245,11 +244,11 @@ func discordMembers(r Rule) ([]string, error) {
 			for _, id := range m.RoleIDs {
 				if id == roleID {
 					ids = append(ids, m.User.ID.String())
-					return
+					break
 				}
 			}
 		}
-	})
+	}
 
 	if seen == 0 {
 		return nil, ErrDiscordNotReady

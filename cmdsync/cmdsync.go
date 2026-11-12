@@ -22,8 +22,8 @@ type Plan struct {
 	Guilds map[snowflake.ID][]discord.ApplicationCommandCreate
 }
 
-func Sync(client bot.Client, plan Plan) error {
-	appID := client.ApplicationID()
+func Sync(client *bot.Client, plan Plan) error {
+	appID := client.ApplicationID
 	log := state.Logger.With(zap.String("bot", plan.Name))
 	var errs []error
 
@@ -32,7 +32,7 @@ func Sync(client bot.Client, plan Plan) error {
 		global = []discord.ApplicationCommandCreate{}
 	}
 
-	if _, err := client.Rest().SetGlobalCommands(appID, global); err != nil {
+	if _, err := client.Rest.SetGlobalCommands(appID, global); err != nil {
 		errs = append(errs, fmt.Errorf("setting global commands: %w", err))
 	} else {
 		log.Info("Synced global slash commands", zap.Int("count", len(global)))
@@ -47,7 +47,7 @@ func Sync(client bot.Client, plan Plan) error {
 			cmds = []discord.ApplicationCommandCreate{}
 		}
 
-		if _, err := client.Rest().SetGuildCommands(appID, guildID, cmds); err != nil {
+		if _, err := client.Rest.SetGuildCommands(appID, guildID, cmds); err != nil {
 			if noAccess(err) {
 				log.Warn("Not in a guild it should have commands in, skipping", zap.Stringer("guild_id", guildID))
 				continue
@@ -62,14 +62,14 @@ func Sync(client bot.Client, plan Plan) error {
 
 	var others []snowflake.ID
 
-	client.Caches().GuildsForEach(func(g discord.Guild) {
+	for g := range client.Caches.Guilds() {
 		if _, planned := plan.Guilds[g.ID]; !planned {
 			others = append(others, g.ID)
 		}
-	})
+	}
 
 	for _, guildID := range others {
-		existing, err := client.Rest().GetGuildCommands(appID, guildID, false)
+		existing, err := client.Rest.GetGuildCommands(appID, guildID, false)
 
 		if err != nil {
 			if !noAccess(err) {
@@ -83,7 +83,7 @@ func Sync(client bot.Client, plan Plan) error {
 			continue
 		}
 
-		if _, err := client.Rest().SetGuildCommands(appID, guildID, []discord.ApplicationCommandCreate{}); err != nil {
+		if _, err := client.Rest.SetGuildCommands(appID, guildID, []discord.ApplicationCommandCreate{}); err != nil {
 			errs = append(errs, fmt.Errorf("clearing commands in guild %s: %w", guildID, err))
 			continue
 		}
@@ -95,15 +95,9 @@ func Sync(client bot.Client, plan Plan) error {
 }
 
 func noAccess(err error) bool {
-	var value rest.Error
-	var ptr *rest.Error
-
 	var resp *http.Response
 
-	switch {
-	case errors.As(err, &value):
-		resp = value.Response
-	case errors.As(err, &ptr) && ptr != nil:
+	if ptr := (*rest.Error)(nil); errors.As(err, &ptr) && ptr != nil {
 		resp = ptr.Response
 	}
 

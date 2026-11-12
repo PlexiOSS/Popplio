@@ -47,7 +47,7 @@ func (c cachedPosition) String() string {
 }
 
 func StaffResync(ctx context.Context) error {
-	if _, ok := dclient.Get().Caches().Guild(state.Config.Servers.Staff); !ok {
+	if _, ok := dclient.Get().Caches.Guild(state.Config.Servers.Staff); !ok {
 		return fmt.Errorf("Failed to get staff guild for staff perms resync")
 	}
 
@@ -59,7 +59,7 @@ func StaffResync(ctx context.Context) error {
 
 	var staffResync []guildMember
 
-	dclient.Get().Caches().MembersForEach(state.Config.Servers.Staff, func(member discord.Member) {
+	for member := range dclient.Get().Caches.Members(state.Config.Servers.Staff) {
 		roles := make([]string, 0, len(member.RoleIDs))
 
 		for _, roleID := range member.RoleIDs {
@@ -67,7 +67,7 @@ func StaffResync(ctx context.Context) error {
 		}
 
 		staffResync = append(staffResync, guildMember{UserID: member.User.ID, Roles: roles, IsBot: member.User.Bot})
-	})
+	}
 
 	tx, err := state.Pool.Begin(ctx)
 

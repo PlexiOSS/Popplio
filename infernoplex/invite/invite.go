@@ -78,7 +78,7 @@ func ResolveInvite(ctx context.Context, guildID snowflake.ID, rawInvite string) 
 
 	code := match[1]
 
-	inv, err := dclient.Get().Rest().GetInvite(code)
+	inv, err := dclient.Get().Rest.GetInvite(code)
 
 	if err != nil {
 		return fmt.Errorf("Failed to fetch invite: %w", err)
@@ -185,7 +185,7 @@ func CreateInviteForUser(ctx context.Context, guildID snowflake.ID, userID *stri
 			reason = fmt.Sprintf("Invite created for user %s", *userID)
 		}
 
-		created, err := dclient.Get().Rest().CreateInvite(channelID, discord.InviteCreate{
+		created, err := dclient.Get().Rest.CreateInvite(channelID, discord.InviteCreate{
 			MaxAge:  &maxAge,
 			MaxUses: &maxUses,
 			Unique:  true,

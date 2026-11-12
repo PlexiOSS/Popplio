@@ -78,7 +78,7 @@ func Servers(c Counts) []Line {
 	}
 }
 
-func Run(ctx context.Context, name string, client func() bot.Client, lines func(Counts) []Line) {
+func Run(ctx context.Context, name string, client func() *bot.Client, lines func(Counts) []Line) {
 	go func() {
 		next := 0
 		timer := time.NewTimer(30 * time.Second)
@@ -111,14 +111,14 @@ func Run(ctx context.Context, name string, client func() bot.Client, lines func(
 	}()
 }
 
-func apply(ctx context.Context, c bot.Client, line Line) error {
+func apply(ctx context.Context, c *bot.Client, line Line) error {
 	opts := []gateway.PresenceOpt{gateway.WithOnlineStatus(discord.OnlineStatusOnline), line.presence()}
 
 	if c.HasShardManager() {
 		var firstErr error
 
-		for id := range c.ShardManager().Shards() {
-			if err := c.SetPresenceForShard(ctx, id, opts...); err != nil && firstErr == nil {
+		for shard := range c.ShardManager.Shards() {
+			if err := c.SetPresenceForShard(ctx, shard.ShardID(), opts...); err != nil && firstErr == nil {
 				firstErr = err
 			}
 		}

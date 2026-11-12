@@ -23,7 +23,7 @@ func announceBlogPost(entry types.BlogCreateEntry, pingRoles *bool) {
 		content = state.Config.Meta.BlogAnnounceMentions
 	}
 
-	_, err := state.Discord.Rest().CreateMessage(channelID, discord.MessageCreate{
+	_, err := state.Discord.Rest.CreateMessage(channelID, discord.MessageCreate{
 		Content: content,
 		Embeds: []discord.Embed{
 			{
@@ -79,7 +79,7 @@ func announceChangelogEntry(entry types.ChangelogCreateEntry) {
 		content = state.Config.Meta.ChangelogAnnounceMentions
 	}
 
-	_, err := state.Discord.Rest().CreateMessage(channelID, discord.MessageCreate{
+	_, err := state.Discord.Rest.CreateMessage(channelID, discord.MessageCreate{
 		Content: content,
 		Embeds: []discord.Embed{
 			{

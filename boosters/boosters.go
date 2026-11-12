@@ -41,14 +41,14 @@ func IsBooster(m discord.Member) bool {
 }
 
 func Lookup(userID snowflake.ID) (member, boosting bool, err error) {
-	if m, ok := state.Discord.Caches().Member(state.Config.Servers.Main, userID); ok {
+	if m, ok := state.Discord.Caches.Member(state.Config.Servers.Main, userID); ok {
 		return true, IsBooster(m), nil
 	}
 
-	m, err := state.Discord.Rest().GetMember(state.Config.Servers.Main, userID)
+	m, err := state.Discord.Rest.GetMember(state.Config.Servers.Main, userID)
 
 	if err != nil {
-		var restErr rest.Error
+		var restErr *rest.Error
 
 		if errors.As(err, &restErr) && restErr.Response != nil && restErr.Response.StatusCode == http.StatusNotFound {
 			return false, false, nil
@@ -58,7 +58,7 @@ func Lookup(userID snowflake.ID) (member, boosting bool, err error) {
 	}
 
 	m.GuildID = state.Config.Servers.Main
-	state.Discord.Caches().AddMember(*m)
+	state.Discord.Caches.AddMember(*m)
 
 	return true, IsBooster(*m), nil
 }
@@ -77,19 +77,19 @@ func List() ([]string, error) {
 	ids := []string{}
 	seen := 0
 
-	state.Discord.Caches().MembersForEach(state.Config.Servers.Main, func(m discord.Member) {
+	for m := range state.Discord.Caches.Members(state.Config.Servers.Main) {
 		seen++
 
 		if IsBooster(m) {
 			ids = append(ids, m.User.ID.String())
 		}
-	})
+	}
 
 	if seen == 0 {
 		return nil, ErrNotReady
 	}
 
-	if guild, ok := state.Discord.Caches().Guild(state.Config.Servers.Main); ok && seen < guild.MemberCount*9/10 {
+	if guild, ok := state.Discord.Caches.Guild(state.Config.Servers.Main); ok && seen < guild.MemberCount*9/10 {
 		rechunk(seen, guild.MemberCount)
 	}
 
@@ -135,7 +135,7 @@ func rechunk(cached, total int) {
 		ctx, cancel := context.WithTimeout(state.Context, 2*time.Minute)
 		defer cancel()
 
-		if _, err := state.Discord.MemberChunkingManager().RequestAllMembersCtx(ctx, state.Config.Servers.Main); err != nil {
+		if _, err := state.Discord.MemberChunkingManager.RequestAllMembers(ctx, state.Config.Servers.Main); err != nil {
 			state.Logger.Error("boosters: re-requesting main server members failed", zap.Error(err))
 		}
 	}()

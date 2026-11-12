@@ -60,7 +60,7 @@ func BotPresenceSync(ctx context.Context) error {
 			continue
 		}
 
-		if _, ok := state.Discord.Caches().Presence(mainGuild, userID); ok {
+		if _, ok := state.Discord.Caches.Presence(mainGuild, userID); ok {
 			continue
 		}
 
@@ -193,22 +193,22 @@ func arcadiaPresences(botIDs []string) map[string]string {
 
 	var guilds []snowflake.ID
 
-	client.Caches().GuildsForEach(func(g discord.Guild) {
+	for g := range client.Caches.Guilds() {
 		guilds = append(guilds, g.ID)
-	})
+	}
 
 	var found []sighting
 
 	for _, guildID := range guilds {
-		client.Caches().MembersForEach(guildID, func(m discord.Member) {
+		for m := range client.Caches.Members(guildID) {
 			if _, ok := want[m.User.ID]; ok {
 				found = append(found, sighting{guild: guildID, user: m.User.ID})
 			}
-		})
+		}
 	}
 
 	for _, f := range found {
-		status := presenceStatus(client.Caches().Presence(f.guild, f.user))
+		status := presenceStatus(client.Caches.Presence(f.guild, f.user))
 		id := want[f.user]
 
 		if prev, ok := out[id]; !ok || prev == "offline" {

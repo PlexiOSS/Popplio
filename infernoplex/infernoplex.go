@@ -37,7 +37,7 @@ func Start(parent context.Context) *Infernoplex {
 		state.Logger.Error("Infernoplex's Discord bot failed to start; Sorbet will run without it", zap.Error(err))
 	} else {
 		brandemoji.LoadAsync(brandemoji.Infernoplex, dclient.Get(), "infernoplex")
-		botstatus.Run(ctx, "infernoplex", func() discordbot.Client { return dclient.Get() }, botstatus.Servers)
+		botstatus.Run(ctx, "infernoplex", func() *discordbot.Client { return dclient.Get() }, botstatus.Servers)
 	}
 
 	go func() {

@@ -6,9 +6,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 
-	"popplio/listing"
 	"popplio/api/resp"
 	"popplio/db"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/types"
 	"popplio/validators"
@@ -156,7 +156,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		embed.Thumbnail = &discord.EmbedResource{URL: avatar}
 	}
 
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Content: "",
 		Embeds:  []discord.Embed{embed},
 	})

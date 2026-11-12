@@ -124,7 +124,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error transferring bot to team", nil, zap.String("botID", id), zap.String("userID", d.Auth.ID), zap.String("newTeamID", payload.TeamID))
 	}
 
-	state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
+	state.Discord.Rest.CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Embeds: []discord.Embed{
 			{
 				URL:   state.Config.Sites.Frontend + "/bots/" + id,

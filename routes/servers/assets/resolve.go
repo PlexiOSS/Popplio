@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"popplio/listing"
 	"popplio/api"
 	"popplio/db"
 	"popplio/entityassets"
+	"popplio/listing"
 	"popplio/state"
 	"popplio/types"
 	"popplio/votes"
@@ -34,7 +34,7 @@ func ResolveInvite(ctx context.Context, rawInvite string) (*discord.Invite, erro
 		return nil, errors.New("could not find an invite code in that URL")
 	}
 
-	invite, err := state.Discord.Rest().GetInvite(match[1])
+	invite, err := state.Discord.Rest.GetInvite(match[1])
 
 	if err != nil {
 		return nil, fmt.Errorf("that invite is invalid, expired, or the server has revoked it: %w", err)

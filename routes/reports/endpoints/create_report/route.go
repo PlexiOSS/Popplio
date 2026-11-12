@@ -140,7 +140,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	// doesn't include it either, only the target and reason. Best-effort:
 	// the report is already filed, so a failed Discord post shouldn't turn
 	// into an error response.
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.StaffLogs, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.StaffLogs, discord.MessageCreate{
 		Content: "New report filed against **" + targetInfo.Name + "** (" + targetType + ", " + payload.Reason + "): " + targetInfo.URL,
 	})
 

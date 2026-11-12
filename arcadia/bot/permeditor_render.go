@@ -136,7 +136,7 @@ func renderPermEditor(ctx context.Context, s *permSession) (discord.MessageCreat
 		}
 	}
 
-	var rows []discord.ContainerComponent
+	var rows []discord.LayoutComponent
 
 	if !s.editingMember() {
 		if row, ok := roleSelectRow(target.roles, s, manager); ok {
@@ -184,7 +184,7 @@ func editorButtons(s *permSession, editing bool) []discord.InteractiveComponent 
 
 // roleSelectRow lists the roles the caller may edit. Roles at or above their own
 // rank are left out rather than shown and refused on click.
-func roleSelectRow(roles []staffRole, s *permSession, manager managerContext) (discord.ContainerComponent, bool) {
+func roleSelectRow(roles []staffRole, s *permSession, manager managerContext) (discord.LayoutComponent, bool) {
 	options := make([]discord.StringSelectMenuOption, 0, len(roles))
 
 	for _, r := range roles {

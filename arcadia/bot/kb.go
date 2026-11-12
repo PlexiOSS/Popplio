@@ -307,7 +307,7 @@ func kbArticleOptions(articles []kbArticle, current string) []discord.StringSele
 	return opts
 }
 
-func kbCategoryMenu(k *kbIndex, current string) discord.ContainerComponent {
+func kbCategoryMenu(k *kbIndex, current string) discord.LayoutComponent {
 	opts := make([]discord.StringSelectMenuOption, 0, len(k.Categories))
 
 	for _, c := range k.Categories {
@@ -325,7 +325,7 @@ func kbCategoryMenu(k *kbIndex, current string) discord.ContainerComponent {
 
 type kbView struct {
 	content    string
-	components []discord.ContainerComponent
+	components []discord.LayoutComponent
 }
 
 func (v kbView) create() discord.MessageCreate {
@@ -364,7 +364,7 @@ func kbArticleView(k *kbIndex, a kbArticle, others []kbArticle, othersLabel stri
 
 	content := kbClip(sb.String(), 1900)
 
-	components := []discord.ContainerComponent{
+	components := []discord.LayoutComponent{
 		discord.NewActionRow(discord.NewLinkButton("Read the article", a.url())),
 	}
 
@@ -402,7 +402,7 @@ func kbCategoryView(k *kbIndex, c kbCategory) kbView {
 		sb.WriteString(line)
 	}
 
-	components := []discord.ContainerComponent{}
+	components := []discord.LayoutComponent{}
 
 	if len(articles) > 0 {
 		components = append(components, discord.NewActionRow(
@@ -431,7 +431,7 @@ func kbHomeView(k *kbIndex) kbView {
 		}
 	}
 
-	components := []discord.ContainerComponent{kbCategoryMenu(k, "")}
+	components := []discord.LayoutComponent{kbCategoryMenu(k, "")}
 
 	if common := k.common(); len(common) > 0 {
 		components = append(components, discord.NewActionRow(
@@ -505,7 +505,7 @@ func cmdKb() *Command {
 			if len(matches) == 0 {
 				return c.Send(kbView{
 					content: fmt.Sprintf("I couldn't find an article about **%s**. Try different words, browse a category below, or open a ticket with `/ticket` and staff will help.", kbSafe(topic)),
-					components: []discord.ContainerComponent{
+					components: []discord.LayoutComponent{
 						kbCategoryMenu(k, ""),
 						discord.NewActionRow(discord.NewLinkButton("Open the Knowledge Base", frontendURL()+"/kb")),
 					},

@@ -31,7 +31,7 @@ func Channels(serverID string) ([]types.ServerVoteChannelOption, error) {
 		return nil, err
 	}
 
-	channels, err := dclient.Get().Rest().GetGuildChannels(guildID)
+	channels, err := dclient.Get().Rest.GetGuildChannels(guildID)
 
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func SendTest(channelID string) error {
 		return err
 	}
 
-	_, err = dclient.Get().Rest().CreateMessage(id, discord.MessageCreate{
+	_, err = dclient.Get().Rest.CreateMessage(id, discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title:       "Vote messages are on",
 			Description: "New votes on Omniplex will be posted in this channel.",
@@ -92,7 +92,7 @@ func Post(ctx context.Context, serverID, voter string, votes int, auto bool, lis
 		description = fmt.Sprintf("**%s** voted for **%s** with Auto-vote. It now has **%d** votes.", voter, name, votes)
 	}
 
-	if _, err := dclient.Get().Rest().CreateMessage(id, discord.MessageCreate{
+	if _, err := dclient.Get().Rest.CreateMessage(id, discord.MessageCreate{
 		Embeds: []discord.Embed{{
 			Title:       "New vote",
 			URL:         listingURL,

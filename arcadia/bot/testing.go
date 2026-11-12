@@ -174,22 +174,22 @@ func renderQueue(c *Ctx, s *queueSession) (discord.MessageCreate, error) {
 	return msg, nil
 }
 
-func queueComponents(s *queueSession, bot queueBot) []discord.ContainerComponent {
+func queueComponents(s *queueSession, bot queueBot) []discord.LayoutComponent {
 	safeInvite := fmt.Sprintf(
 		"https://discord.com/api/v10/oauth2/authorize?client_id=%s&permissions=0&scope=bot%%20applications.commands&guild_id=%s",
 		bot.ClientID, state.Config.Servers.Testing)
 
-	return []discord.ContainerComponent{
-		discord.ActionRowComponent{
+	return []discord.LayoutComponent{
+		discord.NewActionRow(
 			discord.NewPrimaryButton("Previous", "q:prev").WithDisabled(s.Current == 0),
 			discord.NewDangerButton("Cancel", "q:cancel"),
 			discord.NewPrimaryButton("Next", "q:next").WithDisabled(s.Current >= len(s.Bots)-1),
-		},
-		discord.ActionRowComponent{
+		),
+		discord.NewActionRow(
 			discord.NewLinkButton("Invite", safeInvite),
 			discord.NewLinkButton("Invite (DB, Unsafe)", bot.Invite),
 			discord.NewLinkButton("View Page", state.Config.Sites.Frontend+"/bots/"+bot.BotID),
-		},
+		),
 	}
 }
 
@@ -225,11 +225,11 @@ func cmdClaim() *Command {
 						Description: fmt.Sprintf("This bot is already claimed by <@%s>", claimedBy),
 						Color:       impls.ColourRed,
 					}},
-					Components: []discord.ContainerComponent{
-						discord.ActionRowComponent{
+					Components: []discord.LayoutComponent{
+						discord.NewActionRow(
 							discord.NewDangerButton("Force Claim", "fclaim"),
 							discord.NewSecondaryButton("Remind Reviewer", "remind"),
-						},
+						),
 					},
 				})
 

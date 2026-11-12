@@ -60,7 +60,7 @@ func cmdBump() *Command {
 					Description: description,
 					Color:       colourGreen,
 				}},
-				Components: []discord.ContainerComponent{
+				Components: []discord.LayoutComponent{
 					discord.NewActionRow(discord.NewLinkButton("View on Omniplex", serverURL)),
 				},
 				AllowedMentions: &discord.AllowedMentions{},

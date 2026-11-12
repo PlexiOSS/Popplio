@@ -143,7 +143,7 @@ func fetchAllBans(guildID snowflake.ID) ([]discord.Ban, error) {
 	)
 
 	for {
-		page, err := dclient.Get().Rest().GetBans(guildID, 0, after, 1000)
+		page, err := dclient.Get().Rest.GetBans(guildID, 0, after, 1000)
 
 		if err != nil {
 			return nil, err
@@ -160,20 +160,20 @@ func fetchAllBans(guildID snowflake.ID) ([]discord.Ban, error) {
 }
 
 func SpecRoleSync(ctx context.Context) error {
-	if _, ok := dclient.Get().Caches().Guild(state.Config.Servers.Main); !ok {
+	if _, ok := dclient.Get().Caches.Guild(state.Config.Servers.Main); !ok {
 		return fmt.Errorf("Failed to get guild")
 	}
 
 	var bugHunters []string
 
-	dclient.Get().Caches().MembersForEach(state.Config.Servers.Main, func(member discord.Member) {
+	for member := range dclient.Get().Caches.Members(state.Config.Servers.Main) {
 		for _, roleID := range member.RoleIDs {
 			if roleID == state.Config.Roles.BugHunters {
 				bugHunters = append(bugHunters, member.User.ID.String())
-				return
+				continue
 			}
 		}
-	})
+	}
 
 	tx, err := state.Pool.Begin(ctx)
 
@@ -326,7 +326,7 @@ func TopReviewerSync(ctx context.Context) error {
 		return err
 	}
 
-	if _, ok := dclient.Get().Caches().Guild(state.Config.Servers.Main); !ok {
+	if _, ok := dclient.Get().Caches.Guild(state.Config.Servers.Main); !ok {
 		state.Logger.Error("Failed to get guild")
 		return nil
 	}
@@ -345,14 +345,14 @@ func SyncTopReviewerRoles(ctx context.Context, stats []TopReviewer) error {
 
 	var holders []snowflake.ID
 
-	dclient.Get().Caches().MembersForEach(state.Config.Servers.Main, func(member discord.Member) {
+	for member := range dclient.Get().Caches.Members(state.Config.Servers.Main) {
 		for _, roleID := range member.RoleIDs {
 			if roleID == state.Config.Roles.TopReviewers {
 				holders = append(holders, member.User.ID)
-				return
+				continue
 			}
 		}
-	})
+	}
 
 	for _, userID := range holders {
 		if err := impls.RemoveRole(state.Config.Servers.Main, userID, state.Config.Roles.TopReviewers, reason); err != nil {

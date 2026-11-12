@@ -44,7 +44,7 @@ func cmdVote() *Command {
 						Description: "Sign in to Omniplex once with Discord, then you can vote from here.",
 						Color:       colourBlurple,
 					}},
-					Components: []discord.ContainerComponent{linkRow},
+					Components: []discord.LayoutComponent{linkRow},
 				})
 			}
 
@@ -81,7 +81,7 @@ func cmdVote() *Command {
 						Description: "Votes for this server need a quick check on the website first.",
 						Color:       colourBlurple,
 					}},
-					Components: []discord.ContainerComponent{linkRow},
+					Components: []discord.LayoutComponent{linkRow},
 				})
 			}
 
@@ -111,7 +111,7 @@ func cmdVote() *Command {
 					Description: fmt.Sprintf("Your vote for %s counted as %d. You can vote again once your cooldown ends.", name, res.Votes),
 					Color:       colourGreen,
 				}},
-				Components: []discord.ContainerComponent{
+				Components: []discord.LayoutComponent{
 					discord.NewActionRow(discord.NewLinkButton("View on Omniplex", serverURL)),
 				},
 			})

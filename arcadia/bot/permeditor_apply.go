@@ -150,7 +150,7 @@ func closePermEditor(e *events.ComponentInteractionCreate, messageID, note strin
 
 	var (
 		content    = ""
-		components = []discord.ContainerComponent{}
+		components = []discord.LayoutComponent{}
 		embeds     = []discord.Embed{{Description: note, Color: impls.ColourBlurple}}
 	)
 

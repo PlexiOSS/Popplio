@@ -35,6 +35,7 @@ roles:
   bot_developer: 758756147313246209 # Bot Developer Role
   certified_developer: 759468303344992266 # Certified Developer Role
   bot_role: 758652296459976715 # Role given to bots joining the main server
+  partner_bot: 874062136639389716 # Role given to partner bots in the main server. Skipped when unset
   bug_hunters: 1042546603795427398 # Bug Hunters Role
   top_reviewers: 1239696066350420038 # Top Reviewers Role
 

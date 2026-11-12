@@ -62,7 +62,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 	}
 
 	// Send embed to bot log channel
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.ModLogs, discord.MessageCreate{
 		Content: "",
 		Embeds: []discord.Embed{
 			{

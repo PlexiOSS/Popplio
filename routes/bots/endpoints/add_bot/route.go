@@ -352,7 +352,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		botAddedEmbed.Thumbnail = &discord.EmbedResource{URL: metadata.Avatar}
 	}
 
-	_, err = state.Discord.Rest().CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
+	_, err = state.Discord.Rest.CreateMessage(state.Config.Channels.BotLogs, discord.MessageCreate{
 		Content: state.Config.Meta.UrgentMentions,
 		Embeds:  []discord.Embed{botAddedEmbed},
 	})

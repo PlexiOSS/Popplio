@@ -111,7 +111,7 @@ func resolveUptimeStatus(ctx context.Context, mainGuild, userID snowflake.ID, bo
 		lastSeenOnline: bot.LastSeenOnline,
 	}
 
-	if presence, ok := state.Discord.Caches().Presence(mainGuild, userID); ok {
+	if presence, ok := state.Discord.Caches.Presence(mainGuild, userID); ok {
 		signals.presence = "online"
 
 		if presence.Status == discord.OnlineStatusOffline || presence.Status == discord.OnlineStatusInvisible {

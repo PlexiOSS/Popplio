@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-var client bot.Client
+var client *bot.Client
 
-func Get() bot.Client {
+func Get() *bot.Client {
 	if client == nil {
 		panic("arcadia: Discord client used before dclient.Setup")
 	}
@@ -38,7 +38,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 		bot.WithRestClientConfigOpts(state.ProxyRestOpts(token)...),
 		bot.WithGatewayConfigOpts(
 			gateway.WithIntents(intents()),
-			gateway.WithCompress(true),
+			gateway.WithCompression(gateway.CompressionZlibPayload),
 			state.BotPresence("the review queue"),
 		),
 		bot.WithCacheConfigOpts(
@@ -60,7 +60,7 @@ func Setup(ctx context.Context, listeners ...bot.EventListener) error {
 
 	client = c
 
-	state.Logger.Info("Staff bot connected", zap.String("applicationID", c.ApplicationID().String()))
+	state.Logger.Info("Staff bot connected", zap.String("applicationID", c.ApplicationID.String()))
 
 	return nil
 }

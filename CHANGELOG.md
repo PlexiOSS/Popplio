@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   servers and top voters, with buttons to switch between them and a link
   to the full list on the website. New `GetTopVotedBots` and
   `GetTopVotedServers` queries back it.
+- Bots joining the main server get Certified Bots when their listing is
+  certified and Partner Bots when they're a partner, as well as Bots. The
+  join announcement says which kind of bot it is and links its listing,
+  or says it isn't listed. A new `bot_role_sync` task gives every bot in
+  the main server any of those roles it's missing every 15 minutes, so a
+  bot that joined while Omi was restarting catches up. It only adds roles
+  and never removes them. The Partner Bots role is the new
+  `roles.partner_bot` config key. Add it to the config to turn it on, and
+  it's skipped while it's unset.
 
 ### Changed
 
@@ -30,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/api/kb` index, cached for 10 minutes, so it needs the matching website
   release.
 - The reviewer leaderboard moved from Omi to Arcadia as `/reviewers`.
+- Upgraded disgo to v0.20.0, which reads channel types it doesn't know
+  instead of dropping the whole server. The patched copy in
+  `third_party/disgo` is gone, and the Dockerfile no longer copies it.
+  Modal text boxes use Discord's new labelled layout, and the bots still
+  ask for compressed gateway messages.
+
+### Fixed
+
+- Checks for "not found" and "missing access" answers from Discord, used
+  by booster sync, command sync, team clean-up, the tracking bot check,
+  server ownership checks and user lookups, now match disgo v0.20's error
+  type. The old checks would have crashed on it.
 
 ## [1.30.0] - 2026-11-12
 

@@ -22,8 +22,8 @@ var (
 	Infernoplex = &Set{}
 )
 
-func (s *Set) Load(client bot.Client) (int, error) {
-	emojis, err := client.Rest().GetApplicationEmojis(client.ApplicationID())
+func (s *Set) Load(client *bot.Client) (int, error) {
+	emojis, err := client.Rest.GetApplicationEmojis(client.ApplicationID)
 
 	if err != nil {
 		return 0, err
@@ -53,7 +53,7 @@ func (s *Set) Get(name, fallback string) string {
 	return fallback
 }
 
-func LoadAsync(s *Set, client bot.Client, label string) {
+func LoadAsync(s *Set, client *bot.Client, label string) {
 	if client == nil {
 		return
 	}

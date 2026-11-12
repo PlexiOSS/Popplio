@@ -241,3 +241,10 @@ FROM servers
 WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND approximate_votes > 0
 ORDER BY approximate_votes DESC, total_members DESC, server_id
 LIMIT $1;
+
+-- name: GetBotRoleStates :many
+SELECT ids.id::text AS bot_id,
+    COALESCE(b.type, '')::text AS bot_type,
+    EXISTS (SELECT 1 FROM partners p WHERE p.bot_id = ids.id) AS partner
+FROM unnest(sqlc.arg('ids')::text[]) AS ids(id)
+LEFT JOIN bots b ON b.bot_id = ids.id;

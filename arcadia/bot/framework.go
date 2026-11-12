@@ -59,7 +59,7 @@ func (c *Ctx) Discord() impls.Discord {
 	return impls.With(c.client())
 }
 
-func (c *Ctx) client() bot.Client {
+func (c *Ctx) client() *bot.Client {
 	if c.bot == nil {
 		return dclient.Get()
 	}
@@ -150,7 +150,7 @@ func (c *Ctx) SayColour(content string, colour int) error {
 func (c *Ctx) Send(msg discord.MessageCreate) error {
 	if c.slash != nil {
 		if c.replied {
-			_, err := c.slash.Client().Rest().CreateFollowupMessage(
+			_, err := c.slash.Client().Rest.CreateFollowupMessage(
 				c.slash.ApplicationID(), c.slash.Token(), msg)
 			return err
 		}
@@ -159,7 +159,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 		return c.slash.CreateMessage(msg)
 	}
 
-	_, err := c.client().Rest().CreateMessage(c.ChannelID, msg)
+	_, err := c.client().Rest.CreateMessage(c.ChannelID, msg)
 	return err
 }
 
@@ -171,7 +171,7 @@ func (c *Ctx) Send(msg discord.MessageCreate) error {
 // the invocation and then resolves the message id either way.
 func (c *Ctx) SendTracked(msg discord.MessageCreate) (snowflake.ID, error) {
 	if c.slash == nil {
-		sent, err := c.client().Rest().CreateMessage(c.ChannelID, msg)
+		sent, err := c.client().Rest.CreateMessage(c.ChannelID, msg)
 
 		if err != nil {
 			return 0, err
@@ -184,7 +184,7 @@ func (c *Ctx) SendTracked(msg discord.MessageCreate) (snowflake.ID, error) {
 		return 0, err
 	}
 
-	sent, err := c.client().Rest().GetInteractionResponse(c.slash.ApplicationID(), c.slash.Token())
+	sent, err := c.client().Rest.GetInteractionResponse(c.slash.ApplicationID(), c.slash.Token())
 
 	if err != nil {
 		return 0, err
@@ -229,7 +229,7 @@ type Command struct {
 // commands in the staff and testing servers.
 type Bot struct {
 	Name   string
-	client func() bot.Client
+	client func() *bot.Client
 	guilds func() []snowflake.ID
 	prefix func() string
 
@@ -238,7 +238,7 @@ type Bot struct {
 	categories []string
 }
 
-func newBot(name string, client func() bot.Client, guilds func() []snowflake.ID, prefix func() string) *Bot {
+func newBot(name string, client func() *bot.Client, guilds func() []snowflake.ID, prefix func() string) *Bot {
 	return &Bot{Name: name, client: client, guilds: guilds, prefix: prefix, registry: map[string]*Command{}}
 }
 
@@ -253,7 +253,7 @@ var arcadiaBot = newBot("arcadia", dclient.Get,
 	},
 )
 
-var omiBot = newBot("omi", func() bot.Client { return state.Discord },
+var omiBot = newBot("omi", func() *bot.Client { return state.Discord },
 	func() []snowflake.ID { return []snowflake.ID{state.Config.Servers.Main, state.Config.Servers.Testing} },
 	func() string { return "/" },
 )

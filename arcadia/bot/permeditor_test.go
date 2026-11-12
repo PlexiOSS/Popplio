@@ -141,7 +141,7 @@ func TestRoleSelectRowHidesSeniorRoles(t *testing.T) {
 		t.Fatal("a manager with a junior role below them should get a picker")
 	}
 
-	menu, valid := row.(discord.ActionRowComponent)[0].(discord.StringSelectMenuComponent)
+	menu, valid := row.(discord.ActionRowComponent).Components[0].(discord.StringSelectMenuComponent)
 
 	if !valid {
 		t.Fatal("the role picker is not a string select menu")
@@ -209,7 +209,7 @@ func TestEditorButtons(t *testing.T) {
 		out := make([]string, 0, len(components))
 
 		for _, c := range components {
-			out = append(out, c.ID())
+			out = append(out, c.GetCustomID())
 		}
 
 		return out

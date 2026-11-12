@@ -107,9 +107,9 @@ func upload(label, token string, files []emojiFile, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	appID := client.ApplicationID()
+	appID := client.ApplicationID
 
-	existing, err := client.Rest().GetApplicationEmojis(appID)
+	existing, err := client.Rest.GetApplicationEmojis(appID)
 	if err != nil {
 		return fmt.Errorf("listing application emojis: %w", err)
 	}
@@ -132,7 +132,7 @@ func upload(label, token string, files []emojiFile, dryRun bool) error {
 		if err != nil {
 			return err
 		}
-		e, err := client.Rest().CreateApplicationEmoji(appID, discord.EmojiCreate{
+		e, err := client.Rest.CreateApplicationEmoji(appID, discord.EmojiCreate{
 			Name:  f.name,
 			Image: *discord.NewIconRaw(f.kind, data),
 		})

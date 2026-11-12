@@ -234,7 +234,7 @@ func runRolesCreate(c *Ctx) error {
 
 	// The binding is what makes the role real: without a role in the staff
 	// server, nobody can ever hold it.
-	if _, ok := dclient.Get().Caches().Role(state.Config.Servers.Staff, roleID); !ok {
+	if _, ok := dclient.Get().Caches.Role(state.Config.Servers.Staff, roleID); !ok {
 		return errors.New("That role does not exist in the staff server")
 	}
 

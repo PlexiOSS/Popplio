@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"popplio/audit"
+	"popplio/botroles"
 	"popplio/state"
 
 	"go.uber.org/zap"
@@ -122,6 +123,13 @@ func All() []Task {
 			Enabled:     true,
 			Interval:    6 * time.Hour,
 			Run:         CreditReminders,
+		},
+		{
+			Name:        "bot_role_sync",
+			Description: "Giving bots in the main server the roles they're missing: Bots, Certified Bots for certified listings and Partner Bots for partners",
+			Enabled:     true,
+			Interval:    15 * time.Minute,
+			Run:         botroles.Sync,
 		},
 		{
 			Name:        "booster_sync",

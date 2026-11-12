@@ -49,7 +49,7 @@ var (
 	Pool      *pgxpool.Pool
 	Paypal    *paypal.Client
 	Redis     *redis.Client
-	Discord   bot.Client
+	Discord   *bot.Client
 	Logger    *zap.Logger
 	Context   = context.Background()
 	Validator = validator.New()
@@ -160,7 +160,7 @@ func Setup() {
 			sharding.WithAutoScaling(true),
 			sharding.WithGatewayConfigOpts(
 				gateway.WithIntents(omiIntents()),
-				gateway.WithCompress(true),
+				gateway.WithCompression(gateway.CompressionZlibPayload),
 				BotPresence(SiteHost()),
 			),
 		),

@@ -8,6 +8,7 @@ import (
 
 	"popplio/arcadia/dclient"
 	"popplio/arcadia/impls"
+	"popplio/botroles"
 	"popplio/db"
 	"popplio/perms"
 	"popplio/state"
@@ -18,7 +19,7 @@ import (
 )
 
 func onGuildsReady(ctx context.Context, _ *events.GuildsReady) {
-	self, ok := dclient.Get().Caches().SelfUser()
+	self, ok := dclient.Get().Caches.SelfUser()
 
 	name := "arcadia"
 	if ok {
@@ -50,14 +51,40 @@ func onGuildMemberJoin(e *events.GuildMemberJoin) {
 	now := time.Now()
 
 	if member.User.Bot {
+		listing := botroles.Listing{}
+
+		if found, err := botroles.Lookup(context.Background(), []string{member.User.ID.String()}); err != nil {
+			state.Logger.Error("Failed to look up a new bot's listing", zap.Error(err))
+		} else {
+			listing = found[member.User.ID.String()]
+		}
+
+		kind := "Bot"
+
+		switch {
+		case listing.Partner && listing.Certified():
+			kind = "Certified partner bot"
+		case listing.Partner:
+			kind = "Partner bot"
+		case listing.Certified():
+			kind = "Certified bot"
+		}
+
+		description := fmt.Sprintf("%s <@%s> (%s) has been added to the server.", kind, member.User.ID, member.User.Username)
+
+		if listing.Listed() {
+			description += fmt.Sprintf("\n[View on Omniplex](%s/bots/%s)", frontendURL(), member.User.ID)
+		} else {
+			description += "\nIt isn't listed on Omniplex."
+		}
+
 		err := d.SendChannel(state.Config.Channels.System, discord.MessageCreate{
 			Embeds: []discord.Embed{{
-				Title:     "__**New Bot Added**__",
-				Color:     impls.ColourGreen,
-				Thumbnail: &discord.EmbedResource{URL: face},
-				Timestamp: &now,
-				Description: fmt.Sprintf(
-					"Bot <@%s> (%s) has been added to the server.", member.User.ID, member.User.Username),
+				Title:       "__**New Bot Added**__",
+				Color:       impls.ColourGreen,
+				Thumbnail:   &discord.EmbedResource{URL: face},
+				Timestamp:   &now,
+				Description: description,
 			}},
 		})
 
@@ -65,10 +92,8 @@ func onGuildMemberJoin(e *events.GuildMemberJoin) {
 			state.Logger.Error("Failed to announce new bot", zap.Error(err))
 		}
 
-		err = d.AddRole(state.Config.Servers.Main, member.User.ID, state.Config.Roles.BotRole, "Bot added to server")
-
-		if err != nil {
-			state.Logger.Error("Failed to add bot role", zap.Error(err))
+		if err := botroles.Give(e.Client(), member.User.ID, botroles.Missing(member.RoleIDs, botroles.Wanted(listing)), "Bot added to server"); err != nil {
+			state.Logger.Error("Failed to give a new bot its roles", zap.Error(err))
 		}
 
 		return
