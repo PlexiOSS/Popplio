@@ -36,3 +36,24 @@ SELECT name FROM packs WHERE url = $1;
 
 -- name: GetTeamName :one
 SELECT name FROM teams WHERE id = $1;
+
+-- name: InsertSystemReport :execrows
+INSERT INTO reports (target_type, target_id, reporter_id, reason, description) VALUES ($1, $2, $3, 'tos_violation', $4) ON CONFLICT DO NOTHING;
+
+-- name: ListReportsPage :many
+SELECT r.id, r.target_type, r.target_id, r.reporter_id, r.reason, r.description, r.status, r.resolved_by, r.resolution_note, r.created_at, r.resolved_at,
+    COALESCE(CASE r.target_type
+        WHEN 'bot' THEN (SELECT NULLIF(c.display_name, '') FROM internal_user_cache__discord c WHERE c.id = r.target_id)
+        WHEN 'server' THEN (SELECT s.name FROM servers s WHERE s.server_id = r.target_id)
+        WHEN 'pack' THEN (SELECT p.name FROM packs p WHERE p.url = r.target_id)
+        WHEN 'team' THEN (SELECT t.name FROM teams t WHERE t.id::text = r.target_id)
+    END, CASE WHEN r.target_type = 'bot' THEN (SELECT c.username FROM internal_user_cache__discord c WHERE c.id = r.target_id) END, '')::text AS target_name,
+    COALESCE(CASE r.target_type
+        WHEN 'bot' THEN (SELECT c.avatar FROM internal_user_cache__discord c WHERE c.id = r.target_id)
+        WHEN 'server' THEN (SELECT s.avatar FROM servers s WHERE s.server_id = r.target_id)
+    END, '')::text AS target_avatar,
+    COUNT(*) OVER ()::int AS total
+FROM reports r
+WHERE sqlc.narg('status')::text IS NULL OR r.status = sqlc.narg('status')
+ORDER BY r.created_at DESC
+LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;

@@ -194,7 +194,10 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 			return true, failed("checkout session has no subscription or customer", nil)
 		}
 
-		sub, err := subscription.Get(s.Subscription.ID, nil)
+		params := &stripe.SubscriptionParams{}
+		params.AddExpand("default_payment_method")
+
+		sub, err := subscription.Get(s.Subscription.ID, params)
 
 		if err != nil {
 			return true, failed("fetching subscription", err)
@@ -216,6 +219,7 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 		}
 
 		promo.Complete(ctx, s.ID)
+		RecordCard(ctx, s.Metadata["user_id"], sub)
 
 		audit.Record(audit.Event{
 			Source:     audit.SourceStripe,
@@ -250,6 +254,10 @@ func HandleStripeEvent(ctx context.Context, event stripe.Event) (bool, uapi.Http
 			BillingInterval:      interval,
 		}); err != nil {
 			return true, failed("updating subscription", err)
+		}
+
+		if event.Type != "customer.subscription.deleted" {
+			RecordCard(ctx, sub.Metadata["user_id"], &sub)
 		}
 
 		audit.Record(audit.Event{

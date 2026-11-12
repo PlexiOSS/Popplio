@@ -68,6 +68,20 @@ func All() []Task {
 			Run:         UserCacheRefresh,
 		},
 		{
+			Name:        "auto_vote_watch",
+			Description: "Reporting listings whose share of automatic votes jumped in the last day, for staff to check for Auto-vote abuse",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         AutoVoteWatch,
+		},
+		{
+			Name:        "template_sync",
+			Description: "Refreshing server templates from Discord (usage count, channels, roles) and hiding ones that were deleted",
+			Enabled:     true,
+			Interval:    time.Hour,
+			Run:         TemplateSync,
+		},
+		{
 			Name:        "badge_sync",
 			Description: "Awarding and revoking badges that have an automatic rule, then pushing changed linked roles to Discord",
 			Enabled:     true,

@@ -64,6 +64,8 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error while getting user tokens", err)
 	}
 
+	currentID, _ := d.Auth.Data["session_id"].(string)
+
 	tokens := make([]*types.Session, len(rows))
 	for i, row := range rows {
 		tokens[i] = &types.Session{
@@ -75,6 +77,7 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 			TargetID:   row.TargetID,
 			PermLimits: row.PermLimits,
 			Expiry:     row.Expiry.Time,
+			Current:    row.ID == currentID,
 		}
 	}
 

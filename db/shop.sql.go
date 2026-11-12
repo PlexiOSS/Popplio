@@ -1031,7 +1031,7 @@ func (q *Queries) LockShopCoupon(ctx context.Context, couponID string) error {
 	return err
 }
 
-const setBotCardColor = `-- name: SetBotCardColor :exec
+const setBotCardColor = `-- name: SetBotCardColor :execrows
 UPDATE bots SET card_color = $2 WHERE bot_id = $1 AND card_theme = true
 `
 
@@ -1040,12 +1040,15 @@ type SetBotCardColorParams struct {
 	CardColor pgtype.Text `db:"card_color" json:"card_color"`
 }
 
-func (q *Queries) SetBotCardColor(ctx context.Context, arg SetBotCardColorParams) error {
-	_, err := q.db.Exec(ctx, setBotCardColor, arg.BotID, arg.CardColor)
-	return err
+func (q *Queries) SetBotCardColor(ctx context.Context, arg SetBotCardColorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setBotCardColor, arg.BotID, arg.CardColor)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const setServerCardColor = `-- name: SetServerCardColor :exec
+const setServerCardColor = `-- name: SetServerCardColor :execrows
 UPDATE servers SET card_color = $2 WHERE server_id = $1 AND card_theme = true
 `
 
@@ -1054,9 +1057,12 @@ type SetServerCardColorParams struct {
 	CardColor pgtype.Text `db:"card_color" json:"card_color"`
 }
 
-func (q *Queries) SetServerCardColor(ctx context.Context, arg SetServerCardColorParams) error {
-	_, err := q.db.Exec(ctx, setServerCardColor, arg.ServerID, arg.CardColor)
-	return err
+func (q *Queries) SetServerCardColor(ctx context.Context, arg SetServerCardColorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setServerCardColor, arg.ServerID, arg.CardColor)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const spendCreditBatch = `-- name: SpendCreditBatch :exec

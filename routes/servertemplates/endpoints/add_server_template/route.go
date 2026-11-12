@@ -108,16 +108,21 @@ func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {
 		return resp.Err("Error encoding template roles", err)
 	}
 
+	sourceGuild, sourceUpdated := assets.SourceParams(meta)
+
 	id, err := q.InsertServerTemplate(d.Context, db.InsertServerTemplateParams{
-		Code:       payload.Code,
-		Name:       meta.Name,
-		Short:      payload.Short,
-		Tags:       payload.Tags,
-		Nsfw:       payload.NSFW,
-		Owner:      d.Auth.ID,
-		UsageCount: meta.UsageCount,
-		Channels:   channelsJSON,
-		Roles:      rolesJSON,
+		Code:            payload.Code,
+		Name:            meta.Name,
+		Short:           payload.Short,
+		Tags:            payload.Tags,
+		Nsfw:            payload.NSFW,
+		Owner:           d.Auth.ID,
+		UsageCount:      meta.UsageCount,
+		Channels:        channelsJSON,
+		Roles:           rolesJSON,
+		SourceGuildID:   sourceGuild,
+		SourceUpdatedAt: sourceUpdated,
+		OutOfDate:       meta.OutOfDate,
 	})
 
 	if err != nil {

@@ -37,6 +37,7 @@ type Session struct {
 	TargetID   string      `db:"target_id" json:"target_id" description:"The target (entities) ID"`
 	PermLimits []string    `db:"perm_limits" json:"perm_limits" description:"The permissions the session has"`
 	Expiry     time.Time   `db:"expiry" json:"expiry" description:"The time the session expires"`
+	Current    bool        `db:"-" json:"current" description:"Whether this is the session making the request"`
 }
 
 // A list of sessions.

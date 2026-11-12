@@ -219,8 +219,8 @@ FROM bots WHERE bot_id = ANY(sqlc.arg('ids')::text[]);
 SELECT server_id, (highlighted_until IS NOT NULL AND highlighted_until > NOW())::boolean AS highlighted, COALESCE(CASE WHEN card_theme THEN card_color END, '')::text AS card_color
 FROM servers WHERE server_id = ANY(sqlc.arg('ids')::text[]);
 
--- name: SetBotCardColor :exec
+-- name: SetBotCardColor :execrows
 UPDATE bots SET card_color = $2 WHERE bot_id = $1 AND card_theme = true;
 
--- name: SetServerCardColor :exec
+-- name: SetServerCardColor :execrows
 UPDATE servers SET card_color = $2 WHERE server_id = $1 AND card_theme = true;

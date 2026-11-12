@@ -5,7 +5,6 @@
 package create_oauth2_login
 
 import (
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -75,7 +74,17 @@ func sessionName(userAgent string) string {
 
 	parsed := ua.Parse(userAgent)
 
-	return fmt.Sprintf("%s (on %s %s) [mobile: %t]", parsed.Name, parsed.OS, parsed.Version, parsed.Mobile)
+	browser, os := parsed.Name, parsed.OS
+
+	if browser == "" {
+		browser = "Unknown browser"
+	}
+
+	if os == "" {
+		return browser
+	}
+
+	return browser + " on " + os
 }
 
 func Route(d uapi.RouteData, r *http.Request) uapi.HttpResponse {

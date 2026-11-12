@@ -29,6 +29,16 @@ func AutoVote(ctx context.Context) error {
 		return fmt.Errorf("listing auto-vote targets: %w", err)
 	}
 
+	overCardLimit := map[string]bool{}
+
+	if ids, err := q.ListAutoVoteUsersOverCardLimit(ctx, autovote.MaxAccountsPerCard); err != nil {
+		return fmt.Errorf("checking auto-vote card limits: %w", err)
+	} else {
+		for _, id := range ids {
+			overCardLimit[id] = true
+		}
+	}
+
 	var cast_, failed int
 
 	for _, t := range targets {
@@ -36,7 +46,17 @@ func AutoVote(ctx context.Context) error {
 			continue
 		}
 
-		voted, reason, err := autoVoteOne(ctx, q, t.UserID, t.TargetType, t.TargetID)
+		var (
+			voted  bool
+			reason string
+			err    error
+		)
+
+		if overCardLimit[t.UserID] {
+			reason = autovote.CardLimitSkipReason
+		} else {
+			voted, reason, err = autoVoteOne(ctx, q, t.UserID, t.TargetType, t.TargetID)
+		}
 
 		if err != nil {
 			failed++

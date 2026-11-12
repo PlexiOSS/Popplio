@@ -17,6 +17,13 @@ type ReportAction struct {
 // report regardless of status.
 type ReportListQuery struct {
 	Status *string `json:"status"`
+	Page   int     `json:"page"`
+}
+
+type ReportPage struct {
+	Reports []Report `json:"reports"`
+	Total   int      `json:"total"`
+	PerPage int      `json:"per_page"`
 }
 
 // ReportResolve is shared by Resolve and Dismiss — both just move a report
@@ -74,6 +81,7 @@ type Report struct {
 	TargetID       string     `json:"target_id"`
 	TargetName     string     `json:"target_name"`
 	TargetURL      string     `json:"target_url"`
+	TargetAvatar   string     `json:"target_avatar"`
 	ReporterID     string     `json:"reporter_id"`
 	Reason         string     `json:"reason"`
 	Description    string     `json:"description"`

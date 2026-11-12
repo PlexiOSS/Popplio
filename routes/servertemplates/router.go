@@ -13,6 +13,8 @@ import (
 	"popplio/routes/servertemplates/endpoints/get_server_template"
 	"popplio/routes/servertemplates/endpoints/get_template_reaction"
 	"popplio/routes/servertemplates/endpoints/patch_server_template"
+	"popplio/routes/servertemplates/endpoints/put_server_template_icon"
+	"popplio/routes/servertemplates/endpoints/sync_server_template"
 	"popplio/routes/servertemplates/endpoints/set_template_reaction"
 
 	"github.com/go-chi/chi/v5"
@@ -93,6 +95,40 @@ func (b Router) Routes(r *chi.Mux) {
 		},
 		ExtData: map[string]any{
 			api.PERMISSION_CHECK_KEY: nil, // No authorization is needed for this endpoint beyond defaults
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{uid}/server-templates/{id}/sync",
+		OpId:    "sync_server_template",
+		Method:  uapi.POST,
+		Docs:    sync_server_template.Docs,
+		Handler: sync_server_template.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "uid",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
+		},
+	}.Route(r)
+
+	uapi.Route{
+		Pattern: "/users/{uid}/server-templates/{id}/icon",
+		OpId:    "put_server_template_icon",
+		Method:  uapi.PUT,
+		Docs:    put_server_template_icon.Docs,
+		Handler: put_server_template_icon.Route,
+		Auth: []uapi.AuthType{
+			{
+				URLVar: "uid",
+				Type:   api.TargetTypeUser,
+			},
+		},
+		ExtData: map[string]any{
+			api.PERMISSION_CHECK_KEY: nil,
 		},
 	}.Route(r)
 

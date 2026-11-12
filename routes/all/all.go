@@ -44,7 +44,7 @@ import (
 	"github.com/PlexiOSS/Keel/uapi"
 )
 
-const Version = "1.26.1"
+const Version = "1.27.0"
 
 func Routers() []uapi.APIRouter {
 	return []uapi.APIRouter{

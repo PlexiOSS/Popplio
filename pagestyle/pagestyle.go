@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,12 +23,18 @@ var Gradients = []string{"aurora", "sunset", "ocean", "forest", "candy", "midnig
 
 var (
 	ErrNotPremium  = errors.New("page styles need premium or a Page Style pass")
-	ErrBadGradient = errors.New("unknown gradient preset")
+	ErrBadGradient = errors.New("gradient must be a preset or two custom colours")
 	ErrBadAccent   = errors.New("accent colour is too dark or too light to read")
 	ErrNotFound    = errors.New("listing not found")
 )
 
+var customGradient = regexp.MustCompile(`^custom:#[0-9a-f]{6}:#[0-9a-f]{6}$`)
+
 func ValidGradient(id string) bool {
+	if customGradient.MatchString(id) {
+		return true
+	}
+
 	for _, g := range Gradients {
 		if g == id {
 			return true
@@ -230,11 +237,13 @@ func Update(ctx context.Context, targetType, targetID string, u types.PageStyleU
 	}
 
 	if u.Gradient != nil && *u.Gradient != "" {
-		if !ValidGradient(*u.Gradient) {
+		gradient := strings.ToLower(*u.Gradient)
+
+		if !ValidGradient(gradient) {
 			return ErrBadGradient
 		}
 
-		params.Gradient = pgtype.Text{String: *u.Gradient, Valid: true}
+		params.Gradient = pgtype.Text{String: gradient, Valid: true}
 	}
 
 	if u.Accent != nil && *u.Accent != "" {

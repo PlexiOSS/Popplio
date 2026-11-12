@@ -155,6 +155,7 @@ type AutoVoteSubscription struct {
 	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	ExtraSlots           int32              `db:"extra_slots" json:"extra_slots"`
 	BillingInterval      string             `db:"billing_interval" json:"billing_interval"`
+	CardFingerprint      pgtype.Text        `db:"card_fingerprint" json:"card_fingerprint"`
 }
 
 type AutoVoteTarget struct {
@@ -704,18 +705,24 @@ type ServerChangelog struct {
 }
 
 type ServerTemplate struct {
-	ID         string             `db:"id" json:"id"`
-	Code       string             `db:"code" json:"code"`
-	Name       string             `db:"name" json:"name"`
-	Short      string             `db:"short" json:"short"`
-	Tags       []string           `db:"tags" json:"tags"`
-	Nsfw       bool               `db:"nsfw" json:"nsfw"`
-	Owner      string             `db:"owner" json:"owner"`
-	UsageCount int32              `db:"usage_count" json:"usage_count"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	Channels   []byte             `db:"channels" json:"channels"`
-	Roles      []byte             `db:"roles" json:"roles"`
+	ID              string             `db:"id" json:"id"`
+	Code            string             `db:"code" json:"code"`
+	Name            string             `db:"name" json:"name"`
+	Short           string             `db:"short" json:"short"`
+	Tags            []string           `db:"tags" json:"tags"`
+	Nsfw            bool               `db:"nsfw" json:"nsfw"`
+	Owner           string             `db:"owner" json:"owner"`
+	UsageCount      int32              `db:"usage_count" json:"usage_count"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Channels        []byte             `db:"channels" json:"channels"`
+	Roles           []byte             `db:"roles" json:"roles"`
+	IconVersion     pgtype.Text        `db:"icon_version" json:"icon_version"`
+	SourceGuildID   pgtype.Text        `db:"source_guild_id" json:"source_guild_id"`
+	SourceUpdatedAt pgtype.Timestamptz `db:"source_updated_at" json:"source_updated_at"`
+	OutOfDate       bool               `db:"out_of_date" json:"out_of_date"`
+	Unavailable     bool               `db:"unavailable" json:"unavailable"`
+	SyncedAt        pgtype.Timestamptz `db:"synced_at" json:"synced_at"`
 }
 
 type ServerTemplateReaction struct {
