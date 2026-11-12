@@ -109,7 +109,7 @@ func cmdInfo() *Command {
 
 func cmdLeaderboard() *Command {
 	return &Command{
-		Name:        "leaderboard",
+		Name:        "reviewers",
 		Category:    "Leaderboard",
 		Description: "Top reviewers by approvals and denials",
 		Options: []discord.ApplicationCommandOption{

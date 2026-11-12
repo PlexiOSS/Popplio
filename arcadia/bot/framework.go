@@ -8,6 +8,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -100,11 +101,12 @@ func (c *Ctx) BoolOption(name string, fallback bool) bool {
 
 // Say replies with a message in the bot's neutral colour.
 //
-// Every reply the bot makes is an embed, including one-liners: a bare content
-// message is indistinguishable from a staff member talking, which matters in
-// the staff server where the bot's answers and the conversation share a channel.
-// The text itself is unchanged — the embed is the container, not a rewrite — so
-// the strings frozen in arcadia/conformance still read exactly as they did.
+// Arcadia's replies are embeds, including one-liners: a bare content message
+// is indistinguishable from a staff member talking, which matters in the staff
+// server where the bot's answers and the conversation share a channel. Omi
+// answers the public in plain text, and its refusals are only shown to the
+// person who ran the command. The text itself is the same either way, so the
+// strings frozen in arcadia/conformance still read exactly as they did.
 func (c *Ctx) Say(content string) error {
 	return c.SayColour(content, impls.ColourBlurple)
 }
@@ -124,6 +126,20 @@ func (c *Ctx) Fail(content string) error {
 
 // SayColour replies with a message in an explicit colour.
 func (c *Ctx) SayColour(content string, colour int) error {
+	if c.bot == omiBot {
+		msg := discord.MessageCreate{
+			Content:         content,
+			AllowedMentions: &discord.AllowedMentions{},
+			Flags:           discord.MessageFlagSuppressEmbeds,
+		}
+
+		if colour == impls.ColourRed && c.slash != nil {
+			msg.Flags |= discord.MessageFlagEphemeral
+		}
+
+		return c.Send(msg)
+	}
+
 	return c.Send(discord.MessageCreate{Embeds: []discord.Embed{{
 		Description: content,
 		Color:       colour,
@@ -198,9 +214,10 @@ type Command struct {
 	Category    string
 	Description string
 	// Options are the slash-command options, in order.
-	Options []discord.ApplicationCommandOption
-	Checks  []Check
-	Run     func(c *Ctx) error
+	Options      []discord.ApplicationCommandOption
+	Checks       []Check
+	Run          func(c *Ctx) error
+	Autocomplete func(c *Ctx, value string) []discord.AutocompleteChoice
 	// Subcommands are dispatched on the first positional argument.
 	Subcommands []*Command
 	// OwnerOnly restricts the command to the configured owners.
@@ -296,6 +313,15 @@ func OmiListener(ctx context.Context) bot.EventListener {
 		},
 		OnGuildMemberJoin:               onGuildMemberJoin,
 		OnApplicationCommandInteraction: func(e *events.ApplicationCommandInteractionCreate) { onSlashCommand(ctx, omiBot, e) },
+		OnAutocompleteInteraction:       func(e *events.AutocompleteInteractionCreate) { onAutocomplete(ctx, omiBot, e) },
+		OnComponentInteraction: func(e *events.ComponentInteractionCreate) {
+			switch id := e.Data.CustomID(); {
+			case strings.HasPrefix(id, "kb:"):
+				onKbComponent(ctx, e)
+			case strings.HasPrefix(id, voteBoardPrefix):
+				onVoteBoardComponent(ctx, e)
+			}
+		},
 	}
 
 	if state.Config.Arcadia.AutoMod {
@@ -391,6 +417,29 @@ func onSlashCommand(ctx context.Context, b *Bot, e *events.ApplicationCommandInt
 	}
 
 	invoke(cmd, c)
+}
+
+func onAutocomplete(ctx context.Context, b *Bot, e *events.AutocompleteInteractionCreate) {
+	cmd, ok := b.registry[e.Data.CommandName]
+
+	if !ok || cmd.Autocomplete == nil {
+		_ = e.AutocompleteResult([]discord.AutocompleteChoice{})
+		return
+	}
+
+	var value string
+	_ = json.Unmarshal(e.Data.Focused().Value, &value)
+
+	c := &Ctx{Context: ctx, Author: e.User(), Options: map[string]string{}, bot: b}
+	choices := cmd.Autocomplete(c, value)
+
+	if choices == nil {
+		choices = []discord.AutocompleteChoice{}
+	}
+
+	if err := e.AutocompleteResult(choices); err != nil {
+		state.Logger.Error("Failed to answer autocomplete", zap.String("command", cmd.Name), zap.Error(err))
+	}
 }
 
 // invoke runs a command through its checks, logging like poise's pre/post hooks.

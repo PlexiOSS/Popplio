@@ -260,7 +260,7 @@ func TestCommandsSplitBetweenBots(t *testing.T) {
 	freshRegistry()
 
 	omi := []string{"help", "kb", "ticket", "info", "analytics", "leaderboard", "getbotroles", "kick", "ban", "timeout", "warn", "purge", "lock", "unlock", "modlogs"}
-	arcadia := []string{"help", "register", "queue", "claim", "unclaim", "approve", "deny", "staff", "staffinfo", "staffguide", "staffroles", "staffperms", "permissions", "rpc", "rpclist", "refresh", "invite", "invite_db", "explainme"}
+	arcadia := []string{"help", "register", "queue", "claim", "unclaim", "approve", "deny", "staff", "staffinfo", "staffguide", "staffroles", "staffperms", "permissions", "rpc", "rpclist", "refresh", "invite", "invite_db", "explainme", "reviewers"}
 
 	for _, name := range omi {
 		if _, ok := omiBot.registry[name]; !ok {

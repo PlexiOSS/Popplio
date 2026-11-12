@@ -917,6 +917,73 @@ func (q *Queries) GetTopReviewers(ctx context.Context, limit int32) ([]GetTopRev
 	return items, nil
 }
 
+const getTopVotedBots = `-- name: GetTopVotedBots :many
+SELECT bot_id, approximate_votes
+FROM bots
+WHERE (type = 'approved' OR type = 'certified') AND approximate_votes > 0
+ORDER BY approximate_votes DESC, servers DESC, bot_id
+LIMIT $1
+`
+
+type GetTopVotedBotsRow struct {
+	BotID            string `db:"bot_id" json:"bot_id"`
+	ApproximateVotes int32  `db:"approximate_votes" json:"approximate_votes"`
+}
+
+func (q *Queries) GetTopVotedBots(ctx context.Context, limit int32) ([]GetTopVotedBotsRow, error) {
+	rows, err := q.db.Query(ctx, getTopVotedBots, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTopVotedBotsRow
+	for rows.Next() {
+		var i GetTopVotedBotsRow
+		if err := rows.Scan(&i.BotID, &i.ApproximateVotes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTopVotedServers = `-- name: GetTopVotedServers :many
+SELECT server_id, name, approximate_votes
+FROM servers
+WHERE state = 'public' AND (type = 'approved' OR type = 'certified') AND approximate_votes > 0
+ORDER BY approximate_votes DESC, total_members DESC, server_id
+LIMIT $1
+`
+
+type GetTopVotedServersRow struct {
+	ServerID         string `db:"server_id" json:"server_id"`
+	Name             string `db:"name" json:"name"`
+	ApproximateVotes int32  `db:"approximate_votes" json:"approximate_votes"`
+}
+
+func (q *Queries) GetTopVotedServers(ctx context.Context, limit int32) ([]GetTopVotedServersRow, error) {
+	rows, err := q.db.Query(ctx, getTopVotedServers, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetTopVotedServersRow
+	for rows.Next() {
+		var i GetTopVotedServersRow
+		if err := rows.Scan(&i.ServerID, &i.Name, &i.ApproximateVotes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserOwnedEntities = `-- name: GetUserOwnedEntities :many
 SELECT b.bot_id as id, b.type, 'bot' as entity
 FROM bots b

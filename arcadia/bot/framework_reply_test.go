@@ -17,10 +17,15 @@ func TestRepliesAreEmbeds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const allowed = "permeditor_apply.go"
+	allowed := map[string]bool{
+		"permeditor_apply.go": true,
+		"framework.go":        true,
+		"kb.go":               true,
+		"votelb.go":           true,
+	}
 
 	for _, path := range files {
-		if strings.HasSuffix(path, "_test.go") || path == allowed {
+		if strings.HasSuffix(path, "_test.go") || allowed[path] {
 			continue
 		}
 
